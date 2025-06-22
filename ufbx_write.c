@@ -723,12 +723,12 @@ UFBXWI_LIST_TYPE(ufbxwi_uint32_list, uint32_t);
 static ufbxwi_forceinline ufbxw_id ufbxwi_make_id(ufbxw_element_type type, uint32_t generation, size_t index)
 {
 	ufbxw_assert(index < (1u << 24));
-	return (ufbxw_id)(((uint64_t)generation << 40) | ((uint64_t)type << 32) | (index));
+	return (ufbxw_id)(((uint64_t)type << 48) | ((uint64_t)generation << 32) | (index));
 }
 
 #define ufbxwi_id_index(id) (uint32_t)(id)
-#define ufbxwi_id_type(id) (ufbxw_element_type)((id >> 32) & 0xff)
-#define ufbxwi_id_generation(id) (uint32_t)(((id) >> 40))
+#define ufbxwi_id_type(id) (ufbxw_element_type)((id >> 48))
+#define ufbxwi_id_generation(id) (uint32_t)(((id) >> 32) & 0xffff)
 
 typedef struct {
 	const char *name;

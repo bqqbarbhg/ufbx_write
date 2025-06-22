@@ -9,6 +9,9 @@ int main(int argc, char **argv)
 
 	ufbxw_string name = ufbxw_get_name(scene, cube.id);
 
+	ufbxw_mesh mesh = ufbxw_create_mesh(scene);
+	ufbxw_set_name(scene, mesh.id, "Cube_Shape");
+
 	ufbxw_save_opts opts = { 0 };
 	ufbxw_error error;
 	ufbxw_save_file(scene, "test.fbx", &opts, &error);
