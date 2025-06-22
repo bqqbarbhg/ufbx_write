@@ -75,6 +75,24 @@
 	#define ufbxwi_ignore(cond) (void)(cond)
 #endif
 
+#if defined(UFBXW_UBSAN)
+	static void ufbxwi_assert_zero(size_t offset) { ufbxw_assert(offset == 0); }
+	#define ufbxwi_add_ptr(ptr, offset) ((ptr) ? (ptr) + (offset) : (ufbxwi_assert_zero((size_t)(offset)), (ptr)))
+	#define ufbxwi_sub_ptr(ptr, offset) ((ptr) ? (ptr) - (offset) : (ufbxwi_assert_zero((size_t)(offset)), (ptr)))
+#else
+	#define ufbxwi_add_ptr(ptr, offset) ((ptr) + (offset))
+	#define ufbxwi_sub_ptr(ptr, offset) ((ptr) - (offset))
+#endif
+
+#if defined(UFBXW_REGRESSION)
+	static size_t ufbxwi_to_size(ptrdiff_t delta) {
+		ufbxw_assert(delta >= 0);
+		return (size_t)delta;
+	}
+#else
+	#define ufbxwi_to_size(delta) ((size_t)(delta))
+#endif
+
 // -- Pointer alignment
 
 #if !defined(UFBXW_STANDARD_C) && defined(__GNUC__) && defined(__has_builtin)
@@ -149,6 +167,81 @@
 	}
 #endif
 
+#if defined(UFBXWI_HAS_ATTRIBUTE_ALIGNED)
+	#define UFBXWI_HAS_UNALIGNED 1
+	#define UFBXWI_HAS_ALIASING 1
+	#define ufbxwi_unaligned
+	typedef uint16_t __attribute__((aligned(1))) ufbxwi_unaligned_u16;
+	typedef uint32_t __attribute__((aligned(1))) ufbxwi_unaligned_u32;
+	typedef uint64_t __attribute__((aligned(1))) ufbxwi_unaligned_u64;
+	typedef float __attribute__((aligned(1))) ufbxwi_unaligned_f32;
+	typedef double __attribute__((aligned(1))) ufbxwi_unaligned_f64;
+	typedef uint32_t __attribute__((may_alias)) ufbxwi_aliasing_u32;
+#elif !defined(UFBXW_STANDARD_C) && defined(_MSC_VER)
+	#define UFBXWI_HAS_UNALIGNED 1
+	#if defined(_M_IX86)
+		// MSVC seems to assume all pointers are unaligned for x86
+		#define ufbxwi_unaligned
+	#else
+		#define ufbxwi_unaligned __unaligned
+	#endif
+	typedef uint16_t ufbxwi_unaligned_u16;
+	typedef uint32_t ufbxwi_unaligned_u32;
+	typedef uint64_t ufbxwi_unaligned_u64;
+	typedef float ufbxwi_unaligned_f32;
+	typedef double ufbxwi_unaligned_f64;
+	// MSVC doesn't have aliasing types in theory, but it works in practice..
+	#define UFBXWI_HAS_ALIASING 1
+	typedef uint32_t ufbxwi_aliasing_u32;
+#endif
+
+#if (defined(UFBXWI_HAS_UNALIGNED) && UFBXW_LITTLE_ENDIAN && !defined(UFBXW_NO_UNALIGNED_LOADS)) || defined(UFBXW_USE_UNALIGNED_LOADS)
+	#define ufbxwi_read_u16(ptr) (*(const ufbxwi_unaligned ufbxwi_unaligned_u16*)(ptr))
+	#define ufbxwi_read_u32(ptr) (*(const ufbxwi_unaligned ufbxwi_unaligned_u32*)(ptr))
+	#define ufbxwi_read_u64(ptr) (*(const ufbxwi_unaligned ufbxwi_unaligned_u64*)(ptr))
+	#define ufbxwi_read_f32(ptr) (*(const ufbxwi_unaligned ufbxwi_unaligned_f32*)(ptr))
+	#define ufbxwi_read_f64(ptr) (*(const ufbxwi_unaligned ufbxwi_unaligned_f64*)(ptr))
+#else
+	static ufbxwi_forceinline uint16_t ufbxwi_read_u16(const void *ptr) {
+		const char *p = (const char*)ptr;
+		return (uint16_t)(
+			(unsigned)(uint8_t)p[0] << 0u |
+			(unsigned)(uint8_t)p[1] << 8u );
+	}
+	static ufbxwi_forceinline uint32_t ufbxwi_read_u32(const void *ptr) {
+		const char *p = (const char*)ptr;
+		return (uint32_t)(
+			(unsigned)(uint8_t)p[0] <<  0u |
+			(unsigned)(uint8_t)p[1] <<  8u |
+			(unsigned)(uint8_t)p[2] << 16u |
+			(unsigned)(uint8_t)p[3] << 24u );
+	}
+	static ufbxwi_forceinline uint64_t ufbxwi_read_u64(const void *ptr) {
+		const char *p = (const char*)ptr;
+		return (uint64_t)(
+			(uint64_t)(uint8_t)p[0] <<  0u |
+			(uint64_t)(uint8_t)p[1] <<  8u |
+			(uint64_t)(uint8_t)p[2] << 16u |
+			(uint64_t)(uint8_t)p[3] << 24u |
+			(uint64_t)(uint8_t)p[4] << 32u |
+			(uint64_t)(uint8_t)p[5] << 40u |
+			(uint64_t)(uint8_t)p[6] << 48u |
+			(uint64_t)(uint8_t)p[7] << 56u );
+	}
+	static ufbxwi_forceinline float ufbxwi_read_f32(const void *ptr) {
+		uint32_t u = ufbxwi_read_u32(ptr);
+		float f;
+		memcpy(&f, &u, 4);
+		return f;
+	}
+	static ufbxwi_forceinline double ufbxwi_read_f64(const void *ptr) {
+		uint64_t u = ufbxwi_read_u64(ptr);
+		double f;
+		memcpy(&f, &u, 8);
+		return f;
+	}
+#endif
+
 // -- Error
 
 typedef struct {
@@ -208,7 +301,7 @@ enum {
 	UFBXWI_MIN_SIZE_CLASS_SIZE = 1 << UFBXWI_MIN_SIZE_CLASS_LOG2,
 	UFBXWI_MAX_SIZE_CLASS_LOG2 = 12,
 	UFBXWI_MAX_SIZE_CLASS_SIZE = 1 << UFBXWI_MAX_SIZE_CLASS_LOG2,
-	UFBXWI_SIZE_CLASS_COUNT = UFBXWI_MAX_SIZE_CLASS_LOG2 - UFBXWI_MIN_SIZE_CLASS_LOG2,
+	UFBXWI_SIZE_CLASS_COUNT = UFBXWI_MAX_SIZE_CLASS_LOG2 - UFBXWI_MIN_SIZE_CLASS_LOG2 + 1,
 };
 
 static uint32_t ufbxwi_get_size_class(size_t size)
@@ -475,6 +568,152 @@ static ufbxwi_forceinline void ufbxwi_list_free_size(ufbxwi_allocator *ator, voi
 #define ufbxwi_list_push_copy_n(ator, list, type, n, src) ufbxwi_maybe_null((ufbxwi_check_ptr_type(type, (list)->data), ufbxwi_check_ptr_type(type, src), (type*)ufbxwi_list_push_copy_size((), (list), sizeof(type), (n), (src))))
 #define ufbxwi_list_free(ator, list) ufbxwi_list_free_size((ator),&(list), sizeof(*(list)->data))
 
+// -- Hash functions
+
+static ufbxwi_noinline uint32_t ufbxwi_hash_string(const char *str, size_t length)
+{
+	uint32_t hash = (uint32_t)length;
+	uint32_t seed = UINT32_C(0x9e3779b9);
+	if (length >= 4) {
+		do {
+			uint32_t word = ufbxwi_read_u32(str);
+			hash = ((hash << 5u | hash >> 27u) ^ word) * seed;
+			str += 4;
+			length -= 4;
+		} while (length >= 4);
+
+		uint32_t word = ufbxwi_read_u32(str + length - 4);
+		hash = ((hash << 5u | hash >> 27u) ^ word) * seed;
+	} else {
+		uint32_t word = 0;
+		if (length >= 1) word |= (uint32_t)(uint8_t)str[0] << 0;
+		if (length >= 2) word |= (uint32_t)(uint8_t)str[1] << 8;
+		if (length >= 3) word |= (uint32_t)(uint8_t)str[2] << 16;
+		hash = ((hash << 5u | hash >> 27u) ^ word) * seed;
+	}
+	hash ^= hash >> 16;
+	hash *= UINT32_C(0x7feb352d);
+	hash ^= hash >> 15;
+	return hash;
+}
+
+// -- String
+
+static const char ufbxwi_empty_char[] = "";
+static const ufbxw_string ufbxwi_empty_string = { ufbxwi_empty_char, 0 };
+
+typedef struct ufbxwi_string_entry {
+	uint32_t hash;
+	uint32_t length;
+	const char *data;
+} ufbxwi_string_entry;
+
+UFBXWI_LIST_TYPE(ufbxwi_string_entry_list, ufbxwi_string_entry);
+
+typedef struct ufbxwi_string_pool {
+	ufbxwi_allocator *ator;
+	ufbxwi_error *error;
+
+	ufbxwi_string_entry *entries;
+	uint32_t entry_count;
+	uint32_t entry_capacity;
+
+	char *block_pos;
+	char *block_end;
+} ufbxwi_string_pool;
+
+bool ufbxwi_string_pool_rehash(ufbxwi_string_pool *pool)
+{
+	size_t capacity = ufbxwi_max_sz(pool->entry_capacity * 2, 256);
+	ufbxwi_string_entry *new_entries = ufbxwi_alloc(pool->ator, ufbxwi_string_entry, capacity);
+	ufbxwi_check_return_err(pool->error, new_entries, false);
+
+	memset(new_entries, 0, capacity * sizeof(ufbxwi_string_entry));
+	ufbxwi_for(ufbxwi_string_entry, entry, pool->entries, pool->entry_capacity) {
+		// TODO: Better hashing
+		uint32_t index = entry->hash;
+		for (;;) {
+			uint32_t slot = index & (capacity - 1);
+			if (new_entries[slot].hash == 0) {
+				new_entries[slot] = *entry;
+				break;
+			}
+			index++;
+		}
+	}
+
+	pool->entries = new_entries;
+	pool->entry_capacity = (uint32_t)capacity;
+	return true;
+}
+
+bool ufbxwi_intern_string(ufbxw_string *dst, ufbxwi_string_pool *pool, const char *str, size_t length)
+{
+	if (length == 0) {
+		dst->data = ufbxwi_empty_char;
+		dst->length = 0;
+		return true;
+	}
+
+	ufbxwi_check_return_err(pool->error, length <= UINT32_MAX / 2, false);
+
+	uint32_t hash = ufbxwi_hash_string(str, length);
+	if (hash == 0) hash = 1;
+
+	if (pool->entry_count * 2 >= pool->entry_capacity) {
+		ufbxwi_check_return_err(pool->error, ufbxwi_string_pool_rehash(pool), false);
+	}
+
+	uint32_t capacity = pool->entry_capacity;
+	ufbxwi_string_entry *entries = pool->entries;
+
+	uint32_t index = hash;
+	for (;;) {
+		uint32_t slot = index & (capacity - 1);
+		if (entries[slot].hash == hash && entries[slot].length == length && !memcmp(entries[slot].data, str, length)) {
+			dst->data = entries[slot].data;
+			dst->length = length;
+			return true;
+		} else if (entries[slot].hash == 0) {
+			break;
+		}
+		index++;
+	}
+
+	char *copy = NULL;
+	if (length >= 256) {
+		copy = ufbxwi_alloc(pool->ator, char, length + 1);
+		ufbxwi_check_return_err(pool->error, copy, false);
+	} else {
+		if (ufbxwi_to_size(pool->block_end - pool->block_pos) < length + 1) {
+			const size_t block_size = 4096;
+			char *block = ufbxwi_alloc(pool->ator, char, block_size);
+			ufbxwi_check_return_err(pool->error, block, false);
+
+			pool->block_pos = block;
+			pool->block_end = block + block_size;
+		}
+
+		copy = pool->block_pos;
+		pool->block_pos = copy + (length + 1);
+	}
+
+	pool->entry_count++;
+
+	ufbxw_assert(copy);
+	memcpy(copy, str, length);
+	copy[length] = '\0';
+
+	ufbxwi_string_entry *entry = &entries[index & (capacity - 1)];
+	entry->data = copy;
+	entry->hash = hash;
+	entry->length = (uint32_t)length;
+
+	dst->data = copy;
+	dst->length = length;
+	return true;
+}
+
 // -- Scene
 
 #define UFBXWI_ELEMENT_TYPE_NONE ((ufbxw_element_type)0) 
@@ -500,6 +739,9 @@ UFBXWI_LIST_TYPE(ufbxwi_prop_list, ufbxwi_prop);
 
 typedef struct {
 	ufbxw_id id;
+
+	ufbxw_string name;
+
 	ufbxwi_prop_list props;
 	void *data;
 } ufbxwi_element;
@@ -520,6 +762,7 @@ struct ufbxw_scene {
 	ufbxwi_allocator ator;
 	ufbxwi_error error;
 	ufbxw_scene_opts opts;
+	ufbxwi_string_pool string_pool;
 
 	ufbxwi_element_list elements;
 	ufbxwi_uint32_list free_element_ids;
@@ -544,6 +787,12 @@ static size_t ufbxwi_element_data_size(ufbxw_element_type type)
 	}
 }
 
+static void ufbxwi_init_scene(ufbxw_scene *scene)
+{
+	scene->string_pool.ator = &scene->ator;
+	scene->string_pool.error = &scene->error;
+}
+
 // -- API
 
 ufbxw_abi ufbxw_scene *ufbxw_create_scene(const ufbxw_scene_opts *opts)
@@ -565,6 +814,8 @@ ufbxw_abi ufbxw_scene *ufbxw_create_scene(const ufbxw_scene_opts *opts)
 	memset(scene, 0, sizeof(ufbxw_scene));
 	scene->opts = *opts;
 	ufbxwi_move_allocator(&scene->ator, &ator);
+
+	ufbxwi_init_scene(scene);
 
 	return scene;
 }
@@ -610,7 +861,9 @@ ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type t
 
 	ufbxwi_element *element = &scene->elements.data[index];
 	uint32_t generation = ufbxwi_id_generation(element->id) + 1;
+
 	element->id = ufbxwi_make_id(type, generation, index);
+	element->name = ufbxwi_empty_string;
 	element->data = data;
 	
 	scene->num_elements++;
@@ -655,6 +908,26 @@ ufbxw_abi size_t ufbxw_get_elements(ufbxw_scene *scene, ufbxw_id *elements, size
 		}
 	}
 	return count;
+}
+
+ufbxw_abi void ufbxw_set_name(ufbxw_scene *scene, ufbxw_id id, const char *name)
+{
+	ufbxw_set_name_len(scene, id, name, strlen(name));
+}
+
+ufbxw_abi void ufbxw_set_name_len(ufbxw_scene *scene, ufbxw_id id, const char *name, size_t name_len)
+{
+	ufbxwi_element *element = ufbxwi_get_element(scene, id);
+	ufbxwi_check(element);
+
+	ufbxwi_intern_string(&element->name, &scene->string_pool, name, name_len);
+}
+
+ufbxw_abi ufbxw_string ufbxw_get_name(ufbxw_scene *scene, ufbxw_id id)
+{
+	ufbxwi_element *element = ufbxwi_get_element(scene, id);
+	ufbxwi_check_return(element, ufbxwi_empty_string);
+	return element->name;
 }
 
 ufbxw_abi ufbxw_node ufbxw_create_node(ufbxw_scene *scene)

@@ -28,6 +28,12 @@
 	#define UFBXW_LIST_TYPE(p_name, p_type) typedef struct p_name { p_type *data; size_t count; } p_name
 #endif
 
+// UTF-8
+typedef struct ufbxw_string {
+	const char *data;
+	size_t length;
+} ufbxw_string;
+
 typedef double ufbxw_real;
 
 typedef struct ufbxw_vec2 {
@@ -108,6 +114,10 @@ ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type t
 ufbxw_abi void ufbxw_delete_element(ufbxw_scene *scene, ufbxw_id id);
 ufbxw_abi size_t ufbxw_get_num_elements(ufbxw_scene *scene);
 ufbxw_abi size_t ufbxw_get_elements(ufbxw_scene *scene, ufbxw_id *elements, size_t num_elements);
+
+ufbxw_abi void ufbxw_set_name(ufbxw_scene *scene, ufbxw_id id, const char *name);
+ufbxw_abi void ufbxw_set_name_len(ufbxw_scene *scene, ufbxw_id id, const char *name, size_t name_len);
+ufbxw_abi ufbxw_string ufbxw_get_name(ufbxw_scene *scene, ufbxw_id id);
 
 typedef enum ufbxw_prop {
 	UFBXW_P_Lcl_Translation,
