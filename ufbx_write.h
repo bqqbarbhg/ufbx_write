@@ -67,25 +67,17 @@ typedef enum ufbxw_element_type {
 } ufbxw_element_type;
 
 typedef uint64_t ufbxw_id;
-
-typedef struct ufbxw_node {
-	ufbxw_id id;
-} ufbxw_node;
-
-typedef struct ufbxw_mesh {
-	ufbxw_id id;
-} ufbxw_mesh;
+typedef struct ufbxw_node { ufbxw_id id; } ufbxw_node;
+typedef struct ufbxw_mesh { ufbxw_id id; } ufbxw_mesh;
 
 // -- Memory callbacks
 
 typedef void *ufbxw_alloc_fn(void *user, size_t size);
-typedef void *ufbxw_realloc_fn(void *user, void *old_ptr, size_t old_size, size_t new_size);
 typedef void ufbxw_free_fn(void *user, void *ptr, size_t size);
 typedef void ufbxw_free_allocator_fn(void *user);
 
 typedef struct ufbxw_allocator {
 	ufbxw_alloc_fn *alloc_fn;
-	ufbxw_realloc_fn *realloc_fn;
 	ufbxw_free_fn *free_fn;
 	ufbxw_free_allocator_fn *free_allocator_fn;
 	void *user;
@@ -116,6 +108,22 @@ ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type t
 ufbxw_abi void ufbxw_delete_element(ufbxw_scene *scene, ufbxw_id id);
 ufbxw_abi size_t ufbxw_get_num_elements(ufbxw_scene *scene);
 ufbxw_abi size_t ufbxw_get_elements(ufbxw_scene *scene, ufbxw_id *elements, size_t num_elements);
+
+typedef enum ufbxw_prop {
+	UFBXW_P_Lcl_Translation,
+	UFBXW_P_Lcl_Rotation,
+	UFBXW_P_Lcl_Scaling,
+} ufbxw_prop;
+
+// -- Node
+
+ufbxw_abi ufbxw_node ufbxw_create_node(ufbxw_scene *scene);
+ufbxw_abi ufbxw_node ufbxw_as_node(ufbxw_id id);
+
+// -- Mesh
+
+ufbxw_abi ufbxw_mesh ufbxw_create_mesh(ufbxw_scene *scene);
+ufbxw_abi ufbxw_mesh ufbxw_as_mesh(ufbxw_id id);
 
 // -- Writing API
 

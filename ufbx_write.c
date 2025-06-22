@@ -88,6 +88,67 @@
 	#define ufbxwi_is_aligned_mask(m_ptr, m_align) (((uintptr_t)(m_ptr) & (m_align)) == 0)
 #endif
 
+// -- Bit manipulation
+
+#if defined(__cplusplus)
+	#define ufbxwi_extern_c extern "C"
+#else
+	#define ufbxwi_extern_c
+#endif
+
+#if !defined(UFBXW_STANDARD_C) && defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+	ufbxwi_extern_c unsigned char _BitScanReverse(unsigned long * _Index, unsigned long _Mask);
+	ufbxwi_extern_c unsigned char _BitScanReverse64(unsigned long * _Index, unsigned __int64 _Mask);
+	static ufbxwi_forceinline ufbxwi_unused uint32_t ufbxwi_lzcnt32(uint32_t v) {
+		unsigned long index;
+		_BitScanReverse(&index, (unsigned long)v);
+		return 31 - (uint32_t)index;
+	}
+	static ufbxwi_forceinline ufbxwi_unused uint32_t ufbxwi_lzcnt64(uint64_t v) {
+		unsigned long index;
+		#if defined(_M_X64)
+			_BitScanReverse64(&index, (unsigned __int64)v);
+		#else
+			uint32_t hi = (uint32_t)(v >> 32u);
+			uint32_t hi_nonzero = hi != 0 ? 1 : 0;
+			uint32_t part = hi_nonzero ? hi : (uint32_t)v;
+			_BitScanReverse(&index, (unsigned long)part);
+			index += hi_nonzero * 32u;
+		#endif
+		return 63 - (uint32_t)index;
+	}
+#elif !defined(UFBXW_STANDARD_C) && (defined(__GNUC__) || defined(__clang__))
+	#define ufbxwi_lzcnt32(v) ((uint32_t)__builtin_clz((unsigned)(v)))
+	#define ufbxwi_lzcnt64(v) ((uint32_t)__builtin_clzll((unsigned long long)(v)))
+#else
+	// DeBrujin table lookup
+	static const uint8_t ufbxwi_lzcnt32_table[] =  {
+		31, 22, 30, 21, 18, 10, 29, 2, 20, 17, 15, 13, 9, 6, 28, 1, 23, 19, 11, 3, 16, 14, 7, 24, 12, 4, 8, 25, 5, 26, 27, 0,
+	};
+	static const uint8_t ufbxwi_lzcnt64_table[] = {
+		63, 16, 62, 7, 15, 36, 61, 3, 6, 14, 22, 26, 35, 47, 60, 2, 9, 5, 28, 11, 13, 21, 42,
+		19, 25, 31, 34, 40, 46, 52, 59, 1, 17, 8, 37, 4, 23, 27, 48, 10, 29, 12, 43, 20, 32, 41,
+		53, 18, 38, 24, 49, 30, 44, 33, 54, 39, 50, 45, 55, 51, 56, 57, 58, 0,
+	};
+	static ufbxwi_noinline ufbxwi_unused uint32_t ufbxwi_lzcnt32(uint32_t v) {
+		v |= v >> 1;
+		v |= v >> 2;
+		v |= v >> 4;
+		v |= v >> 8;
+		v |= v >> 16;
+		return ufbxwi_lzcnt32_table[(v * 0x07c4acddu) >> 27];
+	}
+	static ufbxwi_noinline ufbxwi_unused uint32_t ufbxwi_lzcnt64(uint64_t v) {
+		v |= v >> 1;
+		v |= v >> 2;
+		v |= v >> 4;
+		v |= v >> 8;
+		v |= v >> 16;
+		v |= v >> 32;
+		return ufbxwi_lzcnt64_table[(v * UINT64_C(0x03f79d71b4cb0a89)) >> 58];
+	}
+#endif
+
 // -- Error
 
 typedef struct {
@@ -142,13 +203,53 @@ static ufbxwi_forceinline size_t ufbxwi_size_align_mask(size_t size)
 	return ((size ^ (size - 1)) >> 1) & (UFBXW_MAXIMUM_ALIGNMENT - 1);
 }
 
+enum {
+	UFBXWI_MIN_SIZE_CLASS_LOG2 = 6,
+	UFBXWI_MIN_SIZE_CLASS_SIZE = 1 << UFBXWI_MIN_SIZE_CLASS_LOG2,
+	UFBXWI_MAX_SIZE_CLASS_LOG2 = 12,
+	UFBXWI_MAX_SIZE_CLASS_SIZE = 1 << UFBXWI_MAX_SIZE_CLASS_LOG2,
+	UFBXWI_SIZE_CLASS_COUNT = UFBXWI_MAX_SIZE_CLASS_LOG2 - UFBXWI_MIN_SIZE_CLASS_LOG2,
+};
+
+static uint32_t ufbxwi_get_size_class(size_t size)
+{
+	if (size > UFBXWI_MAX_SIZE_CLASS_SIZE) {
+		return UINT32_MAX;
+	} else if (size <= UFBXWI_MIN_SIZE_CLASS_SIZE) {
+		return 0;
+	} else {
+		return (32 - ufbxwi_lzcnt32((uint32_t)size - 1)) - UFBXWI_MIN_SIZE_CLASS_LOG2;
+	}
+}
+
+#define UFBXWI_HUGE_MAGIC  0x68617775
+#define UFBXWI_BLOCK_MAGIC 0x62617775u
+#define UFBXWI_ALLOC_MAGIC 0x61617775u
+#define UFBXWI_FREED_MAGIC 0x66617775u
+
+typedef struct ufbxwi_alloc ufbxwi_alloc;
+struct ufbxwi_alloc {
+	ufbxwi_alloc *prev;
+	ufbxwi_alloc *next;
+	size_t size;
+	size_t magic;
+};
+
 typedef struct {
 	ufbxwi_error *error;
 	ufbxw_allocator ator;
 	size_t max_size;
-	size_t current_size;
 	size_t num_allocs;
 	size_t max_allocs;
+
+	ufbxwi_alloc *free_root[UFBXWI_SIZE_CLASS_COUNT];
+	ufbxwi_alloc block_root;
+
+	void *current_block;
+	size_t current_pos;
+	size_t current_size;
+
+	size_t next_block_size;
 } ufbxwi_allocator;
 
 static ufbxwi_forceinline bool ufbxwi_does_overflow(size_t total, size_t a, size_t b)
@@ -160,7 +261,42 @@ static ufbxwi_forceinline bool ufbxwi_does_overflow(size_t total, size_t a, size
 	return false;
 }
 
-static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t size, size_t n)
+static ufbxwi_noinline ufbxwi_alloc *ufbxwi_alloc_block(ufbxwi_allocator *ator, size_t size)
+{
+	size_t alloc_size = sizeof(ufbxwi_alloc) + size;
+	ufbxwi_alloc *block = NULL;
+	if (ator->ator.alloc_fn) {
+		block = (ufbxwi_alloc*)ator->ator.alloc_fn(ator->ator.user, size);
+	} else {
+		block = ufbxw_malloc(alloc_size);
+	}
+	if (!block) return NULL;
+
+	block->size = size;
+	block->prev = &ator->block_root;
+	block->next = ator->block_root.next;
+	ator->block_root.next = block;
+
+	return block;
+}
+
+static ufbxwi_noinline void ufbxwi_free_block(ufbxwi_allocator *ator, ufbxwi_alloc *block)
+{
+	if (block->prev) block->prev->next = block->next;
+	if (block->next) block->next->prev = block->prev;
+
+	size_t alloc_size = block->size + sizeof(ufbxwi_alloc);
+	block->magic = UFBXWI_FREED_MAGIC;
+	if (ator->ator.alloc_fn) {
+		if (ator->ator.free_fn) {
+			ator->ator.free_fn(ator->ator.user, block, alloc_size);
+		}
+	} else {
+		ufbxw_free(block, alloc_size);
+	}
+}
+
+static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t size, size_t n, size_t *p_alloc_size)
 {
 	// Always succeed with an empty non-NULL buffer for empty allocations
 	ufbxw_assert(size > 0);
@@ -168,56 +304,101 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 
 	size_t total = size * n;
 	ufbxwi_check_return_err(ator->error, !ufbxwi_does_overflow(total, size, n), NULL);
-	ufbxwi_check_return_err(ator->error, total <= SIZE_MAX / 2, NULL); // Make sure it's always safe to double allocations
-	ufbxwi_check_return_err(ator->error, total < ator->max_size - ator->current_size, NULL);
-	ufbxwi_check_return_err(ator->error, ator->num_allocs < ator->max_allocs, NULL);
-	ator->num_allocs++;
 
-	void *ptr;
-	if (ator->ator.alloc_fn) {
-		ptr = ator->ator.alloc_fn(ator->ator.user, total);
-	} else if (ator->ator.realloc_fn) {
-		ptr = ator->ator.realloc_fn(ator->ator.user, NULL, 0, total);
-	} else {
-		ptr = ufbxw_malloc(total);
-	}
+	uint32_t size_class = ufbxwi_get_size_class(total);
+	if (size_class == ~0u) {
+		ufbxwi_alloc *block = ufbxwi_alloc_block(ator, total);
+		ufbxwi_check_return_err(ator->error, block, NULL);
+		block->magic = UFBXWI_HUGE_MAGIC;
 
-	ufbxwi_check_return_err(ator->error, ptr, NULL);
-	ufbxw_assert(ufbxwi_is_aligned_mask(ptr, ufbxwi_size_align_mask(total)));
-
-	ator->current_size += total;
-
-	return ptr;
-}
-
-static ufbxwi_noinline void ufbxwi_free_size(ufbxwi_allocator *ator, size_t size, void *ptr, size_t n)
-{
-	ufbxw_assert(size > 0);
-	if (n == 0) return;
-	ufbxw_assert(ptr);
-
-	size_t total = size * n;
-
-	// The old values have been checked by a previous allocate call
-	ufbxw_assert(!ufbxwi_does_overflow(total, size, n));
-	ufbxw_assert(total <= ator->current_size);
-
-	ator->current_size -= total;
-
-	if (ator->ator.alloc_fn || ator->ator.realloc_fn) {
-		// Don't call default free() if there is an user-provided `alloc_fn()`
-		if (ator->ator.free_fn) {
-			ator->ator.free_fn(ator->ator.user, ptr, total);
-		} else if (ator->ator.realloc_fn) {
-			ator->ator.realloc_fn(ator->ator.user, ptr, total, 0);
+		if (p_alloc_size) {
+			*p_alloc_size = total;
 		}
+		return block + 1;
+	}
+
+	size_t size_class_size = (size_t)UFBXWI_MIN_SIZE_CLASS_SIZE << size_class;
+	ufbxwi_alloc *freed = ator->free_root[size_class];
+	if (freed) {
+		freed->magic = UFBXWI_ALLOC_MAGIC;
+		ator->free_root[size_class] = freed->next;
+		if (p_alloc_size) {
+			*p_alloc_size = size_class_size;
+		}
+		return freed + 1;
+	}
+
+	size_t alloc_size = size_class_size + sizeof(ufbxwi_alloc);
+	if (ufbxwi_unlikely(ator->current_size - ator->current_pos < alloc_size)) {
+		size_t block_alloc_size = ufbxwi_min_sz(ufbxwi_max_sz(ator->next_block_size * 2, 0x10000), 0x100000);
+
+		ufbxwi_alloc *block = ufbxwi_alloc_block(ator, block_alloc_size - sizeof(ufbxwi_alloc));
+		ufbxwi_check_return_err(ator->error, block, NULL);
+		block->magic = UFBXWI_BLOCK_MAGIC;
+
+		ator->current_block = block;
+		ator->current_pos = sizeof(ufbxwi_alloc);
+		ator->current_size = block_alloc_size;
+
+		ator->next_block_size = block_alloc_size;
+	}
+
+	size_t offset = ator->current_pos;
+	ufbxwi_alloc *alloc = (ufbxwi_alloc*)((char*)ator->current_block + offset);
+	ator->current_pos = offset + alloc_size;
+	alloc->next = NULL;
+	alloc->prev = NULL;
+	alloc->size = size_class_size;
+	alloc->magic = UFBXWI_ALLOC_MAGIC;
+	if (p_alloc_size) {
+		*p_alloc_size = size_class_size;
+	}
+	return alloc + 1;
+}
+
+static ufbxwi_noinline void ufbxwi_free(ufbxwi_allocator *ator, void *ptr)
+{
+	if (!ptr || ptr == ufbxwi_zero_size_buffer) return;
+
+	ufbxwi_alloc *alloc = (ufbxwi_alloc*)ptr - 1;
+	ufbxw_assert(alloc->magic == UFBXWI_ALLOC_MAGIC || alloc->magic == UFBXWI_HUGE_MAGIC);
+	uint32_t size_class = ufbxwi_get_size_class(alloc->size);
+
+	if (size_class == ~0u) {
+		ufbxwi_free_block(ator, alloc);
 	} else {
-		ufbxw_free(ptr, total);
+		alloc->magic = UFBXWI_FREED_MAGIC;
+		alloc->next = ator->free_root[size_class];
+		ator->free_root[size_class] = alloc;
 	}
 }
 
-#define ufbxwi_alloc(ator, type, n) ufbxwi_maybe_null((type*)ufbxwi_alloc_size((ator), sizeof(type), (n)))
-#define ufbxwi_free(ator, type, ptr, n) ufbxwi_free_size((ator), sizeof(type), (ptr), (n))
+static ufbxwi_noinline void ufbxwi_move_allocator(ufbxwi_allocator *dst, ufbxwi_allocator *src)
+{
+	*dst = *src;
+	if (dst->block_root.next) {
+		dst->block_root.next->prev = &dst->block_root;
+	}
+	memset(src, 0, sizeof(ufbxwi_allocator));
+}
+
+static ufbxwi_noinline void ufbxwi_free_allocator(ufbxwi_allocator *ator)
+{
+	ufbxwi_alloc *block = ator->block_root.next;
+	while (block) {
+		ufbxw_assert(block->magic == UFBXWI_BLOCK_MAGIC || block->magic == UFBXWI_HUGE_MAGIC);
+
+		ufbxwi_alloc *next = block->next;
+		ufbxwi_free_block(ator, block);
+		block = next;
+	}
+
+	if (ator->ator.free_allocator_fn) {
+		ator->ator.free_allocator_fn(ator->ator.user);
+	}
+}
+
+#define ufbxwi_alloc(ator, type, n) ufbxwi_maybe_null((type*)ufbxwi_alloc_size((ator), sizeof(type), (n), NULL))
 
 // -- Dynamic List
 
@@ -233,12 +414,13 @@ static ufbxwi_noinline void *ufbxwi_list_push_size_slow(ufbxwi_allocator *ator, 
 {
 	size_t count = list->count;
 	size_t new_capacity = ufbxwi_max_sz(count + n, list->capacity * 2);
-	new_capacity = ufbxwi_max_sz(new_capacity, 128 / size);
-	char *new_data = ufbxwi_alloc_size(ator, size, new_capacity);
+
+	size_t alloc_size = 0;
+	char *new_data = ufbxwi_alloc_size(ator, size, new_capacity, &alloc_size);
 	ufbxwi_check_return_err(ator->error, new_data, NULL);
 
 	list->data = new_data;
-	list->capacity = new_capacity;
+	list->capacity = alloc_size / size;
 	list->count += n;
 	return (char*)list->data + size * count;
 }
@@ -274,7 +456,7 @@ static ufbxwi_forceinline ufbxwi_nodiscard void *ufbxwi_list_push_copy_size(ufbx
 static ufbxwi_forceinline void ufbxwi_list_free_size(ufbxwi_allocator *ator, void *p_list, size_t size)
 {
 	ufbxwi_list *list = (ufbxwi_list*)p_list;
-	ufbxwi_free_size(ator, size, list->data, list->capacity);
+	ufbxwi_free(ator, list->data);
 	list->data = NULL;
 	list->count = list->capacity = 0;
 }
@@ -319,10 +501,20 @@ UFBXWI_LIST_TYPE(ufbxwi_prop_list, ufbxwi_prop);
 typedef struct {
 	ufbxw_id id;
 	ufbxwi_prop_list props;
-
+	void *data;
 } ufbxwi_element;
 
 UFBXWI_LIST_TYPE(ufbxwi_element_list, ufbxwi_element);
+
+typedef struct {
+	ufbxw_vec3 lcl_translation;
+	ufbxw_vec3 lcl_rotation;
+	ufbxw_vec3 lcl_scaling;
+} ufbxwi_node;
+
+typedef struct {
+	size_t temp;
+} ufbxwi_mesh;
 
 struct ufbxw_scene {
 	ufbxwi_allocator ator;
@@ -343,10 +535,13 @@ static ufbxwi_forceinline ufbxwi_element *ufbxwi_get_element(ufbxw_scene *scene,
 	return element;
 }
 
-static void ufbxwi_free_scene(ufbxw_scene *scene)
+static size_t ufbxwi_element_data_size(ufbxw_element_type type)
 {
-	ufbxwi_list_free(&scene->ator, &scene->elements);
-	ufbxwi_list_free(&scene->ator, &scene->free_element_ids);
+	switch (type) {
+	case UFBXW_ELEMENT_NODE: return sizeof(ufbxwi_node);
+	case UFBXW_ELEMENT_MESH: return sizeof(ufbxwi_mesh);
+	default: return 0;
+	}
 }
 
 // -- API
@@ -362,25 +557,23 @@ ufbxw_abi ufbxw_scene *ufbxw_create_scene(const ufbxw_scene_opts *opts)
 	ufbxwi_allocator ator = { 0 };
 	ator.ator = opts->allocator;
 	ator.max_allocs = SIZE_MAX;
-	ator.max_size = SIZE_MAX;
+	ator.max_size = SIZE_MAX / 4;
 
 	ufbxw_scene *scene = ufbxwi_alloc(&ator, ufbxw_scene, 1);
 	if (!scene) return NULL;
 
 	memset(scene, 0, sizeof(ufbxw_scene));
 	scene->opts = *opts;
-	scene->ator = ator;
+	ufbxwi_move_allocator(&scene->ator, &ator);
+
 	return scene;
 }
 
 ufbxw_abi void ufbxw_free_scene(ufbxw_scene *scene)
 {
-	ufbxwi_free_scene(scene);
-
-	ufbxwi_allocator ator = scene->ator;
-	ufbxwi_free(&ator, ufbxw_scene, scene, 1);
-
-	ufbxw_assert(ator.current_size == 0);
+	ufbxwi_allocator ator;
+	ufbxwi_move_allocator(&ator, &scene->ator);
+	ufbxwi_free_allocator(&ator);
 }
 
 ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error)
@@ -400,6 +593,13 @@ ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error)
 
 ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type type)
 {
+	size_t data_size = ufbxwi_element_data_size(type);
+	void *data = ufbxwi_alloc_size(&scene->ator, data_size, 1, NULL);
+	ufbxwi_check_return(data, 0);
+	if (data_size > 0) {
+		memset(data, 0, data_size);
+	}
+
 	size_t index = 0;
 	if (scene->free_element_ids.count > 0) {
 		index = scene->free_element_ids.data[--scene->free_element_ids.count];
@@ -411,6 +611,7 @@ ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type t
 	ufbxwi_element *element = &scene->elements.data[index];
 	uint32_t generation = ufbxwi_id_generation(element->id) + 1;
 	element->id = ufbxwi_make_id(type, generation, index);
+	element->data = data;
 	
 	scene->num_elements++;
 
@@ -421,6 +622,9 @@ ufbxw_abi void ufbxw_delete_element(ufbxw_scene *scene, ufbxw_id id)
 {
 	ufbxwi_element *element = ufbxwi_get_element(scene, id);
 	ufbxwi_check(element);
+
+	ufbxw_element_type type = ufbxwi_id_type(id);
+	ufbxwi_free(&scene->ator, element->data);
 
 	uint32_t generation = ufbxwi_id_generation(element->id);
 	memset(element, 0, sizeof(ufbxwi_element));
@@ -451,6 +655,28 @@ ufbxw_abi size_t ufbxw_get_elements(ufbxw_scene *scene, ufbxw_id *elements, size
 		}
 	}
 	return count;
+}
+
+ufbxw_abi ufbxw_node ufbxw_create_node(ufbxw_scene *scene)
+{
+	ufbxw_node node = { ufbxw_create_element(scene, UFBXW_ELEMENT_NODE) };
+	return node;
+}
+
+ufbxw_abi ufbxw_node ufbxw_as_node(ufbxw_id id) {
+	ufbxw_node node = { ufbxwi_id_type(id) == UFBXW_ELEMENT_NODE ? id : 0 };
+	return node;
+}
+
+ufbxw_abi ufbxw_mesh ufbxw_create_mesh(ufbxw_scene *scene)
+{
+	ufbxw_mesh mesh = { ufbxw_create_element(scene, UFBXW_ELEMENT_MESH) };
+	return mesh;
+}
+
+ufbxw_abi ufbxw_mesh ufbxw_as_mesh(ufbxw_id id) {
+	ufbxw_mesh mesh = { ufbxwi_id_type(id) == UFBXW_ELEMENT_MESH ? id : 0 };
+	return mesh;
 }
 
 // -- IO
