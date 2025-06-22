@@ -1,7 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?> 
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	<Type Name="ufbxw_node_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
+	<Type Name="ufbxwi_id_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
 	<Type Name="ufbxwi_uint32_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
 	<Type Name="ufbxwi_prop_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
 	<Type Name="ufbxwi_element_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
+	<Type Name="ufbxwi_element">
+		<DisplayString>{{ type={(ufbxw_element_type)(id &gt;&gt; 48),en} name={name} }}</DisplayString>
+		<Expand>
+			<Item Name="type">(ufbxw_element_type)(id &gt;&gt; 48),en</Item>
+			<Item Name="index">(unsigned)id</Item>
+			<Item Name="props">props</Item>
+			<Item Name="data" Condition="(ufbxw_element_type)(id &gt;&gt; 48) == UFBXW_ELEMENT_NODE">(ufbxwi_node*)data</Item>
+			<Item Name="connections_src">connections_src</Item>
+			<Item Name="connections_dst">connections_dst</Item>
+		</Expand>
+	</Type>
 </AutoVisualizer>
 

@@ -512,13 +512,15 @@ static ufbxwi_noinline void *ufbxwi_list_push_size_slow(ufbxwi_allocator *ator, 
 	char *new_data = ufbxwi_alloc_size(ator, size, new_capacity, &alloc_size);
 	ufbxwi_check_return_err(ator->error, new_data, NULL);
 
+	memcpy(new_data, list->data, count * size);
+
 	list->data = new_data;
 	list->capacity = alloc_size / size;
 	list->count += n;
 	return (char*)list->data + size * count;
 }
 
-static ufbxwi_forceinline ufbxwi_nodiscard void *ufbxwi_list_push_size(ufbxwi_allocator *ator, void *p_list, size_t size, size_t n)
+static ufbxwi_forceinline void *ufbxwi_list_push_size(ufbxwi_allocator *ator, void *p_list, size_t size, size_t n)
 {
 	ufbxwi_list *list = (ufbxwi_list*)p_list;
 	size_t count = list->count;
@@ -530,7 +532,7 @@ static ufbxwi_forceinline ufbxwi_nodiscard void *ufbxwi_list_push_size(ufbxwi_al
 	}
 }
 
-static ufbxwi_forceinline ufbxwi_nodiscard void *ufbxwi_list_push_zero_size(ufbxwi_allocator *ator, void *p_list, size_t size, size_t n)
+static ufbxwi_forceinline void *ufbxwi_list_push_zero_size(ufbxwi_allocator *ator, void *p_list, size_t size, size_t n)
 {
 	void *data = ufbxwi_list_push_size(ator, p_list, size, n);
 	if (!data) return NULL;
@@ -538,7 +540,7 @@ static ufbxwi_forceinline ufbxwi_nodiscard void *ufbxwi_list_push_zero_size(ufbx
 	return data;
 }
 
-static ufbxwi_forceinline ufbxwi_nodiscard void *ufbxwi_list_push_copy_size(ufbxwi_allocator *ator, void *p_list, size_t size, size_t n, void *src)
+static ufbxwi_forceinline void *ufbxwi_list_push_copy_size(ufbxwi_allocator *ator, void *p_list, size_t size, size_t n, void *src)
 {
 	void *data = ufbxwi_list_push_size(ator, p_list, size, n);
 	if (!data) return NULL;
@@ -567,6 +569,39 @@ static ufbxwi_forceinline void ufbxwi_list_free_size(ufbxwi_allocator *ator, voi
 #define ufbxwi_list_push_copy(ator, list, type, src) ufbxwi_maybe_null((ufbxwi_check_ptr_type(type, (list)->data), ufbxwi_check_ptr_type(type, src), (type*)ufbxwi_list_push_copy_size((ator), (list), sizeof(type), 1, (src))))
 #define ufbxwi_list_push_copy_n(ator, list, type, n, src) ufbxwi_maybe_null((ufbxwi_check_ptr_type(type, (list)->data), ufbxwi_check_ptr_type(type, src), (type*)ufbxwi_list_push_copy_size((), (list), sizeof(type), (n), (src))))
 #define ufbxwi_list_free(ator, list) ufbxwi_list_free_size((ator),&(list), sizeof(*(list)->data))
+
+// -- Special list
+
+UFBXWI_LIST_TYPE(ufbxwi_id_list, ufbxw_id);
+
+static bool ufbxwi_id_list_add(ufbxwi_allocator *ator, void *p_list, ufbxw_id id)
+{
+	ufbxwi_id_list *list = (ufbxwi_id_list*)p_list;
+	ufbxw_id *dst = ufbxwi_list_push_uninit(ator, list, ufbxw_id);
+	if (dst) {
+		*dst = id;
+		return true;
+	} else {
+		return false;
+	}
+}
+
+static bool ufbxwi_id_list_remove(ufbxwi_allocator *ator, void *p_list, ufbxw_id id)
+{
+	ufbxwi_id_list *list = (ufbxwi_id_list*)p_list;
+	ufbxw_id *begin = list->data, *dst = begin, *end = begin + list->count;
+	for (; dst != end; dst++) {
+		if (*dst == id) break;
+	}
+	if (dst != end) return false;
+
+	--list->count;
+	--end;
+	for (; dst != end; dst++) {
+		dst[0] = dst[1];
+	}
+	return true;
+}
 
 // -- Hash functions
 
@@ -744,11 +779,19 @@ typedef struct {
 
 	ufbxwi_prop_list props;
 	void *data;
+
+	// TODO: Replace these with more performant containers
+	ufbxwi_id_list connections_src;
+	ufbxwi_id_list connections_dst;
 } ufbxwi_element;
 
 UFBXWI_LIST_TYPE(ufbxwi_element_list, ufbxwi_element);
+UFBXWI_LIST_TYPE(ufbxw_node_list, ufbxw_node);
 
 typedef struct {
+	ufbxw_node parent;
+	ufbxw_node_list children;
+
 	ufbxw_vec3 lcl_translation;
 	ufbxw_vec3 lcl_rotation;
 	ufbxw_vec3 lcl_scaling;
@@ -778,6 +821,17 @@ static ufbxwi_forceinline ufbxwi_element *ufbxwi_get_element(ufbxw_scene *scene,
 	return element;
 }
 
+static ufbxwi_forceinline void *ufbxwi_get_element_data(ufbxw_scene *scene, ufbxw_id id)
+{
+	ufbxwi_element *element = ufbxwi_get_element(scene, id);
+	return element ? element->data : NULL;
+}
+
+static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node_data(ufbxw_scene *scene, ufbxw_node node) { return (ufbxwi_node*)ufbxwi_get_element_data(scene, node.id); }
+static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh_data(ufbxw_scene *scene, ufbxw_mesh mesh) { return (ufbxwi_mesh*)ufbxwi_get_element_data(scene, mesh.id); }
+
+static ufbxwi_forceinline ufbxw_node ufbxwi_assert_node(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_NODE); ufbxw_node node = { id }; return node; }
+
 static size_t ufbxwi_element_data_size(ufbxw_element_type type)
 {
 	switch (type) {
@@ -791,6 +845,42 @@ static void ufbxwi_init_scene(ufbxw_scene *scene)
 {
 	scene->string_pool.ator = &scene->ator;
 	scene->string_pool.error = &scene->error;
+}
+
+static void ufbxwi_connect_imp(ufbxw_scene *scene, ufbxwi_element *src, ufbxwi_element *dst)
+{
+	ufbxw_id src_id = src->id, dst_id = dst->id;
+	ufbxw_element_type src_type = ufbxwi_id_type(src_id);
+	ufbxw_element_type dst_type = ufbxwi_id_type(dst_id);
+
+	if (dst_type == UFBXW_ELEMENT_NODE) {
+		ufbxwi_node *dst_node = (ufbxwi_node*)dst->data;
+
+		if (src_type == UFBXW_ELEMENT_NODE) {
+			ufbxwi_node *src_node = (ufbxwi_node*)src->data;
+
+			ufbxwi_id_list_add(&scene->ator, &dst_node->children, src_id);
+			src_node->parent = ufbxwi_assert_node(dst_id);
+		}
+	}
+}
+
+static void ufbxwi_disconnect_imp(ufbxw_scene *scene, ufbxwi_element *src, ufbxwi_element *dst)
+{
+	ufbxw_id src_id = src->id, dst_id = dst->id;
+	ufbxw_element_type src_type = ufbxwi_id_type(src_id);
+	ufbxw_element_type dst_type = ufbxwi_id_type(dst_id);
+
+	if (dst_type == UFBXW_ELEMENT_NODE) {
+		ufbxwi_node *dst_node = (ufbxwi_node*)dst->data;
+
+		if (src_type == UFBXW_ELEMENT_NODE) {
+			ufbxwi_node *src_node = (ufbxwi_node*)src->data;
+
+			ufbxwi_id_list_remove(&scene->ator, &dst_node->children, dst_id);
+			src_node->parent = ufbxw_null_node;
+		}
+	}
 }
 
 // -- API
@@ -845,9 +935,10 @@ ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error)
 ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type type)
 {
 	size_t data_size = ufbxwi_element_data_size(type);
-	void *data = ufbxwi_alloc_size(&scene->ator, data_size, 1, NULL);
-	ufbxwi_check_return(data, 0);
+	void *data = NULL;
 	if (data_size > 0) {
+		data = ufbxwi_alloc_size(&scene->ator, data_size, 1, NULL);
+		ufbxwi_check_return(data, 0);
 		memset(data, 0, data_size);
 	}
 
@@ -930,15 +1021,126 @@ ufbxw_abi ufbxw_string ufbxw_get_name(ufbxw_scene *scene, ufbxw_id id)
 	return element->name;
 }
 
+ufbxw_abi void ufbxw_connect(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst)
+{
+	ufbxwi_element *src_elem = ufbxwi_get_element(scene, src);
+	ufbxwi_element *dst_elem = ufbxwi_get_element(scene, dst);
+	ufbxwi_check(src_elem && dst_elem);
+
+	// Do not allow duplicate connections by default
+	ufbxwi_for_list(ufbxw_id, id, src_elem->connections_dst) {
+		if (*id == dst) return;
+	}
+
+	ufbxwi_id_list_add(&scene->ator, &src_elem->connections_dst, dst);
+	ufbxwi_id_list_add(&scene->ator, &dst_elem->connections_src, src);
+	ufbxwi_connect_imp(scene, src_elem, dst_elem);
+}
+
+ufbxw_abi void ufbxw_connect_multi(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst)
+{
+	ufbxwi_element *src_elem = ufbxwi_get_element(scene, src);
+	ufbxwi_element *dst_elem = ufbxwi_get_element(scene, dst);
+	ufbxwi_check(src_elem && dst_elem);
+
+	ufbxwi_id_list_add(&scene->ator, &src_elem->connections_dst, dst);
+	ufbxwi_id_list_add(&scene->ator, &dst_elem->connections_src, src);
+	ufbxwi_connect_imp(scene, src_elem, dst_elem);
+}
+
+ufbxw_abi void ufbxw_disconnect(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst)
+{
+	ufbxwi_element *src_elem = ufbxwi_get_element(scene, src);
+	ufbxwi_element *dst_elem = ufbxwi_get_element(scene, dst);
+	ufbxwi_check(src_elem && dst_elem);
+
+	if (!ufbxwi_id_list_remove(&scene->ator, &src_elem->connections_dst, dst)) return;
+	ufbxwi_id_list_remove(&scene->ator, &src_elem->connections_src, src);
+	ufbxwi_disconnect_imp(scene, src_elem, dst_elem);
+}
+
+ufbxw_abi void ufbxw_disconnect_dst(ufbxw_scene *scene, ufbxw_id id, ufbxw_element_type type)
+{
+	ufbxwi_element *src_elem = ufbxwi_get_element(scene, id);
+	ufbxwi_check(src_elem);
+
+	ufbxwi_id_list conn_dst = src_elem->connections_dst;
+	size_t dst_ix = 0;
+	for (size_t src_ix = 0; src_ix < conn_dst.count; src_ix++) {
+		ufbxw_id dst_id = conn_dst.data[src_ix];
+		if (ufbxwi_id_type(dst_id) == type) {
+			if (dst_ix != src_ix) conn_dst.data[dst_ix] = dst_id;
+			dst_ix++;
+
+			ufbxwi_element *dst_elem = ufbxwi_get_element(scene, dst_id);
+			if (dst_elem) {
+				ufbxwi_id_list_remove(&scene->ator, &dst_elem->connections_src, id);
+				ufbxwi_disconnect_imp(scene, src_elem, dst_elem);
+			}
+		}
+	}
+}
+
+ufbxw_abi void ufbxw_disconnect_src(ufbxw_scene *scene, ufbxw_id id, ufbxw_element_type type)
+{
+	ufbxwi_element *dst_elem = ufbxwi_get_element(scene, id);
+	ufbxwi_check(dst_elem);
+
+	ufbxwi_id_list conn_src = dst_elem->connections_src;
+	size_t dst_ix = 0;
+	for (size_t src_ix = 0; src_ix < conn_src.count; src_ix++) {
+		ufbxw_id src_id = conn_src.data[src_ix];
+		if (ufbxwi_id_type(src_id) == type) {
+			if (dst_ix != src_ix) conn_src.data[dst_ix] = src_id;
+			dst_ix++;
+
+			ufbxwi_element *src_elem = ufbxwi_get_element(scene, src_id);
+			if (src_elem) {
+				ufbxwi_id_list_remove(&scene->ator, &dst_elem->connections_dst, id);
+				ufbxwi_disconnect_imp(scene, src_elem, dst_elem);
+			}
+		}
+	}
+}
+
 ufbxw_abi ufbxw_node ufbxw_create_node(ufbxw_scene *scene)
 {
 	ufbxw_node node = { ufbxw_create_element(scene, UFBXW_ELEMENT_NODE) };
 	return node;
 }
 
-ufbxw_abi ufbxw_node ufbxw_as_node(ufbxw_id id) {
+ufbxw_abi ufbxw_node ufbxw_as_node(ufbxw_id id)
+{
 	ufbxw_node node = { ufbxwi_id_type(id) == UFBXW_ELEMENT_NODE ? id : 0 };
 	return node;
+}
+
+ufbxw_abi size_t ufbxw_node_get_num_children(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *node_data = ufbxwi_get_node_data(scene, node);
+	ufbxwi_check_return(node_data, 0);
+	return node_data->children.count;
+}
+
+ufbxw_abi ufbxw_node ufbxw_node_get_child(ufbxw_scene *scene, ufbxw_node node, size_t index)
+{
+	ufbxwi_node *node_data = ufbxwi_get_node_data(scene, node);
+	ufbxwi_check_return(node_data, ufbxw_as_node(0));
+	ufbxwi_check_return(index < node_data->children.count, ufbxw_as_node(0));
+	return node_data->children.data[index];
+}
+
+ufbxw_abi void ufbxw_node_set_parent(ufbxw_scene *scene, ufbxw_node node, ufbxw_node parent)
+{
+	ufbxw_disconnect_dst(scene, node.id, UFBXW_ELEMENT_NODE);
+	ufbxw_connect(scene, node.id, parent.id);
+}
+
+ufbxw_abi ufbxw_node ufbxw_node_get_parent(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *node_data = ufbxwi_get_node_data(scene, node);
+	ufbxwi_check_return(node_data, ufbxw_as_node(0));
+	return node_data->parent;
 }
 
 ufbxw_abi ufbxw_mesh ufbxw_create_mesh(ufbxw_scene *scene)
@@ -947,9 +1149,15 @@ ufbxw_abi ufbxw_mesh ufbxw_create_mesh(ufbxw_scene *scene)
 	return mesh;
 }
 
-ufbxw_abi ufbxw_mesh ufbxw_as_mesh(ufbxw_id id) {
+ufbxw_abi ufbxw_mesh ufbxw_as_mesh(ufbxw_id id)
+{
 	ufbxw_mesh mesh = { ufbxwi_id_type(id) == UFBXW_ELEMENT_MESH ? id : 0 };
 	return mesh;
+}
+
+ufbxw_abi void ufbxw_mesh_add_instance(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_node node)
+{
+	ufbxw_connect(scene, mesh.id, node.id);
 }
 
 // -- IO

@@ -76,6 +76,10 @@ typedef uint64_t ufbxw_id;
 typedef struct ufbxw_node { ufbxw_id id; } ufbxw_node;
 typedef struct ufbxw_mesh { ufbxw_id id; } ufbxw_mesh;
 
+#define ufbxw_null_id ((ufbxw_id)0)
+#define ufbxw_null_node ((ufbxw_node){0})
+#define ufbxw_null_mesh ((ufbxw_mesh){0})
+
 // -- Memory callbacks
 
 typedef void *ufbxw_alloc_fn(void *user, size_t size);
@@ -119,6 +123,12 @@ ufbxw_abi void ufbxw_set_name(ufbxw_scene *scene, ufbxw_id id, const char *name)
 ufbxw_abi void ufbxw_set_name_len(ufbxw_scene *scene, ufbxw_id id, const char *name, size_t name_len);
 ufbxw_abi ufbxw_string ufbxw_get_name(ufbxw_scene *scene, ufbxw_id id);
 
+ufbxw_abi void ufbxw_connect(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst);
+ufbxw_abi void ufbxw_connect_multi(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst);
+ufbxw_abi void ufbxw_disconnect(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst);
+ufbxw_abi void ufbxw_disconnect_dst(ufbxw_scene *scene, ufbxw_id id, ufbxw_element_type type);
+ufbxw_abi void ufbxw_disconnect_src(ufbxw_scene *scene, ufbxw_id id, ufbxw_element_type type);
+
 typedef enum ufbxw_prop {
 	UFBXW_P_Lcl_Translation,
 	UFBXW_P_Lcl_Rotation,
@@ -130,10 +140,17 @@ typedef enum ufbxw_prop {
 ufbxw_abi ufbxw_node ufbxw_create_node(ufbxw_scene *scene);
 ufbxw_abi ufbxw_node ufbxw_as_node(ufbxw_id id);
 
+ufbxw_abi void ufbxw_node_set_parent(ufbxw_scene *scene, ufbxw_node node, ufbxw_node parent);
+ufbxw_abi ufbxw_node ufbxw_node_get_parent(ufbxw_scene *scene, ufbxw_node node);
+ufbxw_abi size_t ufbxw_node_get_num_children(ufbxw_scene *scene, ufbxw_node node);
+ufbxw_abi ufbxw_node ufbxw_node_get_child(ufbxw_scene *scene, ufbxw_node node, size_t index);
+
 // -- Mesh
 
 ufbxw_abi ufbxw_mesh ufbxw_create_mesh(ufbxw_scene *scene);
 ufbxw_abi ufbxw_mesh ufbxw_as_mesh(ufbxw_id id);
+
+ufbxw_abi void ufbxw_mesh_add_instance(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_node node);
 
 // -- Writing API
 
