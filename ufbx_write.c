@@ -637,6 +637,13 @@ static ufbxwi_noinline uint32_t ufbxwi_hash_string(const char *str, size_t lengt
 static const char ufbxwi_empty_char[] = "";
 static const ufbxw_string ufbxwi_empty_string = { ufbxwi_empty_char, 0 };
 
+static ufbxw_string ufbxwi_c_str(const char *str)
+{
+	if (str == NULL) str = ufbxwi_empty_char;
+	ufbxw_string s = { str, strlen(str) };
+	return s;
+}
+
 typedef struct ufbxwi_string_entry {
 	uint32_t hash;
 	uint32_t length;
@@ -682,7 +689,7 @@ bool ufbxwi_string_pool_rehash(ufbxwi_string_pool *pool)
 	return true;
 }
 
-bool ufbxwi_intern_string(ufbxw_string *dst, ufbxwi_string_pool *pool, const char *str, size_t length)
+static bool ufbxwi_intern_string(ufbxw_string *dst, ufbxwi_string_pool *pool, const char *str, size_t length)
 {
 	if (length == 0) {
 		dst->data = ufbxwi_empty_char;
@@ -749,6 +756,11 @@ bool ufbxwi_intern_string(ufbxw_string *dst, ufbxwi_string_pool *pool, const cha
 	return true;
 }
 
+static bool ufbxwi_intern_string_str(ufbxw_string *dst, ufbxwi_string_pool *pool, ufbxw_string str)
+{
+	return ufbxwi_intern_string(dst, pool, str.data, str.length);
+}
+
 // -- Scene
 
 #define UFBXWI_ELEMENT_TYPE_NONE ((ufbxw_element_type)0) 
@@ -766,18 +778,32 @@ static ufbxwi_forceinline ufbxw_id ufbxwi_make_id(ufbxw_element_type type, uint3
 #define ufbxwi_id_generation(id) (uint32_t)(((id) >> 32) & 0xffff)
 
 typedef struct {
-	const char *name;
+	ufbxw_string name;
+	ufbxw_string type;
+	ufbxw_string sub_type;
+} ufbxwi_prop_type;
 
+UFBXWI_LIST_TYPE(ufbxwi_prop_type_list, ufbxwi_prop_type);
+
+typedef struct {
+	ufbxw_prop prop;
+
+	uint32_t str_length;
+	const char *str_value;
 } ufbxwi_prop;
 
 UFBXWI_LIST_TYPE(ufbxwi_prop_list, ufbxwi_prop);
+
+typedef struct {
+	ufbxwi_prop_list props;
+} ufbxwi_props;
 
 typedef struct {
 	ufbxw_id id;
 
 	ufbxw_string name;
 
-	ufbxwi_prop_list props;
+	ufbxwi_props props;
 	void *data;
 
 	// TODO: Replace these with more performant containers
@@ -810,6 +836,8 @@ struct ufbxw_scene {
 	ufbxwi_element_list elements;
 	ufbxwi_uint32_list free_element_ids;
 	size_t num_elements;
+
+	ufbxwi_prop_type_list prop_types;
 };
 
 static ufbxwi_forceinline ufbxwi_element *ufbxwi_get_element(ufbxw_scene *scene, ufbxw_id id)
@@ -841,10 +869,35 @@ static size_t ufbxwi_element_data_size(ufbxw_element_type type)
 	}
 }
 
+static void ufbxwi_create_defaults(ufbxw_scene *scene)
+{
+	if (!scene->opts.no_default_scene_info) {
+		ufbxw_id id = ufbxw_create_element(scene, UFBXW_ELEMENT_SCENE_INFO);
+		ufbxw_set_name(scene, id, "GlobalInfo");
+
+		ufbxw_set_string(scene, id, ufbxw_get_custom_prop_c(scene, "DocumentUrl", "KString", "Url"), "test.fbx");
+		ufbxw_set_string(scene, id, ufbxw_get_custom_prop_c(scene, "SrcDocumentUrl", "KString", "Url"), "test.fbx");
+	}
+
+	if (!scene->opts.no_default_document) {
+		ufbxw_id id = ufbxw_create_element(scene, UFBXW_ELEMENT_DOCUMENT);
+	}
+}
+
 static void ufbxwi_init_scene(ufbxw_scene *scene)
 {
 	scene->string_pool.ator = &scene->ator;
 	scene->string_pool.error = &scene->error;
+
+	if (scene->opts.no_default_elements) {
+		scene->opts.no_default_scene_info = true;
+		scene->opts.no_default_document = true;
+	}
+
+	size_t num_prop_types = (size_t)UFBXW_PROP_FIRST_USER;
+	ufbxwi_check(ufbxwi_list_push_zero_n(&scene->ator, &scene->prop_types, ufbxwi_prop_type, num_prop_types));
+
+	ufbxwi_create_defaults(scene);
 }
 
 static void ufbxwi_connect_imp(ufbxw_scene *scene, ufbxwi_element *src, ufbxwi_element *dst)
@@ -881,6 +934,374 @@ static void ufbxwi_disconnect_imp(ufbxw_scene *scene, ufbxwi_element *src, ufbxw
 			src_node->parent = ufbxw_null_node;
 		}
 	}
+}
+
+// -- Saving
+
+typedef struct {
+	ufbxwi_allocator ator;
+
+	ufbxwi_error error;
+	ufbxw_save_opts opts;
+
+	ufbxw_scene *scene;
+	ufbxw_write_stream stream;
+
+	uint32_t depth;
+
+	char *buffer;
+	char *buffer_pos;
+	char *buffer_end;
+	size_t direct_write_size;
+
+	uint64_t file_pos;
+} ufbxw_save_context;
+
+// -- Writing IO
+
+static ufbxwi_noinline void ufbxwi_write_flush(ufbxw_save_context *sc)
+{
+	size_t size = ufbxwi_to_size(sc->buffer_pos - sc->buffer);
+	if (size == 0) return;
+
+	bool write_ok = sc->stream.write_fn(sc->stream.user, sc->file_pos, sc->buffer, size);
+	ufbxwi_check_err(&sc->error, write_ok);
+
+	sc->file_pos += (uint64_t)size;
+	sc->buffer_pos = sc->buffer;
+}
+
+static ufbxwi_noinline void ufbxwi_write_slow(ufbxw_save_context *sc, const void *data, size_t length)
+{
+	char *dst = sc->buffer_pos;
+	size_t left = ufbxwi_to_size(sc->buffer_end - dst);
+	if (left >= length) {
+		memcpy(dst, data, length);
+		sc->buffer_pos = dst + length;
+	} else {
+		memcpy(dst, data, left);
+
+		data = (const char*)data + left;
+		length -= left;
+
+		ufbxwi_write_flush(sc);
+
+		if (length >= sc->direct_write_size) {
+			bool write_ok = sc->stream.write_fn(sc->stream.user, sc->file_pos, data, length);
+			ufbxwi_check_err(&sc->error, write_ok);
+			sc->file_pos += (uint64_t)length;
+			sc->buffer_pos = sc->buffer;
+		} else {
+			memcpy(sc->buffer_pos, data, length);
+			sc->buffer_pos += length;
+		}
+	}
+}
+
+static ufbxwi_forceinline void ufbxwi_write(ufbxw_save_context *sc, const void *data, size_t length)
+{
+	char *dst = sc->buffer_pos;
+	size_t left = ufbxwi_to_size(sc->buffer_end - dst);
+	if (left >= length) {
+		memcpy(dst, data, length);
+		sc->buffer_pos = dst + length;
+	} else {
+		ufbxwi_write_slow(sc, data, length);
+	}
+}
+
+static ufbxwi_noinline char *ufbxwi_write_reserve_slow(ufbxw_save_context *sc, size_t length)
+{
+	ufbxwi_write_flush(sc);
+	ufbxw_assert(length < ufbxwi_to_size(sc->buffer_end - sc->buffer_pos));
+	return sc->buffer_pos;
+}
+
+static ufbxwi_forceinline char *ufbxwi_write_reserve(ufbxw_save_context *sc, size_t length)
+{
+	char *dst = sc->buffer_pos;
+	size_t left = ufbxwi_to_size(sc->buffer_end - dst);
+	if (left >= length) {
+		return sc->buffer_pos;
+	} else {
+		return ufbxwi_write_reserve_slow(sc, length);
+	}
+}
+
+static ufbxwi_forceinline void ufbxwi_write_commit(ufbxw_save_context *sc, size_t length)
+{
+	ufbxw_assert(length < ufbxwi_to_size(sc->buffer_end - sc->buffer_pos));
+	sc->buffer_pos += length;
+}
+
+// -- ASCII
+
+static void ufbxwi_ascii_indent(ufbxw_save_context *sc)
+{
+	size_t indent = ufbxwi_min_sz(sc->depth, 64);
+	char *dst = ufbxwi_write_reserve(sc, indent);
+	for (size_t i = 0; i < indent; i++) {
+		dst[i] = '\t';
+	}
+	ufbxwi_write_commit(sc, indent);
+}
+
+static void ufbxwi_ascii_dom_string(ufbxw_save_context *sc, const char *str, size_t length)
+{
+	ufbxwi_write(sc, "\"", 1);
+
+	const char *end = str + length;
+	for (;;) {
+		const char *quote = memchr(str, '"', ufbxwi_to_size(end - str));
+		if (!quote) {
+			ufbxwi_write(sc, str, ufbxwi_to_size(end - str));
+			break;
+		} else {
+			ufbxwi_write(sc, str, ufbxwi_to_size(quote - str));
+			ufbxwi_write(sc, "&quot;", 6);
+			str = quote + 1;
+		}
+	}
+
+	ufbxwi_write(sc, "\"", 1);
+}
+
+static void ufbxwi_ascii_dom_write(ufbxw_save_context *sc, const char *tag, const char *fmt, va_list args, bool open)
+{
+	ufbxwi_ascii_indent(sc);
+
+	ufbxwi_write(sc, tag, strlen(tag));
+	ufbxwi_write(sc, ": ", 2);
+
+	for (const char *pf = fmt; *pf; ++pf) {
+		if (pf != fmt) {
+			ufbxwi_write(sc, ", ", 2);
+		}
+
+		switch (*pf) {
+		case 'I': {
+			char *dst = ufbxwi_write_reserve(sc, 32);
+			int len = snprintf(dst, 32, "%d", va_arg(args, int32_t));
+			ufbxw_assert(len >= 0);
+			ufbxwi_write_commit(sc, (size_t)len);
+		} break;
+		case 'L': {
+			char *dst = ufbxwi_write_reserve(sc, 32);
+			int len = snprintf(dst, 32, "%lld", (long long)va_arg(args, int64_t));
+			ufbxw_assert(len >= 0);
+			ufbxwi_write_commit(sc, (size_t)len);
+		} break;
+		case 'F': {
+			char *dst = ufbxwi_write_reserve(sc, 32);
+			int len = snprintf(dst, 32, "%.8g", (float)va_arg(args, double));
+			ufbxw_assert(len >= 0);
+			ufbxwi_write_commit(sc, (size_t)len);
+		} break;
+		case 'D': {
+			char *dst = ufbxwi_write_reserve(sc, 32);
+			int len = snprintf(dst, 32, "%.8g", va_arg(args, double));
+			ufbxw_assert(len >= 0);
+			ufbxwi_write_commit(sc, (size_t)len);
+		} break;
+		case 'C': {
+			const char *str = va_arg(args, const char*);
+			ufbxwi_ascii_dom_string(sc, str, strlen(str));
+		} break;
+		case 'S': {
+			ufbxw_string str = va_arg(args, ufbxw_string);
+			ufbxwi_ascii_dom_string(sc, str.data, str.length);
+		} break;
+		}
+	}
+
+	if (open) {
+		ufbxwi_write(sc, " {", 2);
+	}
+	ufbxwi_write(sc, "\n", 1);
+}
+
+static void ufbxwi_ascii_dom_close(ufbxw_save_context *sc)
+{
+	ufbxwi_ascii_indent(sc);
+	ufbxwi_write(sc, "}\n", 2);
+}
+
+// -- DOM
+
+static void ufbxwi_dom_open(ufbxw_save_context *sc, const char *tag, const char *fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+
+	if (sc->opts.ascii) {
+		ufbxwi_ascii_dom_write(sc, tag, fmt, args, true);
+	} else {
+		// TODO
+	}
+
+	sc->depth++;
+
+	va_end(args);
+}
+
+static void ufbxwi_dom_close(ufbxw_save_context *sc)
+{
+	sc->depth--;
+
+	if (sc->opts.ascii) {
+		ufbxwi_ascii_dom_close(sc);
+	} else {
+		// TODO
+	}
+}
+
+static void ufbxwi_dom_value(ufbxw_save_context *sc, const char *tag, const char *fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+
+	if (sc->opts.ascii) {
+		ufbxwi_ascii_dom_write(sc, tag, fmt, args, false);
+	} else {
+		// TODO
+	}
+
+	va_end(args);
+}
+
+enum {
+	UFBXWI_SAVE_ELEMENT_NO_ID = 0x1,
+};
+
+static void ufbxwi_save_properties(ufbxw_save_context *sc, ufbxwi_props *props)
+{
+	ufbxw_scene *scene = sc->scene;
+
+	// TODO: Version 6
+	ufbxwi_dom_open(sc, "Properties70", "");
+
+	ufbxwi_for_list(ufbxwi_prop, prop, props->props) {
+		const ufbxwi_prop_type *type = &scene->prop_types.data[prop->prop];
+
+		// TODO: Other types, etc
+		ufbxw_string value = { prop->str_value, prop->str_length };
+		ufbxwi_dom_value(sc, "P", "SSSCS", type->name, type->type, type->sub_type, "", value);
+	}
+
+	ufbxwi_dom_close(sc);
+}
+
+static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element, uint32_t flags)
+{
+	if (!element) return;
+
+	// TODO: Make this data-driven
+	const char *fbx_type = "";
+	const char *super_type = NULL;
+	const char *sub_type = "";
+
+	ufbxw_id id = element->id;
+	ufbxw_element_type type = ufbxwi_id_type(id);
+
+	if (type == UFBXW_ELEMENT_NODE) {
+		fbx_type = "Model";
+		sub_type = "Mesh"; // ???
+	} else if (type == UFBXW_ELEMENT_MESH) {
+		fbx_type = "Geometry";
+		sub_type = "Mesh";
+	} else if (type == UFBXW_ELEMENT_SCENE_INFO) {
+		fbx_type = "SceneInfo";
+		sub_type = "UserData";
+	}
+
+	if (super_type == NULL) super_type = fbx_type;
+
+	// TODO: Dynamic buffer
+	char name[256];
+	if (sc->opts.ascii) {
+		snprintf(name, sizeof(name), "%s::%s", fbx_type, element->name.data);
+	} else {
+	}
+
+	if (flags & UFBXWI_SAVE_ELEMENT_NO_ID) {
+		ufbxwi_dom_open(sc, super_type, "CC", name, sub_type);
+	} else {
+		ufbxwi_dom_open(sc, super_type, "LCC", (int64_t)id, name, sub_type);
+	}
+
+	if (type == UFBXW_ELEMENT_NODE) {
+	} else if (type == UFBXW_ELEMENT_MESH) {
+	} else if (type == UFBXW_ELEMENT_SCENE_INFO) {
+		ufbxwi_dom_value(sc, "Type", "C", "UserData");
+		ufbxwi_dom_value(sc, "Version", "I", 100);
+
+		ufbxwi_dom_open(sc, "MetaData", "");
+		ufbxwi_dom_value(sc,"Version", "I", 100);
+		ufbxwi_dom_value(sc, "Title", "C", "");
+		ufbxwi_dom_value(sc, "Subject", "C", "");
+		ufbxwi_dom_value(sc, "Author", "C", "");
+		ufbxwi_dom_value(sc, "Keywords", "C", "");
+		ufbxwi_dom_value(sc, "Revision", "C", "");
+		ufbxwi_dom_value(sc, "Comment", "C", "");
+		ufbxwi_dom_close(sc);
+	}
+
+	ufbxwi_save_properties(sc, &element->props);
+
+	ufbxwi_dom_close(sc);
+}
+
+static void ufbxwi_save_timestamp(ufbxw_save_context *sc)
+{
+	ufbxwi_dom_open(sc, "CreationTimeStamp", "");
+	ufbxwi_dom_value(sc, "Version", "I", 1000);
+	ufbxwi_dom_value(sc, "Year", "I", 2020);
+	ufbxwi_dom_value(sc, "Month", "I", 3);
+	ufbxwi_dom_value(sc, "Day", "I", 22);
+	ufbxwi_dom_value(sc, "Hour", "I", 0);
+	ufbxwi_dom_value(sc, "Minute", "I", 27);
+	ufbxwi_dom_value(sc, "Second", "I", 54);
+	ufbxwi_dom_value(sc, "Millisecond", "I", 501);
+	ufbxwi_dom_close(sc);
+}
+
+static void ufbxwi_save_root(ufbxw_save_context *sc)
+{
+	ufbxw_scene *scene = sc->scene;
+
+	ufbxwi_dom_open(sc, "FBXHeaderExtension", "");
+	ufbxwi_dom_value(sc, "FBXHeaderVersion", "I", 1003);
+	ufbxwi_dom_value(sc, "FBXVersion", "I", sc->opts.version);
+
+	ufbxwi_save_timestamp(sc);
+
+	ufbxwi_dom_value(sc, "Creator", "C", "ufbx_write (version format TBD)");
+
+	ufbxw_id scene_info_id = ufbxw_get_scene_info_id(scene);
+	ufbxwi_element *scene_info = ufbxwi_get_element(scene, scene_info_id);
+	ufbxwi_save_element(sc, scene_info, UFBXWI_SAVE_ELEMENT_NO_ID);
+
+	ufbxwi_dom_close(sc);
+}
+
+// -- Save root
+
+static bool ufbxwi_save_imp(ufbxw_save_context *sc)
+{
+	if (sc->opts.version == 0) sc->opts.version = 7500;
+
+	size_t buffer_size = 0x10000;
+	sc->buffer = ufbxwi_alloc(&sc->ator, char, buffer_size);
+	sc->buffer_pos = sc->buffer;
+	sc->buffer_end = sc->buffer + buffer_size;
+	sc->direct_write_size = buffer_size / 2;
+
+	if (!sc->buffer) return false;
+
+	ufbxwi_save_root(sc);
+	ufbxwi_write_flush(sc);
+
+	return true;
 }
 
 // -- API
@@ -1021,6 +1442,35 @@ ufbxw_abi ufbxw_string ufbxw_get_name(ufbxw_scene *scene, ufbxw_id id)
 	return element->name;
 }
 
+ufbxw_abi void ufbxw_set_string(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, const char *value)
+{
+	ufbxw_set_string_len(scene, id, prop, value, strlen(value));
+}
+
+ufbxw_abi void ufbxw_set_string_len(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, const char *value, size_t value_len)
+{
+	ufbxwi_element *element = ufbxwi_get_element(scene, id);
+	ufbxwi_check(element);
+
+	ufbxwi_prop *dst_prop = NULL;
+	ufbxwi_for_list(ufbxwi_prop, p, element->props.props) {
+		if (p->prop == prop) {
+			dst_prop = p;
+			break;
+		}
+	}
+	if (dst_prop == NULL) {
+		dst_prop = ufbxwi_list_push_zero(&scene->ator, &element->props.props, ufbxwi_prop);
+		ufbxwi_check(dst_prop);
+		dst_prop->prop = prop;
+	}
+
+	ufbxw_string str;
+	ufbxwi_check(ufbxwi_intern_string(&str, &scene->string_pool, value, value_len));
+	dst_prop->str_length = (uint32_t)str.length;
+	dst_prop->str_value = str.data;
+}
+
 ufbxw_abi void ufbxw_connect(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst)
 {
 	ufbxwi_element *src_elem = ufbxwi_get_element(scene, src);
@@ -1103,6 +1553,44 @@ ufbxw_abi void ufbxw_disconnect_src(ufbxw_scene *scene, ufbxw_id id, ufbxw_eleme
 	}
 }
 
+ufbxw_abi ufbxw_prop ufbxw_get_custom_prop(ufbxw_scene *scene, const ufbxw_custom_prop *prop)
+{
+	// TODO: Hash the whole thing
+	ufbxw_custom_prop p = { 0 };
+
+	bool ok = true;
+	ok = ok && ufbxwi_intern_string_str(&p.name, &scene->string_pool, prop->name);
+	ok = ok && ufbxwi_intern_string_str(&p.type, &scene->string_pool, prop->type);
+	ok = ok && ufbxwi_intern_string_str(&p.sub_type, &scene->string_pool, prop->sub_type);
+
+	if (!ok) return UFBXW_PROP_NONE;
+
+	size_t count = scene->prop_types.count;
+	for (size_t i = (size_t)UFBXW_PROP_FIRST_USER; i < count; i++) {
+		ufbxwi_prop_type *pt = &scene->prop_types.data[i];
+		if (pt->name.data == p.name.data && pt->type.data == p.type.data && pt->sub_type.data == p.sub_type.data) {
+			return (ufbxw_prop)i;
+		}
+	}
+
+	ufbxwi_prop_type *type = ufbxwi_list_push_zero(&scene->ator, &scene->prop_types, ufbxwi_prop_type);
+	ufbxwi_check_return(type, UFBXW_PROP_NONE);
+
+	type->name = p.name;
+	type->type = p.type;
+	type->sub_type = p.sub_type;
+	return (ufbxw_prop)count;
+}
+
+ufbxw_abi ufbxw_prop ufbxw_get_custom_prop_c(ufbxw_scene *scene, const char *name, const char *type, const char *sub_type)
+{
+	ufbxw_custom_prop p;
+	p.name = ufbxwi_c_str(name);
+	p.type = ufbxwi_c_str(type);
+	p.sub_type = ufbxwi_c_str(sub_type);
+	return ufbxw_get_custom_prop(scene, &p);
+}
+
 ufbxw_abi ufbxw_node ufbxw_create_node(ufbxw_scene *scene)
 {
 	ufbxw_node node = { ufbxw_create_element(scene, UFBXW_ELEMENT_NODE) };
@@ -1160,15 +1648,85 @@ ufbxw_abi void ufbxw_mesh_add_instance(ufbxw_scene *scene, ufbxw_mesh mesh, ufbx
 	ufbxw_connect(scene, mesh.id, node.id);
 }
 
-// -- IO
-
-ufbxw_abi bool ufbxw_save_file(ufbxw_scene *scene, const char *filename, const ufbxw_save_opts *opts, ufbxw_error *error)
+ufbxw_abi ufbxw_id ufbxw_get_scene_info_id(ufbxw_scene *scene)
 {
-	return ufbxw_save_file_len(scene, filename, strlen(filename), opts, error);
+	ufbxwi_for_list(ufbxwi_element, element, scene->elements) {
+		if (ufbxwi_id_type(element->id) == UFBXW_ELEMENT_SCENE_INFO) {
+			return element->id;
+		}
+	}
+	return ufbxw_null_id;
 }
 
-ufbxw_abi bool ufbxw_save_file_len(ufbxw_scene *scene, const char *filenamee, size_t filename_len, const ufbxw_save_opts *opts, ufbxw_error *error)
+// -- Streams
+
+static bool ufbxwi_stdio_write(void *user, uint64_t offset, const void *data, size_t size)
 {
+	// TODO: Do not seek all the time, support >4GB files
+	FILE *f = (FILE*)user;
+	if (fseek(f, SEEK_SET, (int)offset)) return false;
+	if (fwrite(data, 1, size, f) != size) return false;
+	return true;
+}
+
+static void ufbxwi_stdio_close(void *user)
+{
+	FILE *f = (FILE*)user;
+	fclose(f);
+}
+
+ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *path, size_t path_len)
+{
+	if (path_len >= 1023) return false;
+
+	// TODO: Do this properly
+	char copy[1024];
+	memcpy(copy, path, path_len);
+	copy[path_len] = '\0';
+
+	FILE *f = fopen(copy, "wb");
+	if (!f) return false;
+
+	stream->write_fn = ufbxwi_stdio_write;
+	stream->close_fn = ufbxwi_stdio_close;
+	stream->user = f;
+
+	return true;
+}
+
+// -- IO
+
+ufbxw_abi bool ufbxw_save_file(ufbxw_scene *scene, const char *path, const ufbxw_save_opts *opts, ufbxw_error *error)
+{
+	return ufbxw_save_file_len(scene, path, strlen(path), opts, error);
+}
+
+ufbxw_abi bool ufbxw_save_file_len(ufbxw_scene *scene, const char *path, size_t path_len, const ufbxw_save_opts *opts, ufbxw_error *error)
+{
+	ufbxw_write_stream stream;
+	if (!ufbxw_open_file_write(&stream, path, path_len)) {
+		return false;
+	}
+
+	return ufbxw_save_stream(scene, &stream, opts, error);
+}
+
+ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error)
+{
+	ufbxw_save_context sc = { 0 };
+	sc.scene = scene;
+	sc.stream = *stream;
+	if (opts) {
+		sc.opts = *opts;
+	}
+
+	bool ok = ufbxwi_save_imp(&sc);
+
+	ufbxwi_free_allocator(&sc.ator);
+
+	if (!ok) {
+		return false;
+	}
 
 	return true;
 }
