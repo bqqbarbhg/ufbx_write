@@ -7,6 +7,15 @@ int main(int argc, char **argv)
 	ufbxw_node parent = ufbxw_create_node(scene);
 	ufbxw_set_name(scene, parent.id, "Parent");
 
+	ufbxw_vec3 pos = { 1.0f, 2.0f, 3.0f };
+	ufbxw_vec3 scale = { 2.0f, 2.0f, 2.0f };
+
+	ufbxw_node_set_translation(scene, parent, pos);
+	ufbxw_set_vec3(scene, parent.id, UFBXW_P_Lcl_Scaling, scale);
+
+	ufbxw_vec3 ref_pos = ufbxw_get_vec3(scene, parent.id, UFBXW_P_Lcl_Translation);
+	ufbxw_vec3 ref_scale = ufbxw_node_get_scaling(scene, parent);
+
 	ufbxw_node cube = ufbxw_create_node(scene);
 	ufbxw_set_name(scene, cube.id, "Cube");
 	ufbxw_node_set_parent(scene, cube, parent);

@@ -69,6 +69,8 @@
 	#define ufbxwi_analysis_assert(cond) (void)0
 #endif
 
+#define ufbxwi_unreachable(reason) do { ufbxw_assert(0 && reason); } while (0)
+
 #if defined(__GNUC__) && !defined(__clang__)
 	#define ufbxwi_ignore(cond) (void)!(cond)
 #else
@@ -91,6 +93,14 @@
 	}
 #else
 	#define ufbxwi_to_size(delta) ((size_t)(delta))
+#endif
+
+#if !defined(ufbxw_static_assert)
+	#if defined(__cplusplus) && __cplusplus >= 201103
+		#define ufbxw_static_assert(desc, cond) static_assert(cond, #desc ": " #cond)
+	#else
+		#define ufbxw_static_assert(desc, cond) typedef char ufbxwi_static_assert_##desc[(cond)?1:-1]
+	#endif
 #endif
 
 // -- Pointer alignment
@@ -273,6 +283,8 @@ static ufbxwi_forceinline size_t ufbxwi_max_sz(size_t a, size_t b) { return a < 
 #define ufbxwi_for_list(m_type, m_name, m_list) for (m_type *m_name = (m_list).data, *m_name##_end = ufbxwi_add_ptr(m_name, (m_list).count); m_name != m_name##_end; m_name++)
 #define ufbxwi_for_ptr_list(m_type, m_name, m_list) for (m_type **m_name = (m_list).data, **m_name##_end = ufbxwi_add_ptr(m_name, (m_list).count); m_name != m_name##_end; m_name++)
 
+#define ufbxwi_array_list(arr) { arr, ufbxwi_arraycount(arr) }
+
 // -- Allocator
 
 #if defined(UFBXW_REGRESSION)
@@ -393,7 +405,10 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 {
 	// Always succeed with an empty non-NULL buffer for empty allocations
 	ufbxw_assert(size > 0);
-	if (n == 0) return (void*)ufbxwi_zero_size_buffer;
+	if (n == 0) {
+		if (p_alloc_size) *p_alloc_size = 0;
+		return (void*)ufbxwi_zero_size_buffer;
+	}
 
 	size_t total = size * n;
 	ufbxwi_check_return_err(ator->error, !ufbxwi_does_overflow(total, size, n), NULL);
@@ -540,7 +555,7 @@ static ufbxwi_forceinline void *ufbxwi_list_push_zero_size(ufbxwi_allocator *ato
 	return data;
 }
 
-static ufbxwi_forceinline void *ufbxwi_list_push_copy_size(ufbxwi_allocator *ator, void *p_list, size_t size, size_t n, void *src)
+static ufbxwi_forceinline void *ufbxwi_list_push_copy_size(ufbxwi_allocator *ator, void *p_list, size_t size, size_t n, const void *src)
 {
 	void *data = ufbxwi_list_push_size(ator, p_list, size, n);
 	if (!data) return NULL;
@@ -567,7 +582,7 @@ static ufbxwi_forceinline void ufbxwi_list_free_size(ufbxwi_allocator *ator, voi
 #define ufbxwi_list_push_zero(ator, list, type) ufbxwi_maybe_null((ufbxwi_check_ptr_type(type, (list)->data), (type*)ufbxwi_list_push_zero_size((ator), (list), sizeof(type), 1)))
 #define ufbxwi_list_push_zero_n(ator, list, type, n) ufbxwi_maybe_null((ufbxwi_check_ptr_type(type, (list)->data), (type*)ufbxwi_list_push_zero_size((ator), (list), sizeof(type), (n))))
 #define ufbxwi_list_push_copy(ator, list, type, src) ufbxwi_maybe_null((ufbxwi_check_ptr_type(type, (list)->data), ufbxwi_check_ptr_type(type, src), (type*)ufbxwi_list_push_copy_size((ator), (list), sizeof(type), 1, (src))))
-#define ufbxwi_list_push_copy_n(ator, list, type, n, src) ufbxwi_maybe_null((ufbxwi_check_ptr_type(type, (list)->data), ufbxwi_check_ptr_type(type, src), (type*)ufbxwi_list_push_copy_size((), (list), sizeof(type), (n), (src))))
+#define ufbxwi_list_push_copy_n(ator, list, type, n, src) ufbxwi_maybe_null((ufbxwi_check_ptr_type(type, (list)->data), ufbxwi_check_ptr_type(type, src), (type*)ufbxwi_list_push_copy_size((ator), (list), sizeof(type), (n), (src))))
 #define ufbxwi_list_free(ator, list) ufbxwi_list_free_size((ator),&(list), sizeof(*(list)->data))
 
 // -- Special list
@@ -761,6 +776,8 @@ static bool ufbxwi_intern_string_str(ufbxw_string *dst, ufbxwi_string_pool *pool
 	return ufbxwi_intern_string(dst, pool, str.data, str.length);
 }
 
+// -- Prop types
+
 // -- Scene
 
 #define UFBXWI_ELEMENT_TYPE_NONE ((ufbxw_element_type)0) 
@@ -785,26 +802,33 @@ typedef struct {
 
 UFBXWI_LIST_TYPE(ufbxwi_prop_type_list, ufbxwi_prop_type);
 
+typedef enum {
+	UFBXWI_PROP_DATA_REAL   = 0x1,
+	UFBXWI_PROP_DATA_VEC3   = 0x2,
+	UFBXWI_PROP_DATA_VEC4   = 0x4,
+	UFBXWI_PROP_DATA_STRING = 0x8,
+	UFBXWI_PROP_DATA_INT    = 0x10,
+
+	UFBXWI_PROP_DATA_MASK    = 0xff,
+} ufbxwi_prop_flags;
+
 typedef struct {
 	ufbxw_prop prop;
-
-	uint32_t str_length;
-	const char *str_value;
+	uint32_t data_offset;
+	uint32_t flags;
 } ufbxwi_prop;
 
 UFBXWI_LIST_TYPE(ufbxwi_prop_list, ufbxwi_prop);
-
-typedef struct {
-	ufbxwi_prop_list props;
-} ufbxwi_props;
 
 typedef struct {
 	ufbxw_id id;
 
 	ufbxw_string name;
 
-	ufbxwi_props props;
+	ufbxwi_prop_list props;
 	void *data;
+	size_t data_capacity;
+	size_t data_size;
 
 	// TODO: Replace these with more performant containers
 	ufbxwi_id_list connections_src;
@@ -821,6 +845,20 @@ typedef struct {
 	ufbxw_vec3 lcl_translation;
 	ufbxw_vec3 lcl_rotation;
 	ufbxw_vec3 lcl_scaling;
+	ufbxw_vec3 pre_rotation;
+	ufbxw_vec3 post_rotation;
+	ufbxw_vec3 rotation_offset;
+	ufbxw_vec3 rotation_pivot;
+	ufbxw_vec3 scaling_offset;
+	ufbxw_vec3 scaling_pivot;
+
+	ufbxw_vec3 geometric_translation;
+	ufbxw_vec3 geometric_rotation;
+	ufbxw_vec3 geometric_scaling;
+
+	int64_t rotation_order;
+	int64_t inherit_type;
+	int64_t visibility;
 } ufbxwi_node;
 
 typedef struct {
@@ -839,6 +877,69 @@ struct ufbxw_scene {
 
 	ufbxwi_prop_type_list prop_types;
 };
+
+static const ufbxwi_prop ufbxwi_node_inline_props[] = {
+	{ UFBXW_P_Lcl_Translation, offsetof(ufbxwi_node, lcl_translation), UFBXWI_PROP_DATA_VEC3 },
+	{ UFBXW_P_Lcl_Rotation, offsetof(ufbxwi_node, lcl_rotation), UFBXWI_PROP_DATA_VEC3 },
+	{ UFBXW_P_Lcl_Scaling, offsetof(ufbxwi_node, lcl_scaling), UFBXWI_PROP_DATA_VEC3 },
+	{ UFBXW_P_RotationOrder, offsetof(ufbxwi_node, rotation_order), UFBXWI_PROP_DATA_INT },
+	{ UFBXW_P_PreRotation, offsetof(ufbxwi_node, pre_rotation), UFBXWI_PROP_DATA_VEC3 },
+	{ UFBXW_P_PostRotation, offsetof(ufbxwi_node, post_rotation), UFBXWI_PROP_DATA_VEC3 },
+	{ UFBXW_P_RotationOffset, offsetof(ufbxwi_node, rotation_offset), UFBXWI_PROP_DATA_VEC3 },
+	{ UFBXW_P_RotationPivot, offsetof(ufbxwi_node, rotation_pivot), UFBXWI_PROP_DATA_VEC3 },
+	{ UFBXW_P_ScalingOffset, offsetof(ufbxwi_node, scaling_offset), UFBXWI_PROP_DATA_VEC3 },
+	{ UFBXW_P_ScalingPivot, offsetof(ufbxwi_node, scaling_pivot), UFBXWI_PROP_DATA_VEC3 },
+	{ UFBXW_P_GeometricTranslation, offsetof(ufbxwi_node, geometric_translation), UFBXWI_PROP_DATA_VEC3 },
+	{ UFBXW_P_GeometricRotation, offsetof(ufbxwi_node, geometric_rotation), UFBXWI_PROP_DATA_VEC3 },
+	{ UFBXW_P_GeometricScaling, offsetof(ufbxwi_node, geometric_scaling), UFBXWI_PROP_DATA_VEC3 },
+	{ UFBXW_P_InheritType, offsetof(ufbxwi_node, inherit_type), UFBXWI_PROP_DATA_INT },
+	{ UFBXW_P_Visibility, offsetof(ufbxwi_node, visibility), UFBXWI_PROP_DATA_INT },
+};
+
+typedef struct {
+	size_t data_size;
+	const ufbxwi_prop *inline_props;
+	size_t num_inline_props;
+} ufbxwi_element_type_info;
+
+static const ufbxwi_element_type_info ufbxwi_element_type_infos[] = {
+	{ 0 }, // NULL
+	{ 0 }, // CUSTOM
+	{ sizeof(ufbxwi_node), ufbxwi_node_inline_props, ufbxwi_arraycount(ufbxwi_node_inline_props) },
+	{ 0 }, // CUSTOM_NODE_ATTRIBUTE
+	{ sizeof(ufbxwi_mesh) },
+	{ 0 }, // TEMPATE
+	{ 0 }, // SCENE_INFO
+	{ 0 }, // DOCUMENT
+};
+
+static size_t ufbxwi_prop_data_size(uint32_t flags)
+{
+	switch (flags & UFBXWI_PROP_DATA_MASK) {
+		case UFBXWI_PROP_DATA_REAL: return sizeof(ufbxw_real);
+		case UFBXWI_PROP_DATA_VEC3: return sizeof(ufbxw_vec3);
+		case UFBXWI_PROP_DATA_VEC4: return sizeof(ufbxw_vec4);
+		case UFBXWI_PROP_DATA_STRING: return sizeof(ufbxw_string);
+		case UFBXWI_PROP_DATA_INT: return sizeof(int64_t);
+		default:
+			ufbxwi_unreachable("bad data type");
+			return 0;
+	}
+}
+
+static size_t ufbxwi_prop_data_align(uint32_t flags)
+{
+	switch (flags & UFBXWI_PROP_DATA_MASK) {
+		case UFBXWI_PROP_DATA_REAL: return sizeof(ufbxw_real);
+		case UFBXWI_PROP_DATA_VEC3: return sizeof(ufbxw_real);
+		case UFBXWI_PROP_DATA_VEC4: return sizeof(ufbxw_real);
+		case UFBXWI_PROP_DATA_STRING: return sizeof(void*);
+		case UFBXWI_PROP_DATA_INT: return sizeof(int64_t);
+		default:
+			ufbxwi_unreachable("bad data type");
+			return 0;
+	}
+}
 
 static ufbxwi_forceinline ufbxwi_element *ufbxwi_get_element(ufbxw_scene *scene, ufbxw_id id)
 {
@@ -860,14 +961,98 @@ static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh_data(ufbxw_scene *scene, 
 
 static ufbxwi_forceinline ufbxw_node ufbxwi_assert_node(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_NODE); ufbxw_node node = { id }; return node; }
 
-static size_t ufbxwi_element_data_size(ufbxw_element_type type)
+static ufbxwi_forceinline size_t ufbxwi_align(size_t value, size_t align)
 {
-	switch (type) {
-	case UFBXW_ELEMENT_NODE: return sizeof(ufbxwi_node);
-	case UFBXW_ELEMENT_MESH: return sizeof(ufbxwi_mesh);
-	default: return 0;
-	}
+	return value + (((size_t)0 - value) & (align - 1));
 }
+
+static ufbxwi_prop *ufbxwi_add_element_prop(ufbxw_scene *scene, ufbxwi_element *element, ufbxw_prop prop, uint32_t data_flag)
+{
+	ufbxwi_for_list(ufbxwi_prop, p, element->props) {
+		if (p->prop == prop) return p;
+	}
+
+	ufbxwi_prop *p = ufbxwi_list_push_zero(&scene->ator, &element->props, ufbxwi_prop);
+	ufbxwi_check_return(p, NULL);
+
+	size_t data_size = ufbxwi_prop_data_size(data_flag);
+	size_t data_align = ufbxwi_prop_data_align(data_flag);
+
+	size_t data_offset = ufbxwi_align(element->data_size, data_align);
+	size_t data_end = data_offset + data_size;
+
+	if (data_end > element->data_capacity) {
+		size_t new_capacity = ufbxwi_max_sz(data_end, element->data_capacity * 2);
+		void *new_data = ufbxwi_alloc_size(&scene->ator, 1, new_capacity, &new_capacity);
+		ufbxwi_check_return(new_data, NULL);
+
+		memcpy(new_data, element->data, element->data_size);
+		memset((char*)new_data + element->data_size, 0, new_capacity - element->data_size);
+
+		ufbxwi_free(&scene->ator, element->data);
+		element->data = new_data;
+		element->data_capacity = new_capacity;
+	}
+
+	p->data_offset = (uint32_t)data_offset;
+	element->data_size = data_end;
+
+	p->prop = prop;
+	p->flags = data_flag;
+	return p;
+}
+
+static const ufbxwi_prop *ufbxwi_get_element_prop(ufbxw_scene *scene, const ufbxwi_element *element, ufbxw_prop prop)
+{
+	ufbxwi_for_list(const ufbxwi_prop, p, element->props) {
+		if (p->prop == prop) return p;
+	}
+	return NULL;
+}
+
+static void *ufbxwi_add_element_prop_data(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, uint32_t data_flag)
+{
+	ufbxwi_element *element = ufbxwi_get_element(scene, id);
+	if (!element) return NULL;
+
+	ufbxwi_prop *p = ufbxwi_add_element_prop(scene, element, prop, data_flag);
+	if ((p->flags & data_flag) == 0) {
+		// TODO: Error reporting
+		return NULL;
+	}
+
+	void *data = (char*)element->data + p->data_offset;
+	if (data_flag & UFBXWI_PROP_DATA_STRING) {
+		((ufbxw_string*)data)->data = ufbxwi_empty_char;
+	}
+	return data;
+}
+
+static const void *ufbxwi_get_element_prop_data(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, uint32_t data_flag)
+{
+	ufbxwi_element *element = ufbxwi_get_element(scene, id);
+	if (!element) return NULL;
+
+	const ufbxwi_prop *p = ufbxwi_add_element_prop(scene, element, prop, data_flag);
+	if ((p->flags & data_flag) == 0) {
+		// TODO: Error reporting
+		return NULL;
+	}
+
+	return (const char*)element->data + p->data_offset;
+}
+
+ufbxwi_forceinline static ufbxw_real *ufbxwi_add_element_real(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop) { return (ufbxw_real*)ufbxwi_add_element_prop_data(scene, id, prop, UFBXWI_PROP_DATA_REAL); }
+ufbxwi_forceinline static ufbxw_vec3 *ufbxwi_add_element_vec3(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop) { return (ufbxw_vec3*)ufbxwi_add_element_prop_data(scene, id, prop, UFBXWI_PROP_DATA_VEC3); }
+ufbxwi_forceinline static ufbxw_vec4 *ufbxwi_add_element_vec4(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop) { return (ufbxw_vec4*)ufbxwi_add_element_prop_data(scene, id, prop, UFBXWI_PROP_DATA_VEC4); }
+ufbxwi_forceinline static ufbxw_string *ufbxwi_add_element_string(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop) { return (ufbxw_string*)ufbxwi_add_element_prop_data(scene, id, prop, UFBXWI_PROP_DATA_STRING); }
+ufbxwi_forceinline static int64_t *ufbxwi_add_element_int(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop) { return (int64_t*)ufbxwi_add_element_prop_data(scene, id, prop, UFBXWI_PROP_DATA_INT); }
+
+ufbxwi_forceinline static const ufbxw_real *ufbxwi_get_element_real(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop) { return (const ufbxw_real*)ufbxwi_get_element_prop_data(scene, id, prop, UFBXWI_PROP_DATA_REAL); }
+ufbxwi_forceinline static const ufbxw_vec3 *ufbxwi_get_element_vec3(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop) { return (const ufbxw_vec3*)ufbxwi_get_element_prop_data(scene, id, prop, UFBXWI_PROP_DATA_VEC3); }
+ufbxwi_forceinline static const ufbxw_vec4 *ufbxwi_get_element_vec4(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop) { return (const ufbxw_vec4*)ufbxwi_get_element_prop_data(scene, id, prop, UFBXWI_PROP_DATA_VEC4); }
+ufbxwi_forceinline static const ufbxw_string *ufbxwi_get_element_string(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop) { return (const ufbxw_string*)ufbxwi_get_element_prop_data(scene, id, prop, UFBXWI_PROP_DATA_STRING); }
+ufbxwi_forceinline static const int64_t *ufbxwi_get_element_int(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop) { return (const int64_t*)ufbxwi_get_element_prop_data(scene, id, prop, UFBXWI_PROP_DATA_INT); }
 
 static void ufbxwi_create_defaults(ufbxw_scene *scene)
 {
@@ -1173,19 +1358,39 @@ enum {
 	UFBXWI_SAVE_ELEMENT_NO_ID = 0x1,
 };
 
-static void ufbxwi_save_properties(ufbxw_save_context *sc, ufbxwi_props *props)
+static void ufbxwi_save_properties(ufbxw_save_context *sc, const void *data_buffer, ufbxwi_prop_list props)
 {
 	ufbxw_scene *scene = sc->scene;
 
 	// TODO: Version 6
 	ufbxwi_dom_open(sc, "Properties70", "");
 
-	ufbxwi_for_list(ufbxwi_prop, prop, props->props) {
+	ufbxwi_for_list(ufbxwi_prop, prop, props) {
 		const ufbxwi_prop_type *type = &scene->prop_types.data[prop->prop];
+		const void *data = (const char*)data_buffer + prop->data_offset;
 
-		// TODO: Other types, etc
-		ufbxw_string value = { prop->str_value, prop->str_length };
-		ufbxwi_dom_value(sc, "P", "SSSCS", type->name, type->type, type->sub_type, "", value);
+		switch (prop->flags & UFBXWI_PROP_DATA_MASK) {
+		case UFBXWI_PROP_DATA_REAL: {
+			const ufbxw_real *d = (const ufbxw_real*)data;
+			ufbxwi_dom_value(sc, "P", "SSSCD", type->name, type->type, type->sub_type, "", *d);
+		} break;
+		case UFBXWI_PROP_DATA_VEC3: {
+			const ufbxw_vec3 *d = (const ufbxw_vec3*)data;
+			ufbxwi_dom_value(sc, "P", "SSSCDDD", type->name, type->type, type->sub_type, "", d->x, d->y, d->z);
+		} break;
+		case UFBXWI_PROP_DATA_VEC4: {
+			const ufbxw_vec4 *d = (const ufbxw_vec4*)data;
+			ufbxwi_dom_value(sc, "P", "SSSCDDDD", type->name, type->type, type->sub_type, "", d->x, d->y, d->z, d->w);
+		} break;
+		case UFBXWI_PROP_DATA_STRING: {
+			const ufbxw_string *d = (const ufbxw_string*)data;
+			ufbxwi_dom_value(sc, "P", "SSSCS", type->name, type->type, type->sub_type, "", *d);
+		} break;
+		case UFBXWI_PROP_DATA_INT: {
+			const int64_t *d = (const int64_t*)data;
+			ufbxwi_dom_value(sc, "P", "SSSCL", type->name, type->type, type->sub_type, "", *d);
+		} break;
+		}
 	}
 
 	ufbxwi_dom_close(sc);
@@ -1246,7 +1451,7 @@ static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element,
 		ufbxwi_dom_close(sc);
 	}
 
-	ufbxwi_save_properties(sc, &element->props);
+	ufbxwi_save_properties(sc, element->data, element->props);
 
 	ufbxwi_dom_close(sc);
 }
@@ -1306,6 +1511,11 @@ static bool ufbxwi_save_imp(ufbxw_save_context *sc)
 
 // -- API
 
+ufbxw_abi_data const ufbxw_string ufbxw_empty_string = { ufbxwi_empty_char, 0 };
+ufbxw_abi_data const ufbxw_vec2 ufbxw_zero_vec2 = { 0.0f, 0.0f };
+ufbxw_abi_data const ufbxw_vec3 ufbxw_zero_vec3 = { 0.0f, 0.0f, 0.0f };
+ufbxw_abi_data const ufbxw_vec4 ufbxw_zero_vec4 = { 0.0f, 0.0f, 0.0f, 0.0f };
+
 ufbxw_abi ufbxw_scene *ufbxw_create_scene(const ufbxw_scene_opts *opts)
 {
 	ufbxw_scene_opts default_opts;
@@ -1355,13 +1565,15 @@ ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error)
 
 ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type type)
 {
-	size_t data_size = ufbxwi_element_data_size(type);
+	const ufbxwi_element_type_info *type_info = &ufbxwi_element_type_infos[type];
+
+	size_t data_size = type_info->data_size;
 	void *data = NULL;
-	if (data_size > 0) {
-		data = ufbxwi_alloc_size(&scene->ator, data_size, 1, NULL);
-		ufbxwi_check_return(data, 0);
-		memset(data, 0, data_size);
-	}
+
+	size_t data_capacity = 0;
+	data = ufbxwi_alloc_size(&scene->ator, 1, data_size, &data_capacity);
+	ufbxwi_check_return(data, 0);
+	memset(data, 0, data_capacity);
 
 	size_t index = 0;
 	if (scene->free_element_ids.count > 0) {
@@ -1377,7 +1589,14 @@ ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type t
 	element->id = ufbxwi_make_id(type, generation, index);
 	element->name = ufbxwi_empty_string;
 	element->data = data;
-	
+	element->data_size = data_size;
+	element->data_capacity = data_capacity;
+
+	if (type_info->num_inline_props > 0) {
+		// TODO: How to handle allocation failures...
+		ufbxwi_list_push_copy_n(&scene->ator, &element->props, ufbxwi_prop, type_info->num_inline_props, type_info->inline_props);
+	}
+
 	scene->num_elements++;
 
 	return ufbxwi_make_id(type, generation, index);
@@ -1440,35 +1659,6 @@ ufbxw_abi ufbxw_string ufbxw_get_name(ufbxw_scene *scene, ufbxw_id id)
 	ufbxwi_element *element = ufbxwi_get_element(scene, id);
 	ufbxwi_check_return(element, ufbxwi_empty_string);
 	return element->name;
-}
-
-ufbxw_abi void ufbxw_set_string(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, const char *value)
-{
-	ufbxw_set_string_len(scene, id, prop, value, strlen(value));
-}
-
-ufbxw_abi void ufbxw_set_string_len(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, const char *value, size_t value_len)
-{
-	ufbxwi_element *element = ufbxwi_get_element(scene, id);
-	ufbxwi_check(element);
-
-	ufbxwi_prop *dst_prop = NULL;
-	ufbxwi_for_list(ufbxwi_prop, p, element->props.props) {
-		if (p->prop == prop) {
-			dst_prop = p;
-			break;
-		}
-	}
-	if (dst_prop == NULL) {
-		dst_prop = ufbxwi_list_push_zero(&scene->ator, &element->props.props, ufbxwi_prop);
-		ufbxwi_check(dst_prop);
-		dst_prop->prop = prop;
-	}
-
-	ufbxw_string str;
-	ufbxwi_check(ufbxwi_intern_string(&str, &scene->string_pool, value, value_len));
-	dst_prop->str_length = (uint32_t)str.length;
-	dst_prop->str_value = str.data;
 }
 
 ufbxw_abi void ufbxw_connect(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst)
@@ -1553,6 +1743,91 @@ ufbxw_abi void ufbxw_disconnect_src(ufbxw_scene *scene, ufbxw_id id, ufbxw_eleme
 	}
 }
 
+ufbxw_abi void ufbxw_set_real(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, ufbxw_real value)
+{
+	ufbxw_real *data = ufbxwi_add_element_real(scene, id, prop);
+	if (data) *data = value;
+}
+
+ufbxw_abi void ufbxw_set_bool(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, bool value)
+{
+	int64_t *data = ufbxwi_add_element_int(scene, id, prop);
+	if (data) *data = value ? 1 : 0;
+}
+
+ufbxw_abi void ufbxw_set_int(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, int64_t value)
+{
+	int64_t *data = ufbxwi_add_element_int(scene, id, prop);
+	if (data) *data = value;
+}
+
+ufbxw_abi void ufbxw_set_vec3(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, ufbxw_vec3 value)
+{
+	ufbxw_vec3 *data = ufbxwi_add_element_vec3(scene, id, prop);
+	if (data) *data = value;
+}
+
+ufbxw_abi void ufbxw_set_vec4(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, ufbxw_vec4 value)
+{
+	ufbxw_vec4 *data = ufbxwi_add_element_vec4(scene, id, prop);
+	if (data) *data = value;
+}
+
+ufbxw_abi void ufbxw_set_string(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, const char *value)
+{
+	ufbxw_set_string_len(scene, id, prop, value, strlen(value));
+}
+
+ufbxw_abi void ufbxw_set_string_len(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, const char *value, size_t value_len)
+{
+	ufbxw_string *data = ufbxwi_add_element_string(scene, id, prop);
+	if (data) {
+		ufbxwi_check(ufbxwi_intern_string(data, &scene->string_pool, value, value_len));
+	}
+}
+
+ufbxw_abi ufbxw_real ufbxw_get_real(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop)
+{
+	const ufbxw_real *data = ufbxwi_get_element_real(scene, id, prop);
+	if (!data) return 0.0f;
+	return *data;
+}
+
+ufbxw_abi bool ufbxw_get_bool(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop)
+{
+	const int64_t *data = ufbxwi_get_element_int(scene, id, prop);
+	if (!data) return false;
+	return *data != 0;
+}
+
+ufbxw_abi int64_t ufbxw_get_int(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop)
+{
+	const int64_t *data = ufbxwi_get_element_int(scene, id, prop);
+	if (!data) return 0;
+	return *data;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_get_vec3(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop)
+{
+	const ufbxw_vec3 *data = ufbxwi_get_element_vec3(scene, id, prop);
+	if (!data) return ufbxw_zero_vec3;
+	return *data;
+}
+
+ufbxw_abi ufbxw_vec4 ufbxw_get_vec4(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop)
+{
+	const ufbxw_vec4 *data = ufbxwi_get_element_vec4(scene, id, prop);
+	if (!data) return ufbxw_zero_vec4;
+	return *data;
+}
+
+ufbxw_abi ufbxw_string ufbxw_get_string(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop)
+{
+	const ufbxw_string *data = ufbxwi_get_element_string(scene, id, prop);
+	if (!data) return ufbxw_empty_string;
+	return *data;
+}
+
 ufbxw_abi ufbxw_prop ufbxw_get_custom_prop(ufbxw_scene *scene, const ufbxw_custom_prop *prop)
 {
 	// TODO: Hash the whole thing
@@ -1605,17 +1880,59 @@ ufbxw_abi ufbxw_node ufbxw_as_node(ufbxw_id id)
 
 ufbxw_abi size_t ufbxw_node_get_num_children(ufbxw_scene *scene, ufbxw_node node)
 {
-	ufbxwi_node *node_data = ufbxwi_get_node_data(scene, node);
-	ufbxwi_check_return(node_data, 0);
-	return node_data->children.count;
+	ufbxwi_node *data = ufbxwi_get_node_data(scene, node);
+	ufbxwi_check_return(data, 0);
+	return data->children.count;
 }
 
 ufbxw_abi ufbxw_node ufbxw_node_get_child(ufbxw_scene *scene, ufbxw_node node, size_t index)
 {
-	ufbxwi_node *node_data = ufbxwi_get_node_data(scene, node);
-	ufbxwi_check_return(node_data, ufbxw_as_node(0));
-	ufbxwi_check_return(index < node_data->children.count, ufbxw_as_node(0));
-	return node_data->children.data[index];
+	ufbxwi_node *data = ufbxwi_get_node_data(scene, node);
+	ufbxwi_check_return(data, ufbxw_as_node(0));
+	ufbxwi_check_return(index < data->children.count, ufbxw_as_node(0));
+	return data->children.data[index];
+}
+
+ufbxw_abi void ufbxw_node_set_translation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 translation)
+{
+	ufbxwi_node *data = ufbxwi_get_node_data(scene, node);
+	ufbxwi_check(data);
+	data->lcl_translation = translation;
+}
+
+ufbxw_abi void ufbxw_node_set_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node_data(scene, node);
+	ufbxwi_check(data);
+	data->lcl_rotation = rotation;
+}
+
+ufbxw_abi void ufbxw_node_set_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 scaling)
+{
+	ufbxwi_node *data = ufbxwi_get_node_data(scene, node);
+	ufbxwi_check(data);
+	data->lcl_scaling = scaling;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_translation(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node_data(scene, node);
+	ufbxwi_check_return(data, ufbxw_zero_vec3);
+	return data->lcl_translation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node_data(scene, node);
+	ufbxwi_check_return(data, ufbxw_zero_vec3);
+	return data->lcl_rotation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node_data(scene, node);
+	ufbxwi_check_return(data, ufbxw_zero_vec3);
+	return data->lcl_scaling;
 }
 
 ufbxw_abi void ufbxw_node_set_parent(ufbxw_scene *scene, ufbxw_node node, ufbxw_node parent)
