@@ -15,6 +15,8 @@ int main(int argc, char **argv)
 	ufbxw_vec3 val_scaling = { 0.1, 0.2, 0.3 };
 	ufbxw_set_vec3(scene, parent.id, "ScalingMax", val_scaling);
 
+	ufbxw_add_int(scene, parent.id, "UserThingy", UFBXW_PROP_TYPE_INT, 123);
+
 	ufbxw_vec3 new_scaling = ufbxw_get_vec3(scene, parent.id, "ScalingMax");
 
 	ufbxw_node_set_translation(scene, parent, pos);

@@ -1597,31 +1597,41 @@ static ufbxwi_prop *ufbxwi_element_add_prop(ufbxw_scene *scene, ufbxwi_element *
 		if (!prop) {
 			prop = ufbxwi_props_find_prop(&element->default_props->props, token);
 		}
+		if (prop) {
+			ufbxwi_check_return(scene->prop_types.data[prop->type].data_type == data_type, NULL);
+		}
 		if (!prop || prop->value_offset <= 0) {
 			ufbxwi_prop *new_prop = ufbxwi_props_add_prop(scene, &element->props, token);
 			ufbxwi_check_return(new_prop, NULL);
 
 			int32_t offset = ufbxwi_element_add_field(scene, element, data_type);
 			ufbxwi_check_return(offset != 0, NULL);
-
 			if (prop) {
 				const char *src = (const char*)&ufbxwi_prop_default_data + -prop->value_offset;
 				char *dst = (char*)element->data + offset;
 				memcpy(dst, src, ufbxwi_prop_data_infos[data_type].size);
 			}
 
-			*new_prop = *prop;
+			if (prop) {
+				*new_prop = *prop;
+			} else {
+				new_prop->type = type;
+			}
 			new_prop->value_offset = offset;
 			prop = new_prop;
 		}
 		return prop;
 	} else {
 		ufbxwi_prop *prop = ufbxwi_props_add_prop(scene, &element->props, token);
+		ufbxwi_check_return(prop, NULL);
 
 		if (prop->value_offset <= 0) {
 			int32_t offset = ufbxwi_element_add_field(scene, element, data_type);
 			ufbxwi_check_return(offset != 0, NULL);
 			prop->value_offset = offset;
+			prop->type = type;
+		} else {
+			ufbxwi_check_return(scene->prop_types.data[prop->type].data_type == data_type, NULL);
 		}
 
 		return prop;
@@ -1759,17 +1769,6 @@ static ufbxwi_noinline bool ufbxwi_add_prop(ufbxw_scene *scene, ufbxw_id id, con
 	if (!p) return false;
 
 	ufbxw_prop_data_type data_type = scene->prop_types.data[type].data_type;
-
-	if (p->type == UFBXW_PROP_TYPE_NONE) {
-		p->type = type;
-	} else {
-		ufbxw_prop_data_type old_data_type = scene->prop_types.data[p->type].data_type;
-		if (old_data_type != data_type) {
-			// TODO: Report error
-			return false;
-		}
-	}
-
 	void *dst = (char*)element->data + p->value_offset;
 	if (data_type == src_type) {
 		memcpy(dst, src, ufbxwi_prop_data_infos[src_type].size);
@@ -2545,6 +2544,7 @@ ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type t
 	if (element_type->props.count > 0) {
 		// TODO: Eager copying for materials, etc.
 		element->default_props = element_type;
+		element->props.order_counter = element_type->props.order_counter;
 	}
 
 	ufbxwi_element_data *element_data = (ufbxwi_element_data*)data;
@@ -2698,23 +2698,6 @@ ufbxw_abi void ufbxw_disconnect_src(ufbxw_scene *scene, ufbxw_id id, ufbxw_eleme
 			}
 		}
 	}
-}
-
-ufbxw_abi void ufbxw_add_prop(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_prop_type type)
-{
-	ufbxw_add_prop_len(scene, id, prop, strlen(prop), type);
-}
-
-ufbxw_abi void ufbxw_add_prop_len(ufbxw_scene *scene, ufbxw_id id, const char *prop, size_t prop_len, ufbxw_prop_type type)
-{
-	ufbxwi_token token = ufbxwi_get_token(&scene->string_pool, prop, prop_len);
-	ufbxwi_element *element = ufbxwi_get_element(scene, id);
-	if (!token || !element) return;
-
-	ufbxwi_prop *p = ufbxwi_element_edit_prop(scene, element, token);
-	if (!p) return;
-
-	p->type = type;
 }
 
 ufbxw_abi void ufbxw_set_bool(ufbxw_scene *scene, ufbxw_id id, const char *prop, bool value)
