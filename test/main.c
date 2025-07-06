@@ -35,7 +35,7 @@ int main(int argc, char **argv)
 
 	ufbxw_vec3 red = { 1.0f, 0.0f, 0.0f };
 	ufbxw_set_vec3(scene, mesh.id, "Color", red);
-	ufbxw_set_bool(scene, mesh.id, "Receive Shadows", false);
+	ufbxw_set_int(scene, mesh.id, "Receive Shadows", 0);
 
 	ufbxw_id scene_info = ufbxw_get_scene_info_id(scene);
 	ufbxw_add_string(scene, scene_info, "CustomProperty", UFBXW_PROP_TYPE_STRING, "Hello world");
