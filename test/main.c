@@ -40,6 +40,13 @@ int main(int argc, char **argv)
 	ufbxw_id scene_info = ufbxw_get_scene_info_id(scene);
 	ufbxw_add_string(scene, scene_info, "CustomProperty", UFBXW_PROP_TYPE_STRING, "Hello world");
 
+	ufbxw_id global_settings = ufbxw_get_global_settings_id(scene);
+	ufbxw_add_string(scene, global_settings, "Something", UFBXW_PROP_TYPE_STRING, "Good Stuff");
+
+	ufbxw_id node_template = ufbxw_get_template_id(scene, UFBXW_ELEMENT_NODE);
+	ufbxw_vec3 tmpl_pos = { 1.0f, 2.0f, 3.0f };
+	ufbxw_set_vec3(scene, node_template, "Lcl Translation", tmpl_pos);
+
 	ufbxw_save_opts opts = { 0 };
 	opts.ascii = true;
 

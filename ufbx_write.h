@@ -103,6 +103,7 @@ typedef enum ufbxw_element_type {
 
 	UFBXW_ELEMENT_TEMPLATE,
 	UFBXW_ELEMENT_SCENE_INFO,
+	UFBXW_ELEMENT_GLOBAL_SETTINGS,
 	UFBXW_ELEMENT_DOCUMENT,
 
 	UFBXW_ELEMENT_TYPE_COUNT,
@@ -144,6 +145,7 @@ typedef struct ufbxw_scene_opts {
 
 	bool no_default_elements;
 	bool no_default_scene_info;
+	bool no_default_global_settings;
 	bool no_default_document;
 
 	uint32_t _end_zero;
@@ -339,6 +341,11 @@ ufbxw_abi void ufbxw_mesh_add_instance(ufbxw_scene *scene, ufbxw_mesh mesh, ufbx
 // -- Scene info
 
 ufbxw_abi ufbxw_id ufbxw_get_scene_info_id(ufbxw_scene *scene);
+ufbxw_abi ufbxw_id ufbxw_get_global_settings_id(ufbxw_scene *scene);
+
+// -- Templates
+
+ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type type);
 
 // -- IO callbacks
 
