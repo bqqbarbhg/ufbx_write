@@ -50,6 +50,11 @@ typedef struct ufbxw_string {
 	size_t length;
 } ufbxw_string;
 
+typedef struct ufbxw_blob {
+	const void *data;
+	size_t length;
+} ufbxw_blob;
+
 typedef double ufbxw_real;
 
 typedef struct ufbxw_vec2 {
@@ -144,153 +149,117 @@ typedef struct ufbxw_scene_opts {
 	uint32_t _end_zero;
 } ufbxw_scene_opts;
 
-typedef enum ufbxw_prop {
-	UFBXW_PROP_NONE,
+typedef struct ufbxw_real_string {
+	ufbxw_real value;
+	ufbxw_string string;
+} ufbxw_real_string;
 
-	// Generic
-	UFBXW_P_Color,
+typedef struct ufbxw_user_int {
+	int32_t value;
+	int32_t min_value;
+	int32_t max_value;
+} ufbxw_user_int;
 
-	// Node properties
-	UFBXW_P_Lcl_Translation,
-	UFBXW_P_Lcl_Rotation,
-	UFBXW_P_Lcl_Scaling,
-	UFBXW_P_RotationOrder,
-	UFBXW_P_PreRotation,
-	UFBXW_P_PostRotation,
-	UFBXW_P_RotationOffset,
-	UFBXW_P_RotationPivot,
-	UFBXW_P_ScalingOffset,
-	UFBXW_P_ScalingPivot,
-	UFBXW_P_QuaternionInterpolate,
-	UFBXW_P_GeometricTranslation,
-	UFBXW_P_GeometricRotation,
-	UFBXW_P_GeometricScaling,
-	UFBXW_P_TranslationActive,
-	UFBXW_P_TranslationMin,
-	UFBXW_P_TranslationMax,
-	UFBXW_P_TranslationMinX,
-	UFBXW_P_TranslationMinY,
-	UFBXW_P_TranslationMinZ,
-	UFBXW_P_TranslationMaxX,
-	UFBXW_P_TranslationMaxY,
-	UFBXW_P_TranslationMaxZ,
-	UFBXW_P_RotationSpaceForLimitOnly,
-	UFBXW_P_RotationStiffnessX,
-	UFBXW_P_RotationStiffnessY,
-	UFBXW_P_RotationStiffnessZ,
-	UFBXW_P_AxisLen,
-	UFBXW_P_RotationActive,
-	UFBXW_P_RotationMin,
-	UFBXW_P_RotationMax,
-	UFBXW_P_RotationMinX,
-	UFBXW_P_RotationMinY,
-	UFBXW_P_RotationMinZ,
-	UFBXW_P_RotationMaxX,
-	UFBXW_P_RotationMaxY,
-	UFBXW_P_RotationMaxZ,
-	UFBXW_P_InheritType,
-	UFBXW_P_ScalingActive,
-	UFBXW_P_ScalingMin,
-	UFBXW_P_ScalingMax,
-	UFBXW_P_ScalingMinX,
-	UFBXW_P_ScalingMinY,
-	UFBXW_P_ScalingMinZ,
-	UFBXW_P_ScalingMaxX,
-	UFBXW_P_ScalingMaxY,
-	UFBXW_P_ScalingMaxZ,
-	UFBXW_P_MinDampRangeX,
-	UFBXW_P_MinDampRangeY,
-	UFBXW_P_MinDampRangeZ,
-	UFBXW_P_MaxDampRangeX,
-	UFBXW_P_MaxDampRangeY,
-	UFBXW_P_MaxDampRangeZ,
-	UFBXW_P_MinDampStrengthX,
-	UFBXW_P_MinDampStrengthY,
-	UFBXW_P_MinDampStrengthZ,
-	UFBXW_P_MaxDampStrengthX,
-	UFBXW_P_MaxDampStrengthY,
-	UFBXW_P_MaxDampStrengthZ,
-	UFBXW_P_PreferedAngleX,
-	UFBXW_P_PreferedAngleY,
-	UFBXW_P_PreferedAngleZ,
-	UFBXW_P_LookAtProperty,
-	UFBXW_P_UpVectorProperty,
-	UFBXW_P_Show,
-	UFBXW_P_NegativePercentShapeSupport,
-	UFBXW_P_DefaultAttributeIndex,
-	UFBXW_P_Freeze,
-	UFBXW_P_LODBox,
-	UFBXW_P_Visibility,
-	UFBXW_P_Visibility_Inheritance,
+typedef struct ufbxw_user_real {
+	ufbxw_real value;
+	ufbxw_real min_value;
+	ufbxw_real max_value;
+} ufbxw_user_real;
 
-	// Geometry
-	UFBXW_P_BBoxMin,
-	UFBXW_P_BBoxMax,
-	UFBXW_P_Primary_Visibility,
-	UFBXW_P_Casts_Shadows,
-	UFBXW_P_Receive_Shadows,
+typedef struct ufbxw_user_enum {
+	int32_t value;
+	ufbxw_string options;
+} ufbxw_user_enum;
 
-	// Animation layer
-	UFBXW_P_Weight,
-	UFBXW_P_Mute,
-	UFBXW_P_Solo,
-	UFBXW_P_Lock,
-	UFBXW_P_BlendMode,
-	UFBXW_P_RotationAccumulationMode,
-	UFBXW_P_ScaleAccumulationMode,
-	UFBXW_P_BlendModeBypass,
+typedef enum ufbxw_prop_data_type {
+	UFBXW_PROP_DATA_NONE,         // < `void`
+	UFBXW_PROP_DATA_BOOL,         // < `bool`
+	UFBXW_PROP_DATA_INT32,        // < `int32_t`
+	UFBXW_PROP_DATA_INT64,        // < `int64_t`
+	UFBXW_PROP_DATA_REAL,         // < `ufbxw_real`
+	UFBXW_PROP_DATA_VEC2,         // < `ufbxw_vec2`
+	UFBXW_PROP_DATA_VEC3,         // < `ufbxw_vec3`
+	UFBXW_PROP_DATA_VEC4,         // < `ufbxw_vec4`
+	UFBXW_PROP_DATA_STRING,       // < `ufbxw_string`
+	UFBXW_PROP_DATA_ID,           // < `ufbxw_id`
+	UFBXW_PROP_DATA_REAL_STRING,  // < `ufbxw_real_string`
+	UFBXW_PROP_DATA_BLOB,         // < `ufbxw_blob`
+	UFBXW_PROP_DATA_USER_INT,     // < `ufbxw_user_int`
+	UFBXW_PROP_DATA_USER_REAL,    // < `ufbxw_user_real`
+	UFBXW_PROP_DATA_USER_ENUM,    // < `ufbxw_user_enum`
+} ufbxw_prop_data_type;
 
-	// Animation stack
-	UFBXW_P_Description,
-	UFBXW_P_LocalStart,
-	UFBXW_P_LocalStop,
-	UFBXW_P_ReferenceStart,
-	UFBXW_P_ReferenceStop,
+typedef enum ufbxw_prop_flag {
+	UFBXW_PROP_FLAG_ANIMATABLE = 0x1,
+	UFBXW_PROP_FLAG_USER = 0x2,
+} ufbxw_prop_flag;
 
-	// Material
-	UFBXW_P_ShadingModel,
-	UFBXW_P_MultiLayer,
-	UFBXW_P_EmissiveColor,
-	UFBXW_P_EmissiveFactor,
-	UFBXW_P_AmbientColor,
-	UFBXW_P_AmbientFactor,
-	UFBXW_P_DiffuseColor,
-	UFBXW_P_DiffuseFactor,
-	UFBXW_P_Bump,
-	UFBXW_P_NormalMap,
-	UFBXW_P_BumpFactor,
-	UFBXW_P_TransparentColor,
-	UFBXW_P_TransparencyFactor,
-	UFBXW_P_DisplacementColor,
-	UFBXW_P_DisplacementFactor,
-	UFBXW_P_VectorDisplacementColor,
-	UFBXW_P_VectorDisplacementFactor,
-	UFBXW_P_SpecularColor,
-	UFBXW_P_SpecularFactor,
-	UFBXW_P_ShininessExponent,
-	UFBXW_P_ReflectionColor,
-	UFBXW_P_ReflectionFactor,
+typedef enum ufbxw_prop_type {
+	UFBXW_PROP_TYPE_NONE,
 
-	// Camera
-	UFBXW_P_Position,
-	UFBXW_P_InterestPosition,
-	UFBXW_P_BackgroundColor,
-	UFBXW_P_AspectWidth,
-	UFBXW_P_AspectHeight,
-	UFBXW_P_FilmWidth,
-	UFBXW_P_FilmHeight,
-	UFBXW_P_FilmAspectRatio,
-	UFBXW_P_ApertureMode,
-	UFBXW_P_GateFit,
-	UFBXW_P_FocalLength,
-	UFBXW_P_NearPlane,
-	UFBXW_P_FarPlane,
-	UFBXW_P_AutoComputeClipPanes,
-	UFBXW_P_FocusDistance,
+	UFBXW_PROP_TYPE_COMPOUND,   // < "Compound", "", `UFBXW_PROP_DATA_NONE`
+	UFBXW_PROP_TYPE_BOOL,       // < "bool", "", `UFBXW_PROP_DATA_BOOL`
+	UFBXW_PROP_TYPE_ENUM,       // < "enum", "", `UFBXW_PROP_DATA_INT32`
+	UFBXW_PROP_TYPE_INT,        // < "int", "Integer", `UFBXW_PROP_DATA_INT32`
+	UFBXW_PROP_TYPE_TIME,       // < "KTime", "Time", `UFBXW_PROP_DATA_INT64`
+	UFBXW_PROP_TYPE_UBYTE,      // < "UByte", "", `UFBXW_PROP_DATA_INT64`
+	UFBXW_PROP_TYPE_ULONGLONG,  // < "ULongLong", "", `UFBXW_PROP_DATA_INT64`
+	UFBXW_PROP_TYPE_FLOAT,      // < "float", "", `UFBXW_PROP_DATA_REAL`
+	UFBXW_PROP_TYPE_DOUBLE,     // < "double", "Number", `UFBXW_PROP_DATA_REAL`
+	UFBXW_PROP_TYPE_NUMBER,     // < "Number", "", `UFBXW_PROP_DATA_REAL`
+	UFBXW_PROP_TYPE_VECTOR2D,   // < "Vector2D", "Vector2", `UFBXW_PROP_DATA_VEC2`
+	UFBXW_PROP_TYPE_VECTOR,     // < "Vector", "", `UFBXW_PROP_DATA_VEC3`
+	UFBXW_PROP_TYPE_VECTOR3D,   // < "Vector3D", "Vector", `UFBXW_PROP_DATA_VEC3`
+	UFBXW_PROP_TYPE_COLOR,      // < "Color", "", `UFBXW_PROP_DATA_VEC3`
+	UFBXW_PROP_TYPE_COLOR_RGB,  // < "ColorRGB", "Color", `UFBXW_PROP_DATA_VEC3`
+	UFBXW_PROP_TYPE_COLOR_RGBA, // < "ColorAndAlpha", "", `UFBXW_PROP_DATA_VEC4`
+	UFBXW_PROP_TYPE_STRING,     // < "KString", "", `UFBXW_PROP_DATA_STRING`
+	UFBXW_PROP_TYPE_URL,        // < "KString", "Url", `UFBXW_PROP_DATA_STRING`
+	UFBXW_PROP_TYPE_XREFURL,    // < "KString", "XRefUrl", `UFBXW_PROP_DATA_STRING`
+	UFBXW_PROP_TYPE_DATE_TIME,  // < "DateTime", "", `UFBXW_PROP_DATA_STRING`
+	UFBXW_PROP_TYPE_OBJECT,     // < "object", "", `UFBXW_PROP_DATA_ID`
+	UFBXW_PROP_TYPE_DISTANCE,   // < "Distance", "", `UFBXW_PROP_DATA_REAL_STRING`
+	UFBXW_PROP_TYPE_BLOB,       // < "Blob", "", `UFBXW_PROP_DATA_BLOB`
 
-	UFBXW_PROP_FIRST_USER,
-	UFBXW_PROP_FORCE_32BIT = 0x7fffffff,
-} ufbxw_prop;
+	// User property types
+	UFBXW_PROP_TYPE_USER_BOOL,    // < "Bool", "", `UFBXW_PROP_DATA_BOOL`
+	UFBXW_PROP_TYPE_USER_VECTOR,  // < "Vector", "", `UFBXW_PROP_DATA_VEC3`
+	UFBXW_PROP_TYPE_USER_INTEGER, // < "Integer", "", `UFBXW_PROP_DATA_USER_INT`
+	UFBXW_PROP_TYPE_USER_NUMBER,  // < "Number", "", `UFBXW_PROP_DATA_USER_REAL`
+	UFBXW_PROP_TYPE_USER_STRING,  // < "KString", "", `UFBXW_PROP_DATA_STRING`
+	UFBXW_PROP_TYPE_USER_ENUM,    // < "Enum", "", `UFBXW_PROP_DATA_USER_ENUM`
+
+	// Decicated types
+	UFBXW_PROP_TYPE_VISIBILITY,             // < "Visibility", "", `UFBXW_PROP_DATA_BOOL`
+	UFBXW_PROP_TYPE_VISIBILITY_INHERITANCE, // < "Visibility Inheritance", "", `UFBXW_PROP_DATA_BOOL`
+	UFBXW_PROP_TYPE_ROLL,                   // < "Roll", "", `UFBXW_PROP_DATA_REAL`
+	UFBXW_PROP_TYPE_OPTICAL_CENTER_X,       // < "OpticalCenterX", "", `UFBXW_PROP_DATA_REAL`
+	UFBXW_PROP_TYPE_OPTICAL_CENTER_Y,       // < "OpticalCenterY", "", `UFBXW_PROP_DATA_REAL`
+	UFBXW_PROP_TYPE_FIELD_OF_VIEW,          // < "FieldOfView", "", `UFBXW_PROP_DATA_REAL`
+	UFBXW_PROP_TYPE_FIELD_OF_VIEW_X,        // < "FieldOfViewX", "", `UFBXW_PROP_DATA_REAL`
+	UFBYW_PROP_TYPE_FIELD_OF_VIEW_Y,        // < "FieldOfViewY", "", `UFBXW_PROP_DATA_REAL`
+	UFBXW_PROP_TYPE_LCL_TRANSLATION,        // < "Lcl Translation", "", `UFBXW_PROP_DATA_VEC3`
+	UFBXW_PROP_TYPE_LCL_ROTATION,           // < "Lcl Rotation", "", `UFBXW_PROP_DATA_VEC3`
+	UFBXW_PROP_TYPE_LCL_SCALING,            // < "Lcl Scaling", "", `UFBXW_PROP_DATA_VEC3`
+
+	// Custom
+	UFBXW_PROP_TYPE_FIRST_CUSTOM,
+	UFBXW_PROP_TYPE_FORCE_32BIT = 0x7fffffff,
+} ufbxw_prop_type;
+
+typedef enum ufbxw_prop_type_flags {
+	UFBXW_PROP_TYPE_FLAG_ENCODE_AS_BYTE = 0x1,
+	UFBXW_PROP_TYPE_FLAG_ENCODE_AS_FLOAT = 0x2,
+} ufbxw_prop_type_flags;
+
+typedef struct ufbxw_prop_type_desc {
+	ufbxw_prop_data_type data_type;
+	uint32_t flags;
+	ufbxw_string type;
+	ufbxw_string sub_type;
+} ufbxw_prop_type_desc;
+
+// --
 
 ufbxw_abi ufbxw_scene *ufbxw_create_scene(const ufbxw_scene_opts *opts);
 ufbxw_abi void ufbxw_free_scene(ufbxw_scene *scene);
@@ -313,29 +282,35 @@ ufbxw_abi void ufbxw_disconnect(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst);
 ufbxw_abi void ufbxw_disconnect_dst(ufbxw_scene *scene, ufbxw_id id, ufbxw_element_type type);
 ufbxw_abi void ufbxw_disconnect_src(ufbxw_scene *scene, ufbxw_id id, ufbxw_element_type type);
 
-ufbxw_abi void ufbxw_set_real(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, ufbxw_real value);
-ufbxw_abi void ufbxw_set_bool(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, bool value);
-ufbxw_abi void ufbxw_set_int(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, int64_t value);
-ufbxw_abi void ufbxw_set_vec3(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, ufbxw_vec3 value);
-ufbxw_abi void ufbxw_set_vec4(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, ufbxw_vec4 value);
-ufbxw_abi void ufbxw_set_string_len(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, const char *value, size_t value_len);
-ufbxw_abi void ufbxw_set_string(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop, const char *value);
+ufbxw_abi void ufbxw_add_prop(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_prop_type type);
+ufbxw_abi void ufbxw_add_prop_len(ufbxw_scene *scene, ufbxw_id id, const char *prop, size_t prop_len, ufbxw_prop_type type);
 
-ufbxw_abi ufbxw_real ufbxw_get_real(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop);
-ufbxw_abi bool ufbxw_get_bool(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop);
-ufbxw_abi int64_t ufbxw_get_int(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop);
-ufbxw_abi ufbxw_vec3 ufbxw_get_vec3(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop);
-ufbxw_abi ufbxw_vec4 ufbxw_get_vec4(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop);
-ufbxw_abi ufbxw_string ufbxw_get_string(ufbxw_scene *scene, ufbxw_id id, ufbxw_prop prop);
+ufbxw_abi void ufbxw_set_bool(ufbxw_scene *scene, ufbxw_id id, const char *prop, bool value);
+ufbxw_abi void ufbxw_set_int(ufbxw_scene *scene, ufbxw_id id, const char *prop, int32_t value);
+ufbxw_abi void ufbxw_set_int64(ufbxw_scene *scene, ufbxw_id id, const char *prop, int64_t value);
+ufbxw_abi void ufbxw_set_real(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_real value);
+ufbxw_abi void ufbxw_set_vec2(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_vec2 value);
+ufbxw_abi void ufbxw_set_vec3(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_vec3 value);
+ufbxw_abi void ufbxw_set_vec4(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_vec4 value);
+ufbxw_abi void ufbxw_set_string(ufbxw_scene *scene, ufbxw_id id, const char *prop, const char *value);
 
-typedef struct ufbxw_custom_prop {
-	ufbxw_string name;
-	ufbxw_string type;
-	ufbxw_string sub_type;
-} ufbxw_custom_prop;
+ufbxw_abi void ufbxw_add_bool(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_prop_type type, bool value);
+ufbxw_abi void ufbxw_add_int(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_prop_type type, int32_t value);
+ufbxw_abi void ufbxw_add_int64(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_prop_type type, int64_t value);
+ufbxw_abi void ufbxw_add_real(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_prop_type type, ufbxw_real value);
+ufbxw_abi void ufbxw_add_vec2(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_prop_type type, ufbxw_vec2 value);
+ufbxw_abi void ufbxw_add_vec3(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_prop_type type, ufbxw_vec3 value);
+ufbxw_abi void ufbxw_add_vec4(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_prop_type type, ufbxw_vec4 value);
+ufbxw_abi void ufbxw_add_string(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_prop_type type, const char *value);
 
-ufbxw_abi ufbxw_prop ufbxw_get_custom_prop(ufbxw_scene *scene, const ufbxw_custom_prop *prop);
-ufbxw_abi ufbxw_prop ufbxw_get_custom_prop_c(ufbxw_scene *scene, const char *name, const char *type, const char *sub_type);
+ufbxw_abi bool ufbxw_get_bool(ufbxw_scene *scene, ufbxw_id id, const char *prop);
+ufbxw_abi int32_t ufbxw_get_int(ufbxw_scene *scene, ufbxw_id id, const char *prop);
+ufbxw_abi int64_t ufbxw_get_int64(ufbxw_scene *scene, ufbxw_id id, const char *prop);
+ufbxw_abi ufbxw_real ufbxw_get_real(ufbxw_scene *scene, ufbxw_id id, const char *prop);
+ufbxw_abi ufbxw_vec2 ufbxw_get_vec2(ufbxw_scene *scene, ufbxw_id id, const char *prop);
+ufbxw_abi ufbxw_vec3 ufbxw_get_vec3(ufbxw_scene *scene, ufbxw_id id, const char *prop);
+ufbxw_abi ufbxw_vec4 ufbxw_get_vec4(ufbxw_scene *scene, ufbxw_id id, const char *prop);
+ufbxw_abi ufbxw_string ufbxw_get_string(ufbxw_scene *scene, ufbxw_id id, const char *prop);
 
 // -- Node
 
