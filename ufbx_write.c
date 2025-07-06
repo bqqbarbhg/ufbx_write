@@ -1065,6 +1065,9 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "Visibility Inheritance", 22 },
 };
 
+// Not including none/empty
+ufbxw_static_assert(ufbxwi_tokens_count, ufbxwi_arraycount(ufbxwi_tokens) == UFBXWI_TOKEN_COUNT - 2);
+
 uint32_t ufbxwi_hash_token(ufbxwi_token token)
 {
 	uint32_t x = (uint32_t)token;
@@ -1231,6 +1234,8 @@ static const ufbxwi_prop_data_info ufbxwi_prop_data_infos[] = {
 	{ sizeof(ufbxw_user_enum), sizeof(int32_t) },
 };
 
+ufbxw_static_assert(ufbxwi_prop_data_type_count, ufbxwi_arraycount(ufbxwi_prop_data_infos) == UFBXW_PROP_DATA_TYPE_COUNT);
+
 static const ufbxwi_prop_type_desc ufbxwi_prop_types[] = {
 	{ "", "", UFBXW_PROP_DATA_NONE },
 	{ "Compound", "", UFBXW_PROP_DATA_NONE },
@@ -1274,6 +1279,8 @@ static const ufbxwi_prop_type_desc ufbxwi_prop_types[] = {
 	{ "Lcl Rotation", "", UFBXW_PROP_DATA_VEC3 },
 	{ "Lcl Scaling", "", UFBXW_PROP_DATA_VEC3 },
 };
+
+ufbxw_static_assert(ufbxwi_prop_type_count, ufbxwi_arraycount(ufbxwi_prop_types) == UFBXW_PROP_TYPE_FIRST_CUSTOM);
 
 typedef struct {
 	union {

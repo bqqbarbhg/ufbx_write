@@ -187,6 +187,8 @@ typedef enum ufbxw_prop_data_type {
 	UFBXW_PROP_DATA_USER_INT,     // < `ufbxw_user_int`
 	UFBXW_PROP_DATA_USER_REAL,    // < `ufbxw_user_real`
 	UFBXW_PROP_DATA_USER_ENUM,    // < `ufbxw_user_enum`
+
+	UFBXW_PROP_DATA_TYPE_COUNT,
 } ufbxw_prop_data_type;
 
 typedef enum ufbxw_prop_flag {
