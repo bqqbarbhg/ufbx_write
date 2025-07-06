@@ -5,7 +5,7 @@ import itertools
 script_path = os.path.dirname(__file__)
 path = os.path.join(script_path, "..", "ufbx_write.c")
 
-tokens = { }
+tokens = { "": "TOKEN_EMPTY" }
 
 def to_token(s):
     return re.sub(r"\s+", "_", s)
@@ -13,7 +13,8 @@ def to_token(s):
 def collect_line(line):
     for m in re.finditer(r"T\"([^\"]*)\"", line):
         s = m.group(1)
-        tokens[s] = to_token(s)
+        if s not in tokens:
+            tokens[s] = to_token(s)
 
 def collect_lines(lines):
     it = iter(lines)
@@ -31,7 +32,8 @@ def collect_lines(lines):
             m = re.search(r"\"([^\"]+)\"", line)
             if m:
                 s = m.group(1)
-                tokens[s] = to_token(s)
+                if s not in tokens:
+                    tokens[s] = to_token(s)
 
     for line in it:
         collect_line(line)
@@ -65,7 +67,6 @@ def filter_lines(lines):
             yield filter_line(line)
 
     yield "\tUFBXWI_TOKEN_NONE,"
-    yield "\tUFBXWI_TOKEN_EMPTY,"
     for _, token in token_order:
         yield f"\tUFBXWI_{token},"
     yield "\tUFBXWI_TOKEN_COUNT,"

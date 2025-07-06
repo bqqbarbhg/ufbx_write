@@ -905,6 +905,8 @@ typedef enum ufbxwi_token {
 	UFBXWI_TOKEN_NONE,
 	UFBXWI_TOKEN_EMPTY,
 	UFBXWI_ActiveAnimStackName,
+	UFBXWI_AmbientColor,
+	UFBXWI_AmbientFactor,
 	UFBXWI_AnimationCurve,
 	UFBXWI_AnimationCurveNode,
 	UFBXWI_AnimationLayer,
@@ -912,12 +914,21 @@ typedef enum ufbxwi_token {
 	UFBXWI_AxisLen,
 	UFBXWI_BBoxMax,
 	UFBXWI_BBoxMin,
+	UFBXWI_Bump,
+	UFBXWI_BumpFactor,
 	UFBXWI_Casts_Shadows,
 	UFBXWI_Color,
 	UFBXWI_DefaultAttributeIndex,
+	UFBXWI_DiffuseColor,
+	UFBXWI_DiffuseFactor,
+	UFBXWI_DisplacementColor,
+	UFBXWI_DisplacementFactor,
 	UFBXWI_Document,
+	UFBXWI_EmissiveColor,
+	UFBXWI_EmissiveFactor,
 	UFBXWI_FbxMesh,
 	UFBXWI_FbxNode,
+	UFBXWI_FbxSurfaceLambert,
 	UFBXWI_Freeze,
 	UFBXWI_GeometricRotation,
 	UFBXWI_GeometricScaling,
@@ -945,8 +956,10 @@ typedef enum ufbxwi_token {
 	UFBXWI_MinDampStrengthY,
 	UFBXWI_MinDampStrengthZ,
 	UFBXWI_Model,
+	UFBXWI_MultiLayer,
 	UFBXWI_NegativePercentShapeSupport,
 	UFBXWI_NodeAttribute,
+	UFBXWI_NormalMap,
 	UFBXWI_PostRotation,
 	UFBXWI_PreRotation,
 	UFBXWI_PreferedAngleX,
@@ -983,6 +996,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_ScalingOffset,
 	UFBXWI_ScalingPivot,
 	UFBXWI_SceneInfo,
+	UFBXWI_ShadingModel,
 	UFBXWI_Show,
 	UFBXWI_SourceObject,
 	UFBXWI_TranslationActive,
@@ -994,8 +1008,12 @@ typedef enum ufbxwi_token {
 	UFBXWI_TranslationMinX,
 	UFBXWI_TranslationMinY,
 	UFBXWI_TranslationMinZ,
+	UFBXWI_TransparencyFactor,
+	UFBXWI_TransparentColor,
 	UFBXWI_UpVectorProperty,
 	UFBXWI_UserData,
+	UFBXWI_VectorDisplacementColor,
+	UFBXWI_VectorDisplacementFactor,
 	UFBXWI_Visibility,
 	UFBXWI_Visibility_Inheritance,
 	UFBXWI_TOKEN_COUNT,
@@ -1003,7 +1021,10 @@ typedef enum ufbxwi_token {
 } ufbxwi_token;
 
 static const ufbxw_string ufbxwi_tokens[] = {
+	{ "", 0 },
 	{ "ActiveAnimStackName", 19 },
+	{ "AmbientColor", 12 },
+	{ "AmbientFactor", 13 },
 	{ "AnimationCurve", 14 },
 	{ "AnimationCurveNode", 18 },
 	{ "AnimationLayer", 14 },
@@ -1011,12 +1032,21 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "AxisLen", 7 },
 	{ "BBoxMax", 7 },
 	{ "BBoxMin", 7 },
+	{ "Bump", 4 },
+	{ "BumpFactor", 10 },
 	{ "Casts Shadows", 13 },
 	{ "Color", 5 },
 	{ "DefaultAttributeIndex", 21 },
+	{ "DiffuseColor", 12 },
+	{ "DiffuseFactor", 13 },
+	{ "DisplacementColor", 17 },
+	{ "DisplacementFactor", 18 },
 	{ "Document", 8 },
+	{ "EmissiveColor", 13 },
+	{ "EmissiveFactor", 14 },
 	{ "FbxMesh", 7 },
 	{ "FbxNode", 7 },
+	{ "FbxSurfaceLambert", 17 },
 	{ "Freeze", 6 },
 	{ "GeometricRotation", 17 },
 	{ "GeometricScaling", 16 },
@@ -1044,8 +1074,10 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "MinDampStrengthY", 16 },
 	{ "MinDampStrengthZ", 16 },
 	{ "Model", 5 },
+	{ "MultiLayer", 10 },
 	{ "NegativePercentShapeSupport", 27 },
 	{ "NodeAttribute", 13 },
+	{ "NormalMap", 9 },
 	{ "PostRotation", 12 },
 	{ "PreRotation", 11 },
 	{ "PreferedAngleX", 14 },
@@ -1082,6 +1114,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "ScalingOffset", 13 },
 	{ "ScalingPivot", 12 },
 	{ "SceneInfo", 9 },
+	{ "ShadingModel", 12 },
 	{ "Show", 4 },
 	{ "SourceObject", 12 },
 	{ "TranslationActive", 17 },
@@ -1093,14 +1126,18 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "TranslationMinX", 15 },
 	{ "TranslationMinY", 15 },
 	{ "TranslationMinZ", 15 },
+	{ "TransparencyFactor", 18 },
+	{ "TransparentColor", 16 },
 	{ "UpVectorProperty", 16 },
 	{ "UserData", 8 },
+	{ "VectorDisplacementColor", 23 },
+	{ "VectorDisplacementFactor", 24 },
 	{ "Visibility", 10 },
 	{ "Visibility Inheritance", 22 },
 };
 
-// Not including none/empty
-ufbxw_static_assert(ufbxwi_tokens_count, ufbxwi_arraycount(ufbxwi_tokens) == UFBXWI_TOKEN_COUNT - 2);
+// Not including none
+ufbxw_static_assert(ufbxwi_tokens_count, ufbxwi_arraycount(ufbxwi_tokens) == UFBXWI_TOKEN_COUNT - 1);
 
 uint32_t ufbxwi_hash_token(ufbxwi_token token)
 {
@@ -1180,6 +1217,7 @@ typedef void ufbxwi_element_init_data_fn(void *data);
 typedef struct {
 	ufbxw_element_type element_type;
 
+	ufbxwi_token class_type;
 	ufbxwi_token sub_type;
 	ufbxwi_token object_type;
 	ufbxwi_token fbx_type;
@@ -1251,6 +1289,10 @@ typedef struct {
 typedef struct {
 	ufbxwi_element_data element;
 } ufbxwi_mesh;
+
+typedef struct {
+	ufbxwi_element_data element;
+} ufbxwi_material;
 
 typedef struct {
 	ufbxwi_element_data element;
@@ -1391,6 +1433,7 @@ typedef struct {
 	} zero;
 	bool bool_true;
 	int32_t int_neg1;
+	ufbxw_real double_1;
 	ufbxw_real double_10;
 	ufbxw_vec3 vec3_1;
 	ufbxw_vec3 vec3_color;
@@ -1400,6 +1443,7 @@ static const ufbxwi_prop_defaults ufbxwi_prop_default_data = {
 	{ 0 }, // zero
 	true,
 	-1,
+	(ufbxw_real)1.0,
 	(ufbxw_real)10.0,
 	{ 1.0f, 1.0f, 1.0f },
 	{ (ufbxw_real)0.8, (ufbxw_real)0.8, (ufbxw_real)0.8 },
@@ -1499,6 +1543,26 @@ static const ufbxwi_prop_desc ufbxwi_mesh_props[] = {
 	{ UFBXWI_Receive_Shadows, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 };
 
+static const ufbxwi_prop_desc ufbxwi_material_lambert_props[] = {
+	{ UFBXWI_ShadingModel, UFBXW_PROP_TYPE_STRING, },
+	{ UFBXWI_MultiLayer, UFBXW_PROP_TYPE_BOOL, },
+	{ UFBXWI_EmissiveColor, UFBXW_PROP_TYPE_COLOR, },
+	{ UFBXWI_EmissiveFactor, UFBXW_PROP_TYPE_NUMBER, },
+	{ UFBXWI_AmbientColor, UFBXW_PROP_TYPE_COLOR, },
+	{ UFBXWI_AmbientFactor, UFBXW_PROP_TYPE_NUMBER, },
+	{ UFBXWI_DiffuseColor, UFBXW_PROP_TYPE_COLOR, ufbxwi_default(vec3_color) },
+	{ UFBXWI_DiffuseFactor, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_1) },
+	{ UFBXWI_Bump, UFBXW_PROP_TYPE_VECTOR3D, },
+	{ UFBXWI_NormalMap, UFBXW_PROP_TYPE_VECTOR3D, },
+	{ UFBXWI_BumpFactor, UFBXW_PROP_TYPE_DOUBLE, },
+	{ UFBXWI_TransparentColor, UFBXW_PROP_TYPE_COLOR, },
+	{ UFBXWI_TransparencyFactor, UFBXW_PROP_TYPE_NUMBER, },
+	{ UFBXWI_DisplacementColor, UFBXW_PROP_TYPE_COLOR_RGB, },
+	{ UFBXWI_DisplacementFactor, UFBXW_PROP_TYPE_DOUBLE, },
+	{ UFBXWI_VectorDisplacementColor, UFBXW_PROP_TYPE_COLOR_RGB, },
+	{ UFBXWI_VectorDisplacementFactor, UFBXW_PROP_TYPE_DOUBLE, },
+};
+
 static const ufbxwi_prop_desc ufbxwi_document_props[] = {
 	{ UFBXWI_SourceObject, UFBXW_PROP_TYPE_OBJECT },
 	{ UFBXWI_ActiveAnimStackName, UFBXW_PROP_TYPE_STRING },
@@ -1514,6 +1578,7 @@ static const ufbxwi_element_type_info ufbxwi_element_type_infos[] = {
 	{ sizeof(ufbxwi_node) }, // NODE
 	{ 0 }, // CUSTOM_NODE_ATTRIBUTE
 	{ sizeof(ufbxwi_mesh) }, // MESH
+	{ sizeof(ufbxwi_material) }, // MATERIAL
 	{ sizeof(ufbxwi_template) }, // TEMPLATE
 	{ 0 }, // SCENE_INFO
 	{ 0 }, // GLOBAL_SETTINGS
@@ -1532,12 +1597,12 @@ static void ufbxwi_init_node_data(void *data)
 }
 
 enum {
-	UFBXWI_ELEMENT_TYPE_FLAG_DEFAULT = 0x1,
-	UFBXWI_ELEMENT_TYPE_FLAG_EAGER_PROPS = 0x2,
+	UFBXWI_ELEMENT_TYPE_FLAG_EAGER_PROPS = 0x1,
 };
 
 typedef struct {
 	ufbxw_element_type element_type;
+	ufbxwi_token class_type;
 	ufbxwi_token sub_type;
 	ufbxwi_token object_type;
 	ufbxwi_token fbx_type;
@@ -1550,34 +1615,39 @@ typedef struct {
 
 static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 	{
-		UFBXW_ELEMENT_TEMPLATE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE,
+		UFBXW_ELEMENT_TEMPLATE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE,
 		NULL, 0, NULL,
-		UFBXWI_ELEMENT_TYPE_FLAG_DEFAULT | UFBXWI_ELEMENT_FLAG_ALLOW_NO_OBJECT_ID,
+		UFBXWI_ELEMENT_FLAG_ALLOW_NO_OBJECT_ID,
 	},
 	{
-		UFBXW_ELEMENT_NODE, UFBXWI_TOKEN_NONE, UFBXWI_Model, UFBXWI_Model, UFBXWI_FbxNode,
+		UFBXW_ELEMENT_NODE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, UFBXWI_Model, UFBXWI_Model, UFBXWI_FbxNode,
 		ufbxwi_node_props, ufbxwi_arraycount(ufbxwi_node_props), &ufbxwi_init_node_data,
-		UFBXWI_ELEMENT_TYPE_FLAG_DEFAULT,
+		0,
 	},
 	{
-		UFBXW_ELEMENT_MESH, UFBXWI_Mesh, UFBXWI_Geometry, UFBXWI_Geometry, UFBXWI_FbxMesh,
+		UFBXW_ELEMENT_MESH, UFBXWI_TOKEN_NONE, UFBXWI_Mesh, UFBXWI_Geometry, UFBXWI_Geometry, UFBXWI_FbxMesh,
 		ufbxwi_mesh_props, ufbxwi_arraycount(ufbxwi_mesh_props), NULL,
-		UFBXWI_ELEMENT_TYPE_FLAG_DEFAULT,
+		0,
 	},
 	{
-		UFBXW_ELEMENT_SCENE_INFO, UFBXWI_SceneInfo, UFBXWI_UserData, UFBXWI_SceneInfo, UFBXWI_TOKEN_NONE,
+		UFBXW_ELEMENT_SCENE_INFO, UFBXWI_TOKEN_NONE, UFBXWI_SceneInfo, UFBXWI_UserData, UFBXWI_SceneInfo, UFBXWI_TOKEN_NONE,
 		NULL, 0, NULL,
-		UFBXWI_ELEMENT_TYPE_FLAG_DEFAULT | UFBXWI_ELEMENT_FLAG_ALLOW_NO_OBJECT_ID,
+		UFBXWI_ELEMENT_FLAG_ALLOW_NO_OBJECT_ID,
 	},
 	{
-		UFBXW_ELEMENT_GLOBAL_SETTINGS, UFBXWI_TOKEN_NONE, UFBXWI_GlobalSettings, UFBXWI_TOKEN_NONE, UFBXWI_GlobalSettings,
+		UFBXW_ELEMENT_GLOBAL_SETTINGS, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, UFBXWI_GlobalSettings, UFBXWI_TOKEN_NONE, UFBXWI_GlobalSettings,
 		NULL, 0, NULL,
-		UFBXWI_ELEMENT_TYPE_FLAG_DEFAULT,
+		0,
 	},
 	{
-		UFBXW_ELEMENT_DOCUMENT, UFBXWI_Document, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE,
+		UFBXW_ELEMENT_DOCUMENT, UFBXWI_TOKEN_NONE, UFBXWI_Document, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE,
 		ufbxwi_document_props, ufbxwi_arraycount(ufbxwi_document_props), NULL,
-		UFBXWI_ELEMENT_TYPE_FLAG_DEFAULT | UFBXWI_ELEMENT_FLAG_ALLOW_NO_OBJECT_ID,
+		UFBXWI_ELEMENT_FLAG_ALLOW_NO_OBJECT_ID,
+	},
+	{
+		UFBXW_ELEMENT_MATERIAL, UFBXWI_FbxSurfaceLambert, UFBXWI_TOKEN_EMPTY, UFBXWI_Material, UFBXWI_Material, UFBXWI_FbxSurfaceLambert,
+		ufbxwi_material_lambert_props, ufbxwi_arraycount(ufbxwi_material_lambert_props), NULL,
+		UFBXWI_ELEMENT_TYPE_FLAG_EAGER_PROPS,
 	},
 };
 
@@ -1639,6 +1709,7 @@ static ufbxwi_prop *ufbxwi_props_find_prop(ufbxwi_props *props, ufbxwi_token tok
 
 static ufbxwi_prop *ufbxwi_props_add_prop(ufbxw_scene *scene, ufbxwi_props *props, ufbxwi_token token)
 {
+	ufbxw_assert(token != UFBXWI_TOKEN_NONE && token != UFBXWI_TOKEN_EMPTY);
 	if (props->count * 2 >= props->capacity) {
 		ufbxwi_check_return(ufbxwi_props_rehash(scene, props, 4), NULL);
 	}
@@ -1678,14 +1749,13 @@ static bool ufbxwi_props_copy(ufbxw_scene *scene, ufbxwi_props *dst, const ufbxw
 	return true;
 }
 
-static uint32_t ufbxwi_find_element_type_id(ufbxw_scene *scene, ufbxw_element_type type, ufbxwi_token sub_type)
+static uint32_t ufbxwi_find_element_type_id(ufbxw_scene *scene, ufbxw_element_type type, ufbxwi_token class_type)
 {
 	ufbxwi_element_type_list types = scene->element_types;
 	for (uint32_t i = 0; i < types.count; i++) {
 		ufbxwi_element_type *et = &types.data[i];
 		if (et->element_type != type) continue;
-		if (et->sub_type == sub_type) return i;
-		if (sub_type == UFBXWI_TOKEN_NONE && (et->flags & UFBXWI_ELEMENT_TYPE_FLAG_DEFAULT) != 0) return i;
+		if (et->class_type == class_type) return i;
 	}
 	return ~0u;
 }
@@ -1732,11 +1802,13 @@ static ufbxwi_prop *ufbxwi_element_edit_prop(ufbxw_scene *scene, ufbxwi_element 
 		if (!prop) {
 			prop = ufbxwi_props_find_prop(default_props, token);
 			if (!prop) return NULL;
-		}
-		if (prop->value_offset <= 0) {
+
 			ufbxwi_prop *new_prop = ufbxwi_props_add_prop(scene, &element->props, token);
 			ufbxwi_check_return(new_prop, NULL);
-
+			*new_prop = *prop;
+			prop = new_prop;
+		}
+		if (prop->value_offset <= 0) {
 			ufbxw_prop_data_type data_type = scene->prop_types.data[prop->type].data_type;
 			int32_t offset = ufbxwi_element_add_field(scene, element, data_type);
 			ufbxwi_check_return(offset != 0, NULL);
@@ -1745,9 +1817,7 @@ static ufbxwi_prop *ufbxwi_element_edit_prop(ufbxw_scene *scene, ufbxwi_element 
 			char *dst = (char*)element->data + offset;
 			memcpy(dst, src, ufbxwi_prop_data_infos[data_type].size);
 
-			*new_prop = *prop;
-			new_prop->value_offset = offset;
-			prop = new_prop;
+			prop->value_offset = offset;
 		}
 		return prop;
 	} else {
@@ -1936,6 +2006,67 @@ static ufbxwi_forceinline const void *ufbxwi_resolve_value_offset(const void *ba
 	}
 }
 
+static ufbxw_id ufbxwi_create_element(ufbxw_scene *scene, ufbxw_element_type type, ufbxwi_token class_type)
+{
+	uint32_t type_id = ufbxwi_find_element_type_id(scene, type, class_type);
+	ufbxwi_check_return(type_id != ~0u, ufbxw_null_id);
+
+	const ufbxwi_element_type_info *type_info = &ufbxwi_element_type_infos[type];
+
+	size_t data_size = type_info->data_size;
+	if (data_size < sizeof(ufbxwi_element_data)) {
+		data_size = sizeof(ufbxwi_element_data);
+	}
+
+	void *data = NULL;
+
+	size_t data_capacity = 0;
+	data = ufbxwi_alloc_size(&scene->ator, 1, data_size, &data_capacity);
+	ufbxwi_check_return(data, 0);
+	memset(data, 0, data_capacity);
+
+	size_t index = 0;
+	if (scene->free_element_ids.count > 0) {
+		index = scene->free_element_ids.data[--scene->free_element_ids.count];
+	} else {
+		index = scene->elements.count;
+		ufbxwi_check_return(ufbxwi_list_push_zero(&scene->ator, &scene->elements, ufbxwi_element), 0);
+	}
+
+	ufbxwi_element *element = &scene->elements.data[index];
+	uint32_t generation = ufbxwi_id_generation(element->id) + 1;
+
+	ufbxw_id id = ufbxwi_make_id(type, generation, index);
+	element->id = id;
+	element->name = ufbxwi_empty_string;
+	element->data = data;
+	element->data_size = data_size;
+	element->data_capacity = data_capacity;
+
+	ufbxwi_element_type *element_type = &scene->element_types.data[type_id];
+	element->type_id = type_id;
+
+	if (element_type->props.count == 0) {
+		// No properties
+	} else if ((element_type->flags & UFBXWI_ELEMENT_TYPE_FLAG_EAGER_PROPS) != 0) {
+		ufbxwi_check_return(ufbxwi_props_copy(scene, &element->props, &element_type->props), 0);
+	} else {
+		element->flags |= UFBXWI_ELEMENT_FLAG_HAS_DEFAULT_PROPS;
+		element->props.order_counter = element_type->props.order_counter;
+	}
+
+	ufbxwi_element_data *element_data = (ufbxwi_element_data*)data;
+	element_data->id = id;
+
+	if (element_type->init_fn) {
+		element_type->init_fn(data);
+	}
+
+	scene->num_elements++;
+
+	return ufbxwi_make_id(type, generation, index);
+}
+
 static ufbxwi_noinline bool ufbxwi_set_prop(ufbxw_scene *scene, ufbxw_id id, const char *prop, size_t prop_len, const void *src, ufbxw_prop_data_type src_type)
 {
 	ufbxwi_token token = ufbxwi_get_token(&scene->string_pool, prop, prop_len);
@@ -2062,6 +2193,7 @@ static bool ufbxwi_create_element_types(ufbxw_scene *scene)
 		ufbxwi_element_type *et = ufbxwi_list_push_zero(&scene->ator, &scene->element_types, ufbxwi_element_type);
 
 		et->element_type = desc->element_type;
+		et->class_type = desc->class_type;
 		et->sub_type = desc->sub_type;
 		et->object_type = desc->object_type;
 		et->fbx_type = desc->fbx_type;
@@ -2474,8 +2606,8 @@ static void ufbxwi_dom_value(ufbxw_save_context *sc, const char *tag, const char
 }
 
 enum {
-	UFBXWI_SAVE_ELEMENT_NO_ID = 0x1,
-	UFBXWI_SAVE_ELEMENT_GLOBAL_SETTINGS = 0x2,
+	UFBXWI_SAVE_ELEMENT_MANUAL_OPEN = 0x1,
+	UFBXWI_SAVE_ELEMENT_NO_ID = 0x2,
 };
 
 static int ufbxwi_cmp_prop_identity(const void *va, const void *vb)
@@ -2535,7 +2667,7 @@ static void ufbxwi_save_props(ufbxw_save_context *sc, const void *data_buffer, c
 			}
 		}
 
-		ufbxw_assert(dst_prop - sc->tmp_prop_list.data == prop_count);
+		ufbxw_assert(dst_prop - props == prop_count);
 	}
 
 	// TODO: Better sort here
@@ -2628,8 +2760,7 @@ static void ufbxwi_save_props(ufbxw_save_context *sc, const void *data_buffer, c
 				ufbxwi_dom_value(sc, "P", "SSSCS", name, type->type, type->sub_type, "", *d);
 			} break;
 			case UFBXW_PROP_DATA_ID: {
-				const ufbxw_id *d = (const ufbxw_id*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCL", name, type->type, type->sub_type, "", (int64_t)*d);
+				ufbxwi_dom_value(sc, "P", "SSSC", name, type->type, type->sub_type, "");
 			} break;
 			case UFBXW_PROP_DATA_REAL_STRING: {
 				const ufbxw_real_string *d = (const ufbxw_real_string*)data;
@@ -2688,19 +2819,19 @@ static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element,
 	ufbxw_string obj_type_str = scene->string_pool.tokens.data[obj_type];
 	ufbxw_string fbx_type_str = scene->string_pool.tokens.data[fbx_type];
 
-	// TODO: Dynamic buffer
-	char name[256];
-	if (sc->opts.ascii) {
-		snprintf(name, sizeof(name), "%s::%s", fbx_type_str.data, element->name.data);
-	} else {
-	}
+	if ((flags & UFBXWI_SAVE_ELEMENT_MANUAL_OPEN) == 0) {
+		// TODO: Dynamic buffer
+		char name[256];
+		if (sc->opts.ascii) {
+			snprintf(name, sizeof(name), "%s::%s", fbx_type_str.data, element->name.data);
+		} else {
+		}
 
-	if (flags & UFBXWI_SAVE_ELEMENT_GLOBAL_SETTINGS) {
-		ufbxwi_dom_open(sc, "GlobalSettings", "");
-	} else if (flags & UFBXWI_SAVE_ELEMENT_NO_ID) {
-		ufbxwi_dom_open(sc, obj_type_str.data, "CT", name, sub_type);
-	} else {
-		ufbxwi_dom_open(sc, obj_type_str.data, "LCT", (int64_t)id, name, sub_type);
+		if ((flags & UFBXWI_SAVE_ELEMENT_NO_ID) != 0) {
+			ufbxwi_dom_open(sc, obj_type_str.data, "CT", name, sub_type);
+		} else {
+			ufbxwi_dom_open(sc, obj_type_str.data, "LCT", (int64_t)id, name, sub_type);
+		}
 	}
 
 	if (type == UFBXW_ELEMENT_NODE) {
@@ -2739,6 +2870,11 @@ static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element,
 
 	ufbxwi_save_props(sc, element->data, &element->props, default_props, tmpl_data, tmpl_props);
 
+	if (type == UFBXW_ELEMENT_DOCUMENT) {
+		ufbxwi_document *document = (ufbxwi_document*)element->data;
+		ufbxwi_dom_value(sc, "RootNode", "L", document->root_node);
+	}
+
 	ufbxwi_dom_close(sc);
 }
 
@@ -2753,6 +2889,33 @@ static void ufbxwi_save_timestamp(ufbxw_save_context *sc)
 	ufbxwi_dom_value(sc, "Minute", "I", 27);
 	ufbxwi_dom_value(sc, "Second", "I", 54);
 	ufbxwi_dom_value(sc, "Millisecond", "I", 501);
+	ufbxwi_dom_close(sc);
+}
+
+static void ufbxwi_save_documents(ufbxw_save_context *sc)
+{
+	ufbxw_scene *scene = sc->scene;
+
+	ufbxwi_dom_open(sc, "Documents", "");
+
+	size_t document_count = 0;
+
+	ufbxwi_for_list(ufbxwi_element, element, scene->elements) {
+		ufbxw_element_type type = ufbxwi_id_type(element->id);
+		if (type != UFBXW_ELEMENT_DOCUMENT) continue;
+		document_count++;
+	}
+
+	ufbxwi_dom_value(sc, "Count", "I", (int32_t)document_count);
+
+	ufbxwi_for_list(ufbxwi_element, element, scene->elements) {
+		ufbxw_element_type type = ufbxwi_id_type(element->id);
+		if (type != UFBXW_ELEMENT_DOCUMENT) continue;
+		
+		ufbxwi_dom_open(sc, "Document", "LCC", element->id, "", "Scene");
+		ufbxwi_save_element(sc, element, UFBXWI_SAVE_ELEMENT_MANUAL_OPEN);
+	}
+
 	ufbxwi_dom_close(sc);
 }
 
@@ -2789,14 +2952,13 @@ static void ufbxwi_save_root(ufbxw_save_context *sc)
 		ufbxw_id global_settings_id = ufbxw_get_global_settings_id(scene);
 		ufbxwi_element *global_settings = ufbxwi_get_element(scene, global_settings_id);
 		if (global_settings) {
-			ufbxwi_save_element(sc, global_settings, UFBXWI_SAVE_ELEMENT_GLOBAL_SETTINGS);
+			ufbxwi_dom_open(sc, "GlobalSettings", "");
+			ufbxwi_save_element(sc, global_settings, UFBXWI_SAVE_ELEMENT_MANUAL_OPEN);
 		}
 	}
 
 	ufbxwi_dom_section(sc, "Documents Description");
-
-	ufbxwi_dom_open(sc, "Documents", "");
-	ufbxwi_dom_close(sc);
+	ufbxwi_save_documents(sc);
 
 	ufbxwi_dom_section(sc, "Document References");
 
@@ -2929,61 +3091,18 @@ ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error)
 
 ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type type)
 {
-	uint32_t type_id = ufbxwi_find_element_type_id(scene, type, UFBXWI_TOKEN_NONE);
-	ufbxwi_check_return(type_id != ~0u, ufbxw_null_id);
+	return ufbxwi_create_element(scene, type, UFBXWI_TOKEN_NONE);
+}
 
-	const ufbxwi_element_type_info *type_info = &ufbxwi_element_type_infos[type];
+ufbxw_abi ufbxw_id ufbxw_create_element_ex(ufbxw_scene *scene, ufbxw_element_type type, const char *class_type)
+{
+	return ufbxw_create_element_ex_len(scene, type, class_type, strlen(class_type));
+}
 
-	size_t data_size = type_info->data_size;
-	if (data_size < sizeof(ufbxwi_element_data)) {
-		data_size = sizeof(ufbxwi_element_data);
-	}
-
-	void *data = NULL;
-
-	size_t data_capacity = 0;
-	data = ufbxwi_alloc_size(&scene->ator, 1, data_size, &data_capacity);
-	ufbxwi_check_return(data, 0);
-	memset(data, 0, data_capacity);
-
-	size_t index = 0;
-	if (scene->free_element_ids.count > 0) {
-		index = scene->free_element_ids.data[--scene->free_element_ids.count];
-	} else {
-		index = scene->elements.count;
-		ufbxwi_check_return(ufbxwi_list_push_zero(&scene->ator, &scene->elements, ufbxwi_element), 0);
-	}
-
-	ufbxwi_element *element = &scene->elements.data[index];
-	uint32_t generation = ufbxwi_id_generation(element->id) + 1;
-
-	ufbxw_id id = ufbxwi_make_id(type, generation, index);
-	element->id = id;
-	element->name = ufbxwi_empty_string;
-	element->data = data;
-	element->data_size = data_size;
-	element->data_capacity = data_capacity;
-
-	ufbxwi_element_type *element_type = &scene->element_types.data[type_id];
-	element->type_id = type_id;
-
-	if ((element_type->flags & UFBXWI_ELEMENT_TYPE_FLAG_EAGER_PROPS) != 0) {
-		ufbxwi_check_return(ufbxwi_props_copy(scene, &element->props, &element_type->props), 0);
-	} else {
-		element->flags |= UFBXWI_ELEMENT_FLAG_HAS_DEFAULT_PROPS;
-		element->props.order_counter = element_type->props.order_counter;
-	}
-
-	ufbxwi_element_data *element_data = (ufbxwi_element_data*)data;
-	element_data->id = id;
-
-	if (element_type->init_fn) {
-		element_type->init_fn(data);
-	}
-
-	scene->num_elements++;
-
-	return ufbxwi_make_id(type, generation, index);
+ufbxw_abi ufbxw_id ufbxw_create_element_ex_len(ufbxw_scene *scene, ufbxw_element_type type, const char *class_type, size_t class_type_len)
+{
+	ufbxwi_token class_type_token = ufbxwi_get_token(&scene->string_pool, class_type, class_type_len);
+	return ufbxwi_create_element(scene, type, class_type_token);
 }
 
 ufbxw_abi void ufbxw_delete_element(ufbxw_scene *scene, ufbxw_id id)

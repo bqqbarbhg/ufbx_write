@@ -47,6 +47,14 @@ int main(int argc, char **argv)
 	ufbxw_vec3 tmpl_pos = { 1.0f, 2.0f, 3.0f };
 	ufbxw_set_vec3(scene, node_template, "Lcl Translation", tmpl_pos);
 
+	ufbxw_id material = ufbxw_create_element_ex(scene, UFBXW_ELEMENT_MATERIAL, "FbxSurfaceLambert");
+	ufbxw_set_name(scene, material, "lambert1");
+
+	ufbxw_vec3 green = { 0.0f, 1.0f, 0.0f };
+	ufbxw_set_vec3(scene, material, "DiffuseColor", green);
+
+	ufbxw_connect(scene, material, mesh.id);
+
 	ufbxw_save_opts opts = { 0 };
 	opts.ascii = true;
 

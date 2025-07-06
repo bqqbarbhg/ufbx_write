@@ -101,6 +101,8 @@ typedef enum ufbxw_element_type {
 	UFBXW_ELEMENT_CUSTOM_NODE_ATTRIBUTE,
 	UFBXW_ELEMENT_MESH,
 
+	UFBXW_ELEMENT_MATERIAL,
+
 	UFBXW_ELEMENT_TEMPLATE,
 	UFBXW_ELEMENT_SCENE_INFO,
 	UFBXW_ELEMENT_GLOBAL_SETTINGS,
@@ -271,6 +273,8 @@ ufbxw_abi void ufbxw_free_scene(ufbxw_scene *scene);
 ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error);
 
 ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type type);
+ufbxw_abi ufbxw_id ufbxw_create_element_ex(ufbxw_scene *scene, ufbxw_element_type type, const char *class_type);
+ufbxw_abi ufbxw_id ufbxw_create_element_ex_len(ufbxw_scene *scene, ufbxw_element_type type, const char *class_type, size_t class_type_len);
 ufbxw_abi void ufbxw_delete_element(ufbxw_scene *scene, ufbxw_id id);
 
 ufbxw_abi size_t ufbxw_get_num_elements(ufbxw_scene *scene);
