@@ -1069,7 +1069,7 @@ uint32_t ufbxwi_hash_token(ufbxwi_token token)
 {
 	uint32_t x = (uint32_t)token;
 	x ^= x >> 16;
-    x *= 0x7feb352d;
+	x *= 0x7feb352d;
 	x ^= x >> 16;
 	return x;
 }
