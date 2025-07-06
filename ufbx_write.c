@@ -1160,7 +1160,7 @@ UFBXWI_LIST_TYPE(ufbxwi_uint32_list, uint32_t);
 
 static ufbxwi_forceinline ufbxw_id ufbxwi_make_id(ufbxw_element_type type, uint32_t generation, size_t index)
 {
-	ufbxw_assert(index < (1u << 24));
+	ufbxw_assert((uint64_t)index < ((uint64_t)1u << 32u));
 	return (ufbxw_id)(((uint64_t)type << 48) | ((uint64_t)generation << 32) | (index));
 }
 
@@ -2271,6 +2271,8 @@ static void ufbxwi_create_defaults(ufbxw_scene *scene)
 
 	if (!scene->opts.no_default_document) {
 		ufbxw_id id = ufbxw_create_element(scene, UFBXW_ELEMENT_DOCUMENT);
+
+		ufbxw_set_string(scene, id, "ActiveAnimStackName", "Take 001");
 	}
 }
 
@@ -2333,6 +2335,13 @@ static void ufbxwi_disconnect_imp(ufbxw_scene *scene, ufbxwi_element *src, ufbxw
 // -- Saving
 
 typedef struct {
+	uint32_t reference_count;
+	ufbxw_id template_id;
+} ufbxwi_save_object_type;
+
+UFBXWI_LIST_TYPE(ufbxwi_save_object_type_list, ufbxwi_save_object_type);
+
+typedef struct {
 	ufbxwi_allocator ator;
 
 	ufbxwi_error error;
@@ -2351,6 +2360,7 @@ typedef struct {
 	uint64_t file_pos;
 
 	ufbxwi_prop_list tmp_prop_list;
+	ufbxwi_save_object_type_list object_types;
 
 } ufbxw_save_context;
 
@@ -2446,6 +2456,7 @@ static void ufbxwi_ascii_indent(ufbxw_save_context *sc)
 static void ufbxwi_ascii_comment(ufbxw_save_context *sc, const char *fmt, va_list args)
 {
 	// TODO: More rigorous
+	// TODO: Sanitize \n's and other special characters
 	size_t max_length = 512;
 	char *dst = ufbxwi_write_reserve(sc, max_length);
 	int len = vsnprintf(dst, max_length, fmt, args);
@@ -2919,6 +2930,133 @@ static void ufbxwi_save_documents(ufbxw_save_context *sc)
 	ufbxwi_dom_close(sc);
 }
 
+static void ufbxwi_save_definitions(ufbxw_save_context *sc)
+{
+	ufbxw_scene *scene = sc->scene;
+
+	size_t object_type_count = 0;
+	ufbxwi_for_list(ufbxwi_save_object_type, obj_type, sc->object_types) {
+		if (obj_type->reference_count == 0) continue;
+		object_type_count++;
+	}
+
+	ufbxwi_dom_open(sc, "Definitions", "");
+	ufbxwi_dom_value(sc, "Version", "I", 100);
+	ufbxwi_dom_value(sc, "Count", "I", (int32_t)object_type_count);
+
+	for (size_t i = 0; i < sc->object_types.count; i++) {
+		const ufbxwi_object_type *scene_obj_type = &scene->object_types.data[i];
+		ufbxwi_save_object_type *obj_type = &sc->object_types.data[i];
+		if (obj_type->reference_count == 0) continue;
+
+		ufbxwi_dom_open(sc, "ObjectType", "T", scene_obj_type->type);
+		ufbxwi_dom_value(sc, "Count", "I", (int32_t)obj_type->reference_count);
+
+		ufbxwi_element *tmpl_elem = ufbxwi_get_element(scene, obj_type->template_id);
+		if (tmpl_elem) {
+			ufbxwi_template *tmpl = (ufbxwi_template*)tmpl_elem->data;
+			ufbxwi_dom_open(sc, "PropertyTemplate", "T", tmpl->type);
+			ufbxwi_save_props(sc, tmpl_elem->data, &tmpl_elem->props, NULL, NULL, NULL);
+			ufbxwi_dom_close(sc);
+		}
+
+		ufbxwi_dom_close(sc);
+	}
+
+	ufbxwi_dom_close(sc);
+}
+
+static void ufbxwi_save_objects(ufbxw_save_context *sc)
+{
+	ufbxw_scene *scene = sc->scene;
+
+	ufbxwi_dom_open(sc, "Objects", "");
+
+	ufbxwi_for_list(ufbxwi_element, element, scene->elements) {
+		ufbxw_element_type type = ufbxwi_id_type(element->id);
+		if (type == UFBXWI_ELEMENT_TYPE_NONE) continue;
+
+		bool do_save = true;
+		switch (type) {
+		case UFBXW_ELEMENT_DOCUMENT:
+		case UFBXW_ELEMENT_TEMPLATE:
+		case UFBXW_ELEMENT_SCENE_INFO:
+		case UFBXW_ELEMENT_GLOBAL_SETTINGS:
+			do_save = false;
+			break;
+		}
+
+		if (do_save) {
+			ufbxwi_save_element(sc, element, 0);
+		}
+	}
+
+	ufbxwi_dom_close(sc);
+}
+
+static void ufbxwi_save_connections(ufbxw_save_context *sc)
+{
+	ufbxw_scene *scene = sc->scene;
+
+	ufbxwi_dom_open(sc, "Connections", "");
+
+	// Connect root nodes to root
+
+	ufbxwi_for_list(ufbxwi_element, src_element, scene->elements) {
+		ufbxw_id src_id = src_element->id;
+		ufbxw_element_type src_type = ufbxwi_id_type(src_id);
+		if (src_type != UFBXW_ELEMENT_NODE) continue;
+
+		ufbxwi_node *node = (ufbxwi_node*)src_element->data;
+		if (node->parent.id == 0) {
+			if (sc->opts.ascii) {
+				ufbxwi_dom_comment(sc, "\n\t;Model::%s, Model::RootNode\n", src_element->name.data);
+			}
+			ufbxwi_dom_value(sc, "C", "CLL", "OO", src_id, 0);
+		}
+	}
+
+	ufbxwi_for_list(ufbxwi_element, dst_element, scene->elements) {
+		ufbxw_id dst_id = dst_element->id;
+		ufbxw_element_type dst_type = ufbxwi_id_type(dst_id);
+
+		ufbxwi_for_list(ufbxw_id, p_src_id, dst_element->connections_src) {
+			ufbxw_id src_id = *p_src_id;
+			ufbxwi_element *src_element = ufbxwi_get_element(scene, src_id);
+			ufbxw_assert(src_element);
+
+			if (sc->opts.ascii) {
+				const ufbxwi_element_type *src_et = &scene->element_types.data[src_element->type_id];
+				const ufbxwi_element_type *dst_et = &scene->element_types.data[dst_element->type_id];
+				const char *src_type = scene->string_pool.tokens.data[src_et->fbx_type].data;
+				const char *dst_type = scene->string_pool.tokens.data[dst_et->fbx_type].data;
+				const char *src_name = src_element->name.data;
+				const char *dst_name = dst_element->name.data;
+				ufbxwi_dom_comment(sc, "\n\t;%s::%s, %s::%s\n", src_type, src_name, dst_type, dst_name);
+			}
+
+			ufbxwi_dom_value(sc, "C", "CLL", "OO", src_id, dst_id);
+		}
+	}
+
+	ufbxwi_dom_close(sc);
+}
+
+static void ufbxwi_save_takes(ufbxw_save_context *sc)
+{
+	ufbxwi_dom_open(sc, "Takes", "");
+
+	ufbxwi_dom_value(sc, "Current", "C", "Take 001");
+
+	ufbxwi_dom_open(sc, "Take", "C", "Take 001");
+	ufbxwi_dom_value(sc, "FileName", "C", "Take_001.tak");
+	ufbxwi_dom_value(sc, "LocalTime", "LL", (int64_t)1924423250, (int64_t)230930790000);
+	ufbxwi_dom_value(sc, "ReferenceTime", "LL", (int64_t)1924423250, (int64_t)230930790000);
+	ufbxwi_dom_close(sc);
+
+	ufbxwi_dom_close(sc);
+}
+
 static void ufbxwi_save_root(ufbxw_save_context *sc)
 {
 	ufbxw_scene *scene = sc->scene;
@@ -2961,58 +3099,44 @@ static void ufbxwi_save_root(ufbxw_save_context *sc)
 	ufbxwi_save_documents(sc);
 
 	ufbxwi_dom_section(sc, "Document References");
-
 	ufbxwi_dom_open(sc, "References", "");
 	ufbxwi_dom_close(sc);
 
 	ufbxwi_dom_section(sc, "Object definitions");
-
-	ufbxwi_dom_open(sc, "Definitions", "");
-
-	ufbxwi_for_list(ufbxwi_element, element, scene->elements) {
-		ufbxw_element_type type = ufbxwi_id_type(element->id);
-		if (type != UFBXW_ELEMENT_TEMPLATE) continue;
-
-		ufbxwi_save_template(sc, element, 0);
-	}
-
-	ufbxwi_dom_close(sc);
+	ufbxwi_save_definitions(sc);
 
 	ufbxwi_dom_section(sc, "Object properties");
-
-	ufbxwi_dom_open(sc, "Objects", "");
-
-	ufbxwi_for_list(ufbxwi_element, element, scene->elements) {
-		ufbxw_element_type type = ufbxwi_id_type(element->id);
-		if (type == UFBXWI_ELEMENT_TYPE_NONE) continue;
-
-		bool do_save = true;
-		switch (type) {
-		case UFBXW_ELEMENT_DOCUMENT:
-		case UFBXW_ELEMENT_TEMPLATE:
-		case UFBXW_ELEMENT_SCENE_INFO:
-		case UFBXW_ELEMENT_GLOBAL_SETTINGS:
-			do_save = false;
-			break;
-		}
-
-		if (do_save) {
-			ufbxwi_save_element(sc, element, 0);
-		}
-	}
-
-	ufbxwi_dom_close(sc);
+	ufbxwi_save_objects(sc);
 
 	ufbxwi_dom_section(sc, "Object connections");
-
-	ufbxwi_dom_open(sc, "Connections", "");
-	ufbxwi_dom_close(sc);
+	ufbxwi_save_connections(sc);
 
 	// Differently formatted section...
 	ufbxwi_dom_comment(sc, ";Takes section\n;%.52s\n\n", ufbxwi_dom_section_str);
 
-	ufbxwi_dom_open(sc, "Takes", "");
-	ufbxwi_dom_close(sc);
+	ufbxwi_save_takes(sc);
+}
+
+static void ufbxwi_save_init(ufbxw_save_context *sc)
+{
+	ufbxw_scene *scene = sc->scene;
+
+	ufbxwi_save_object_type *object_types = ufbxwi_list_push_zero_n(&sc->ator, &sc->object_types, ufbxwi_save_object_type, scene->object_types.count);
+	ufbxwi_check_err(&sc->error, object_types);
+
+	ufbxwi_for_list(ufbxwi_element, element, scene->elements) {
+		const ufbxwi_element_type *et = &scene->element_types.data[element->type_id];
+		if (et->object_type_id != ~0u) {
+			ufbxwi_save_object_type *object_type = &object_types[et->object_type_id];
+			object_type->reference_count++;
+
+			// TODO: Better prioritization?
+			if (object_type->template_id == 0 && et->template_id != 0) {
+				object_type->template_id = et->template_id;
+			}
+		}
+	}
+
 }
 
 // -- Save root
@@ -3029,6 +3153,7 @@ static bool ufbxwi_save_imp(ufbxw_save_context *sc)
 
 	if (!sc->buffer) return false;
 
+	ufbxwi_save_init(sc);
 	ufbxwi_save_root(sc);
 	ufbxwi_write_flush(sc);
 

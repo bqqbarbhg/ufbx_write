@@ -4,6 +4,24 @@ int main(int argc, char **argv)
 {
 	ufbxw_scene *scene = ufbxw_create_scene(NULL);
 
+	ufbxw_node node = ufbxw_create_node(scene);
+	ufbxw_set_name(scene, node.id, "Node");
+
+	ufbxw_vec3 pos = { 1.0f, 2.0f, 3.0f };
+	ufbxw_vec3 scale = { 0.5f, 0.5f, 0.5f };
+
+	ufbxw_node_set_translation(scene, node, pos);
+	ufbxw_node_set_scaling(scene, node, scale);
+
+	ufbxw_mesh mesh = ufbxw_create_mesh(scene);
+	ufbxw_set_name(scene, mesh.id, "Cube");
+
+	ufbxw_connect(scene, node.id, mesh.id);
+
+	ufbxw_id node_template = ufbxw_get_template_id(scene, UFBXW_ELEMENT_NODE);
+	ufbxw_set_vec3(scene, node_template, "Lcl Scaling", scale);
+
+#if 0
 	ufbxw_node parent = ufbxw_create_node(scene);
 	ufbxw_set_name(scene, parent.id, "Parent");
 
@@ -54,6 +72,7 @@ int main(int argc, char **argv)
 	ufbxw_set_vec3(scene, material, "DiffuseColor", green);
 
 	ufbxw_connect(scene, material, mesh.id);
+#endif
 
 	ufbxw_save_opts opts = { 0 };
 	opts.ascii = true;
