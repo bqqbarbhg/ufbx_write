@@ -2219,6 +2219,7 @@ static bool ufbxwi_create_element_types(ufbxw_scene *scene)
 				prop->value_offset = pd->value_offset;
 			}
 
+			// TODO: Defer template creation to use/get time
 			if (desc->tmpl_type != UFBXWI_TOKEN_NONE) {
 				ufbxw_id template_id = ufbxw_create_element(scene, UFBXW_ELEMENT_TEMPLATE);
 				ufbxwi_check_return(template_id, false);
@@ -2252,6 +2253,7 @@ static void ufbxwi_create_defaults(ufbxw_scene *scene)
 		ufbxw_id id = ufbxw_create_element(scene, UFBXW_ELEMENT_SCENE_INFO);
 		ufbxw_set_name(scene, id, "GlobalInfo");
 
+		// TODO: Fill these out
 		ufbxw_add_string(scene, id, "DocumentUrl", UFBXW_PROP_TYPE_URL, "test.fbx");
 		ufbxw_add_string(scene, id, "SrcDocumentUrl", UFBXW_PROP_TYPE_URL, "test.fbx");
 	}
@@ -2259,6 +2261,7 @@ static void ufbxwi_create_defaults(ufbxw_scene *scene)
 	if (!scene->opts.no_default_global_settings) {
 		ufbxw_id id = ufbxw_create_element(scene, UFBXW_ELEMENT_GLOBAL_SETTINGS);
 
+		// TODO: Make these (and the rest) into actual fast access fields
 		ufbxw_add_int(scene, id, "UpAxis", UFBXW_PROP_TYPE_INT, 1);
 		ufbxw_add_int(scene, id, "UpAxisSign", UFBXW_PROP_TYPE_INT, 1);
 		ufbxw_add_int(scene, id, "FrontAxis", UFBXW_PROP_TYPE_INT, 2);
@@ -2529,6 +2532,10 @@ static void ufbxwi_ascii_dom_write(ufbxw_save_context *sc, const char *tag, cons
 		case 'C': {
 			const char *str = va_arg(args, const char*);
 			ufbxwi_ascii_dom_string(sc, str, strlen(str));
+		} break;
+		case 'c': {
+			char str = va_arg(args, char);
+			ufbxwi_write(sc, &str, 1);
 		} break;
 		case 'S': {
 			ufbxw_string str = va_arg(args, ufbxw_string);
@@ -2846,6 +2853,7 @@ static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element,
 	}
 
 	if (type == UFBXW_ELEMENT_NODE) {
+		ufbxwi_dom_value(sc, "Version", "I", 232);
 	} else if (type == UFBXW_ELEMENT_MESH) {
 	} else if (type == UFBXW_ELEMENT_SCENE_INFO) {
 		ufbxwi_dom_value(sc, "Type", "C", "UserData");
@@ -2884,6 +2892,13 @@ static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element,
 	if (type == UFBXW_ELEMENT_DOCUMENT) {
 		ufbxwi_document *document = (ufbxwi_document*)element->data;
 		ufbxwi_dom_value(sc, "RootNode", "L", document->root_node);
+	}
+
+	if (type == UFBXW_ELEMENT_NODE) {
+		// TODO: Use actual values for these
+		ufbxwi_dom_value(sc, "Shading", "c", 'T');
+		ufbxwi_dom_value(sc, "Culling", "C", "CullingOff");
+
 	}
 
 	ufbxwi_dom_close(sc);
