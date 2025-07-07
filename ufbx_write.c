@@ -1276,7 +1276,8 @@ typedef struct {
 	uint32_t flags;
 	ufbxwi_element_init_data_fn *init_fn;
 
-	const ufbxwi_element_type_desc *template_desc;
+	bool initialized;
+	const ufbxwi_element_type_desc *desc;
 } ufbxwi_element_type;
 
 UFBXWI_LIST_TYPE(ufbxwi_element_type_list, ufbxwi_element_type);
@@ -1539,15 +1540,15 @@ static const ufbxwi_prop_defaults ufbxwi_prop_default_data = {
 };
 
 enum {
-	UFBXWI_PROP_FLAG_EXCLUDE_FROM_TEMPLATE = 0x100000,
+	UFBXWI_PROP_FLAG_EXCLUDE_FROM_TEMPLATE = 0x1000,
 };
 
 typedef struct {
-	ufbxwi_token name;
+	uint16_t name;
 	uint8_t type;
-	int32_t value_offset;
-	int32_t default_offset;
-	uint32_t flags;
+	int16_t value_offset;
+	int16_t default_offset;
+	uint16_t flags;
 } ufbxwi_prop_desc;
 
 #define ufbxwi_field(m_type, m_field) (int32_t)offsetof(m_type, m_field)
@@ -2434,40 +2435,56 @@ static ufbxwi_forceinline const void *ufbxwi_resolve_value_offset(const void *ba
 	}
 }
 
-static ufbxwi_forceinline ufbxw_id ufbxwi_create_template(ufbxw_scene *scene, const ufbxwi_element_type_desc *desc)
+static ufbxwi_forceinline bool ufbxwi_init_element_type_imp(ufbxw_scene *scene, ufbxwi_element_type *et)
 {
-	ufbxw_id template_id = ufbxw_create_element(scene, UFBXW_ELEMENT_TEMPLATE);
-	ufbxwi_check_return(template_id, 0);
+	const ufbxwi_element_type_desc *desc = et->desc;
+	et->initialized = true;
 
-	ufbxwi_element *tmpl_elem = ufbxwi_get_element(scene, template_id);
-	ufbxw_assert(tmpl_elem);
+	if (desc->num_props > 0) {
+		ufbxwi_check_return(ufbxwi_props_rehash(scene, &et->props, desc->num_props), false);
 
-	tmpl_elem->name = scene->string_pool.tokens.data[desc->tmpl_type];
-
-	ufbxwi_template *tmpl_data = (ufbxwi_template*)tmpl_elem->data;
-	tmpl_data->type = desc->tmpl_type;
-
-	ufbxwi_check_return(ufbxwi_props_rehash(scene, &tmpl_elem->props, desc->num_props), 0);
-
-	ufbxwi_for(const ufbxwi_prop_desc, pd, desc->props, desc->num_props) {
-		if (pd->flags & UFBXWI_PROP_FLAG_EXCLUDE_FROM_TEMPLATE) continue;
-
-		ufbxwi_prop *prop = ufbxwi_props_add_prop(scene, &tmpl_elem->props, pd->name);
-		ufbxwi_check_return(prop, false);
-		prop->type = pd->type;
-		prop->value_offset = pd->value_offset <= 0 ? pd->value_offset : pd->default_offset;
+		ufbxwi_for(const ufbxwi_prop_desc, pd, desc->props, desc->num_props) {
+			ufbxwi_prop *prop = ufbxwi_props_add_prop(scene, &et->props, pd->name);
+			ufbxwi_check_return(prop, false);
+			prop->type = pd->type;
+			prop->value_offset = pd->value_offset;
+			prop->flags = pd->flags & 0xff; // TODO: Better mapping, compact flags
+		}
 	}
 
-	return template_id;
+	if (desc->tmpl_type != UFBXWI_TOKEN_NONE) {
+		ufbxw_id template_id = ufbxw_create_element(scene, UFBXW_ELEMENT_TEMPLATE);
+		ufbxwi_check_return(template_id, 0);
+
+		ufbxwi_element *tmpl_elem = ufbxwi_get_element(scene, template_id);
+		ufbxw_assert(tmpl_elem);
+
+		tmpl_elem->name = scene->string_pool.tokens.data[desc->tmpl_type];
+
+		ufbxwi_template *tmpl_data = (ufbxwi_template*)tmpl_elem->data;
+		tmpl_data->type = desc->tmpl_type;
+
+		ufbxwi_check_return(ufbxwi_props_rehash(scene, &tmpl_elem->props, desc->num_props), 0);
+
+		ufbxwi_for(const ufbxwi_prop_desc, pd, desc->props, desc->num_props) {
+			if (pd->flags & UFBXWI_PROP_FLAG_EXCLUDE_FROM_TEMPLATE) continue;
+
+			ufbxwi_prop *prop = ufbxwi_props_add_prop(scene, &tmpl_elem->props, pd->name);
+			ufbxwi_check_return(prop, false);
+			prop->type = pd->type;
+			prop->value_offset = pd->value_offset <= 0 ? pd->value_offset : pd->default_offset;
+			prop->flags = pd->flags & 0xff; // TODO: Better mapping, compact flags
+		}
+		et->template_id = template_id;
+	}
+
+	return true;
 }
 
-static ufbxwi_forceinline bool ufbxwi_init_template(ufbxw_scene *scene, ufbxwi_element_type *type)
+static ufbxwi_forceinline bool ufbxwi_init_element_type(ufbxw_scene *scene, ufbxwi_element_type *et)
 {
-	if (type->template_desc && type->template_id == ufbxw_null_id) {
-		type->template_id = ufbxwi_create_template(scene, type->template_desc);
-		ufbxwi_check_return(scene, type->template_id);
-	}
-	return true;
+	if (et->initialized) return true;
+	return ufbxwi_init_element_type_imp(scene, et);
 }
 
 static ufbxw_id ufbxwi_create_element(ufbxw_scene *scene, ufbxw_element_type type, ufbxwi_token class_type)
@@ -2477,7 +2494,7 @@ static ufbxw_id ufbxwi_create_element(ufbxw_scene *scene, ufbxw_element_type typ
 
 	const ufbxwi_element_type_info *type_info = &ufbxwi_element_type_infos[type];
 	ufbxwi_element_type *element_type = &scene->element_types.data[type_id];
-	ufbxwi_check_return(ufbxwi_init_template(scene, element_type), 0);
+	ufbxwi_check_return(ufbxwi_init_element_type(scene, element_type), 0);
 
 	size_t data_size = type_info->data_size;
 	if (data_size < sizeof(ufbxwi_element_data)) {
@@ -2781,6 +2798,7 @@ static bool ufbxwi_create_element_types(ufbxw_scene *scene)
 		et->fbx_type = desc->fbx_type;
 		et->init_fn = desc->init_fn;
 		et->flags = desc->flags;
+		et->desc = desc;
 
 		et->object_type_id = ~0u;
 		for (uint32_t i = 0; i < scene->object_types.count; i++) {
@@ -2790,21 +2808,6 @@ static bool ufbxwi_create_element_types(ufbxw_scene *scene)
 			}
 		}
 		ufbxw_assert(et->object_type_id != ~0u || (desc->flags & UFBXWI_ELEMENT_FLAG_ALLOW_NO_OBJECT_ID) != 0);
-
-		if (desc->num_props > 0) {
-			ufbxwi_check_return(ufbxwi_props_rehash(scene, &et->props, desc->num_props), false);
-
-			ufbxwi_for(const ufbxwi_prop_desc, pd, desc->props, desc->num_props) {
-				ufbxwi_prop *prop = ufbxwi_props_add_prop(scene, &et->props, pd->name);
-				ufbxwi_check_return(prop, false);
-				prop->type = pd->type;
-				prop->value_offset = pd->value_offset;
-			}
-		}
-
-		if (desc->tmpl_type != UFBXWI_TOKEN_NONE) {
-			et->template_desc = desc;
-		}
 	}
 
 	return true;
@@ -3307,48 +3310,54 @@ static void ufbxwi_save_props(ufbxw_save_context *sc, const void *data_buffer, c
 		const ufbxwi_prop_type *type = &scene->prop_types.data[p->type];
 		const void *data = ufbxwi_resolve_value_offset(data_buffer, p->value_offset);
 
+		char flags[16];
+		char *flag = flags;
+		if (p->flags & UFBXW_PROP_FLAG_ANIMATABLE) *flag++ = 'A';
+		*flag++ = '\0';
+		ufbxw_assert(flag <= flags + sizeof(flags));
+
 		switch (type->data_type) {
 			case UFBXW_PROP_DATA_NONE: {
-				ufbxwi_dom_value(sc, "P", "SSSC", name, type->type, type->sub_type, "");
+				ufbxwi_dom_value(sc, "P", "SSSC", name, type->type, type->sub_type, flags);
 			} break;
 			case UFBXW_PROP_DATA_BOOL: {
 				const bool *d = (const bool*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCI", name, type->type, type->sub_type, "", *d ? 1 : 0);
+				ufbxwi_dom_value(sc, "P", "SSSCI", name, type->type, type->sub_type, flags, *d ? 1 : 0);
 			} break;
 			case UFBXW_PROP_DATA_INT32: {
 				const int32_t *d = (const int32_t*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCI", name, type->type, type->sub_type, "", *d);
+				ufbxwi_dom_value(sc, "P", "SSSCI", name, type->type, type->sub_type, flags, *d);
 			} break;
 			case UFBXW_PROP_DATA_INT64: {
 				const int64_t *d = (const int64_t*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCL", name, type->type, type->sub_type, "", *d);
+				ufbxwi_dom_value(sc, "P", "SSSCL", name, type->type, type->sub_type, flags, *d);
 			} break;
 			case UFBXW_PROP_DATA_REAL: {
 				const ufbxw_real *d = (const ufbxw_real*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCD", name, type->type, type->sub_type, "", *d);
+				ufbxwi_dom_value(sc, "P", "SSSCD", name, type->type, type->sub_type, flags, *d);
 			} break;
 			case UFBXW_PROP_DATA_VEC2: {
 				const ufbxw_vec2 *d = (const ufbxw_vec2*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCDD", name, type->type, type->sub_type, "", d->x, d->y);
+				ufbxwi_dom_value(sc, "P", "SSSCDD", name, type->type, type->sub_type, flags, d->x, d->y);
 			} break;
 			case UFBXW_PROP_DATA_VEC3: {
 				const ufbxw_vec3 *d = (const ufbxw_vec3*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCDDD", name, type->type, type->sub_type, "", d->x, d->y, d->z);
+				ufbxwi_dom_value(sc, "P", "SSSCDDD", name, type->type, type->sub_type, flags, d->x, d->y, d->z);
 			} break;
 			case UFBXW_PROP_DATA_VEC4: {
 				const ufbxw_vec4 *d = (const ufbxw_vec4*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCDDDD", name, type->type, type->sub_type, "", d->x, d->y, d->z, d->w);
+				ufbxwi_dom_value(sc, "P", "SSSCDDDD", name, type->type, type->sub_type, flags, d->x, d->y, d->z, d->w);
 			} break;
 			case UFBXW_PROP_DATA_STRING: {
 				const ufbxw_string *d = (const ufbxw_string*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCS", name, type->type, type->sub_type, "", *d);
+				ufbxwi_dom_value(sc, "P", "SSSCS", name, type->type, type->sub_type, flags, *d);
 			} break;
 			case UFBXW_PROP_DATA_ID: {
-				ufbxwi_dom_value(sc, "P", "SSSC", name, type->type, type->sub_type, "");
+				ufbxwi_dom_value(sc, "P", "SSSC", name, type->type, type->sub_type, flags);
 			} break;
 			case UFBXW_PROP_DATA_REAL_STRING: {
 				const ufbxw_real_string *d = (const ufbxw_real_string*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCDS", name, type->type, type->sub_type, "", d->value, d->string);
+				ufbxwi_dom_value(sc, "P", "SSSCDS", name, type->type, type->sub_type, flags, d->value, d->string);
 			} break;
 			case UFBXW_PROP_DATA_BLOB: {
 				const ufbxw_blob *d = (const ufbxw_blob*)data;
@@ -3356,15 +3365,15 @@ static void ufbxwi_save_props(ufbxw_save_context *sc, const void *data_buffer, c
 			} break;
 			case UFBXW_PROP_DATA_USER_INT: {
 				const ufbxw_user_int *d = (const ufbxw_user_int*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCIII", name, type->type, type->sub_type, "", d->value, d->min_value, d->max_value);
+				ufbxwi_dom_value(sc, "P", "SSSCIII", name, type->type, type->sub_type, flags, d->value, d->min_value, d->max_value);
 			} break;
 			case UFBXW_PROP_DATA_USER_REAL: {
 				const ufbxw_user_real *d = (const ufbxw_user_real*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCDDD", name, type->type, type->sub_type, "", d->value, d->min_value, d->max_value);
+				ufbxwi_dom_value(sc, "P", "SSSCDDD", name, type->type, type->sub_type, flags, d->value, d->min_value, d->max_value);
 			} break;
 			case UFBXW_PROP_DATA_USER_ENUM: {
 				const ufbxw_user_enum *d = (const ufbxw_user_enum*)data;
-				ufbxwi_dom_value(sc, "P", "SSSCIS", name, type->type, type->sub_type, "", d->value, d->options);
+				ufbxwi_dom_value(sc, "P", "SSSCIS", name, type->type, type->sub_type, flags, d->value, d->options);
 			} break;
 		}
 	}
@@ -4222,7 +4231,7 @@ ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type 
 	uint32_t type_id = ufbxwi_find_element_type_id(scene, type, UFBXWI_TOKEN_NONE);
 	if (type_id == ~0u) return ufbxw_null_id;
 	ufbxwi_element_type *et = &scene->element_types.data[type_id];
-	ufbxwi_check_return(ufbxwi_init_template(scene, et), 0);
+	ufbxwi_check_return(ufbxwi_init_element_type(scene, et), 0);
 	return et->template_id;
 }
 
