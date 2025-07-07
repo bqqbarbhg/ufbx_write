@@ -98,10 +98,13 @@ typedef enum ufbxw_element_type {
 	UFBXW_ELEMENT_CUSTOM = 1,
 	UFBXW_ELEMENT_NODE,
 
-	UFBXW_ELEMENT_CUSTOM_NODE_ATTRIBUTE,
+	UFBXW_ELEMENT_NODE_ATTRIBUTE,
 	UFBXW_ELEMENT_MESH,
 
 	UFBXW_ELEMENT_MATERIAL,
+
+	UFBXW_ELEMENT_TEXTURE,
+	UFBXW_ELEMENT_FILE_TEXTURE,
 
 	UFBXW_ELEMENT_TEMPLATE,
 	UFBXW_ELEMENT_SCENE_INFO,
@@ -114,10 +117,28 @@ typedef enum ufbxw_element_type {
 typedef uint64_t ufbxw_id;
 typedef struct ufbxw_node { ufbxw_id id; } ufbxw_node;
 typedef struct ufbxw_mesh { ufbxw_id id; } ufbxw_mesh;
+typedef struct ufbxw_material { ufbxw_id id; } ufbxw_material;
 
 #define ufbxw_null_id ((ufbxw_id)0)
 #define ufbxw_null_node ((ufbxw_node){0})
 #define ufbxw_null_mesh ((ufbxw_mesh){0})
+#define ufbxw_null_material ((ufbxw_material){0})
+
+typedef enum ufbxw_connection_type {
+	UFBXW_CONNECTION_NODE_PARENT = 1, // NODE* -> NODE
+	UFBXW_CONNECTION_NODE_ATTRIBUTE,  // NODE_ATTRIBUTE -> NODE*
+	UFBXW_CONNECTION_MATERIAL,        // MATERIAL* -> NODE*
+	UFBXW_CONNECTION_TEXTURE,         // TEXTURE* -> MATERIAL(property)*
+#if 0 // TODO
+	UFBXW_CONNECTION_ANIM_PROPERTY,   // ANIM_CURVE_NODE -> ANY(property)
+	UFBXW_CONNECTION_ANIM_NODE,       // ANIM_CURVE* -> ANIM_CURVE_NODE
+	UFBXW_CONNECTION_ANIM_LAYER,      // ANIM_CURVE_NODE* -> ANIM_LAYER
+	UFBXW_CONNECTION_ANIM_STACK,      // ANIM_LAYER* -> ANIM_STACK
+#endif
+	UFBXW_CONNECTION_CUSTOM,          // ANY* -> ANY*
+
+	UFBXW_CONNECTION_TYPE_COUNT,
+} ufbxw_connection_type;
 
 // -- Memory callbacks
 
@@ -285,10 +306,8 @@ ufbxw_abi void ufbxw_set_name_len(ufbxw_scene *scene, ufbxw_id id, const char *n
 ufbxw_abi ufbxw_string ufbxw_get_name(ufbxw_scene *scene, ufbxw_id id);
 
 ufbxw_abi void ufbxw_connect(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst);
-ufbxw_abi void ufbxw_connect_multi(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst);
-ufbxw_abi void ufbxw_disconnect(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst);
-ufbxw_abi void ufbxw_disconnect_dst(ufbxw_scene *scene, ufbxw_id id, ufbxw_element_type type);
-ufbxw_abi void ufbxw_disconnect_src(ufbxw_scene *scene, ufbxw_id id, ufbxw_element_type type);
+ufbxw_abi void ufbxw_connect_prop(ufbxw_scene *scene, ufbxw_id src, const char *src_prop, ufbxw_id dst, const char *dst_prop);
+ufbxw_abi void ufbxw_connect_prop_len(ufbxw_scene *scene, ufbxw_id src, const char *src_prop, size_t src_prop_len, ufbxw_id dst, const char *dst_prop, size_t dst_prop_len);
 
 ufbxw_abi void ufbxw_set_bool(ufbxw_scene *scene, ufbxw_id id, const char *prop, bool value);
 ufbxw_abi void ufbxw_set_int(ufbxw_scene *scene, ufbxw_id id, const char *prop, int32_t value);
@@ -376,6 +395,8 @@ typedef struct ufbxw_save_opts {
 
 	bool ascii;
 	uint32_t version;
+
+	bool debug_comments;
 
 	uint32_t _end_zero;
 } ufbxw_save_opts;

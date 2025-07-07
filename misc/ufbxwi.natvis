@@ -33,8 +33,6 @@
 			<Item Name="index">(unsigned)id</Item>
 			<Item Name="props">props</Item>
 			<Item Name="data" Condition="(ufbxw_element_type)(id &gt;&gt; 48) == UFBXW_ELEMENT_NODE">(ufbxwi_node*)data</Item>
-			<Item Name="connections_src">connections_src</Item>
-			<Item Name="connections_dst">connections_dst</Item>
 		</Expand>
 	</Type>
 </AutoVisualizer>

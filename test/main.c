@@ -1,25 +1,42 @@
 #include "../ufbx_write.h"
 
+static ufbxw_vec3 make_vec3(ufbxw_real x, ufbxw_real y, ufbxw_real z)
+{
+	ufbxw_vec3 v = { x, y, z };
+	return v;
+}
+
 int main(int argc, char **argv)
 {
 	ufbxw_scene *scene = ufbxw_create_scene(NULL);
 
+	ufbxw_node parent = ufbxw_create_node(scene);
+	ufbxw_set_name(scene, parent.id, "Parent");
+
 	ufbxw_node node = ufbxw_create_node(scene);
 	ufbxw_set_name(scene, node.id, "Node");
 
+	ufbxw_connect(scene, node.id, parent.id);
+
 	ufbxw_vec3 pos = { 1.0f, 2.0f, 3.0f };
-	ufbxw_vec3 scale = { 0.5f, 0.5f, 0.5f };
 
 	ufbxw_node_set_translation(scene, node, pos);
-	ufbxw_node_set_scaling(scene, node, scale);
 
 	ufbxw_mesh mesh = ufbxw_create_mesh(scene);
 	ufbxw_set_name(scene, mesh.id, "Cube");
 
-	ufbxw_connect(scene, node.id, mesh.id);
+	ufbxw_mesh_add_instance(scene, mesh, node);
 
-	ufbxw_id node_template = ufbxw_get_template_id(scene, UFBXW_ELEMENT_NODE);
-	ufbxw_set_vec3(scene, node_template, "Lcl Scaling", scale);
+	ufbxw_id material = ufbxw_create_element_ex(scene, UFBXW_ELEMENT_MATERIAL, "FbxSurfaceLambert");
+	ufbxw_set_name(scene, material, "lambert1");
+	ufbxw_set_vec3(scene, material, "DiffuseColor", make_vec3(0.2, 0.4, 0.6));
+
+	ufbxw_id texture = ufbxw_create_element(scene, UFBXW_ELEMENT_FILE_TEXTURE);
+	ufbxw_set_name(scene, texture, "texture");
+	ufbxw_set_string(scene, texture, "Path", "C:/Files/texture.png");
+	ufbxw_set_string(scene, texture, "RelPath", "texture.png");
+
+	ufbxw_connect_prop(scene, texture, "", material, "DiffuseColor");
 
 #if 0
 	ufbxw_node parent = ufbxw_create_node(scene);
@@ -76,6 +93,7 @@ int main(int argc, char **argv)
 
 	ufbxw_save_opts opts = { 0 };
 	opts.ascii = true;
+	opts.debug_comments = true;
 
 	ufbxw_error error;
 	ufbxw_save_file(scene, "test.fbx", &opts, &error);

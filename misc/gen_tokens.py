@@ -54,7 +54,7 @@ def filter_line(line):
         s = m.group(1)
         return f"UFBXWI_{tokens[s]}"
 
-    return re.sub(r"T\"([^\"]*)\"", replacer, line)
+    return re.sub(r"(?<![\"A-Z])T\"([^\"]*)\"", replacer, line)
 
 def filter_lines(lines):
     it = iter(lines)
