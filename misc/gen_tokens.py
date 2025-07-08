@@ -11,7 +11,7 @@ def to_token(s):
     return re.sub(r"\s+", "_", s)
 
 def collect_line(line):
-    for m in re.finditer(r"T\"([^\"]*)\"", line):
+    for m in re.finditer(r"(?<![\"A-Z])T\"([^\"]*)\"", line):
         s = m.group(1)
         if s not in tokens:
             tokens[s] = to_token(s)

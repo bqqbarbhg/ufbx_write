@@ -9,7 +9,6 @@ static ufbxw_vec3 make_vec3(ufbxw_real x, ufbxw_real y, ufbxw_real z)
 int main(int argc, char **argv)
 {
 	ufbxw_scene *scene = ufbxw_create_scene(NULL);
-
 	ufbxw_node parent = ufbxw_create_node(scene);
 	ufbxw_set_name(scene, parent.id, "Parent");
 
@@ -28,15 +27,25 @@ int main(int argc, char **argv)
 	ufbxw_mesh_add_instance(scene, mesh, node);
 
 	ufbxw_id material = ufbxw_create_element_ex(scene, UFBXW_ELEMENT_MATERIAL, "FbxSurfaceLambert");
-	ufbxw_set_name(scene, material, "lambert1");
+	ufbxw_set_name(scene, material, "MyLambert");
 	ufbxw_set_vec3(scene, material, "DiffuseColor", make_vec3(0.2, 0.4, 0.6));
 
-	ufbxw_id texture = ufbxw_create_element(scene, UFBXW_ELEMENT_FILE_TEXTURE);
-	ufbxw_set_name(scene, texture, "texture");
+	ufbxw_id texture = ufbxw_create_element_ex(scene, UFBXW_ELEMENT_TEXTURE, "FbxFileTexture");
+	ufbxw_set_name(scene, texture, "MyTexture");
 	ufbxw_set_string(scene, texture, "Path", "C:/Files/texture.png");
 	ufbxw_set_string(scene, texture, "RelPath", "texture.png");
 
-	ufbxw_connect_prop(scene, texture, "", material, "DiffuseColor");
+	ufbxw_node light_node = ufbxw_create_node(scene);
+	ufbxw_set_name(scene, light_node.id, "Light");
+	ufbxw_set_vec3(scene, light_node.id, "Lcl Translation", make_vec3(5.0, 5.0, 5.0));
+
+	ufbxw_id light = ufbxw_create_element(scene, UFBXW_ELEMENT_LIGHT);
+	ufbxw_set_name(scene, light, "lightAttribute1");
+	ufbxw_set_vec3(scene, light, "Color", make_vec3(1.0f, 0.5f, 0.25f));
+
+	ufbxw_connect(scene, light, light_node.id);
+	ufbxw_connect(scene, material, node.id);
+	ufbxw_connect_prop(scene, texture, "", material, "TransparentColor");
 
 #if 0
 	ufbxw_node parent = ufbxw_create_node(scene);

@@ -918,27 +918,44 @@ typedef enum ufbxwi_token {
 	UFBXWI_AnimationCurveNode,
 	UFBXWI_AnimationLayer,
 	UFBXWI_AnimationStack,
+	UFBXWI_AreaLightShape,
 	UFBXWI_AxisLen,
 	UFBXWI_BBoxMax,
 	UFBXWI_BBoxMin,
+	UFBXWI_BottomBarnDoor,
 	UFBXWI_Bump,
 	UFBXWI_BumpFactor,
+	UFBXWI_CastLightOnObject,
+	UFBXWI_CastShadows,
 	UFBXWI_Casts_Shadows,
 	UFBXWI_Color,
 	UFBXWI_CurrentMappingType,
 	UFBXWI_CurrentTextureBlendMode,
+	UFBXWI_DecayStart,
+	UFBXWI_DecayType,
 	UFBXWI_DefaultAttributeIndex,
 	UFBXWI_DiffuseColor,
 	UFBXWI_DiffuseFactor,
 	UFBXWI_DisplacementColor,
 	UFBXWI_DisplacementFactor,
 	UFBXWI_Document,
+	UFBXWI_DrawFrontFacingVolumetricLight,
+	UFBXWI_DrawGroundProjection,
+	UFBXWI_DrawVolumetricLight,
 	UFBXWI_EmissiveColor,
 	UFBXWI_EmissiveFactor,
+	UFBXWI_EnableBarnDoor,
+	UFBXWI_EnableFarAttenuation,
+	UFBXWI_EnableNearAttenuation,
+	UFBXWI_FarAttenuationEnd,
+	UFBXWI_FarAttenuationStart,
 	UFBXWI_FbxFileTexture,
+	UFBXWI_FbxLight,
 	UFBXWI_FbxMesh,
 	UFBXWI_FbxNode,
 	UFBXWI_FbxSurfaceLambert,
+	UFBXWI_FileName,
+	UFBXWI_Fog,
 	UFBXWI_Freeze,
 	UFBXWI_GeometricRotation,
 	UFBXWI_GeometricScaling,
@@ -946,10 +963,15 @@ typedef enum ufbxwi_token {
 	UFBXWI_Geometry,
 	UFBXWI_GlobalSettings,
 	UFBXWI_InheritType,
+	UFBXWI_InnerAngle,
+	UFBXWI_Intensity,
 	UFBXWI_LODBox,
 	UFBXWI_Lcl_Rotation,
 	UFBXWI_Lcl_Scaling,
 	UFBXWI_Lcl_Translation,
+	UFBXWI_LeftBarnDoor,
+	UFBXWI_Light,
+	UFBXWI_LightType,
 	UFBXWI_LookAtProperty,
 	UFBXWI_Material,
 	UFBXWI_MaxDampRangeX,
@@ -967,9 +989,12 @@ typedef enum ufbxwi_token {
 	UFBXWI_MinDampStrengthZ,
 	UFBXWI_Model,
 	UFBXWI_MultiLayer,
+	UFBXWI_NearAttenuationEnd,
+	UFBXWI_NearAttenuationStart,
 	UFBXWI_NegativePercentShapeSupport,
 	UFBXWI_NodeAttribute,
 	UFBXWI_NormalMap,
+	UFBXWI_OuterAngle,
 	UFBXWI_Path,
 	UFBXWI_PostRotation,
 	UFBXWI_PreRotation,
@@ -981,6 +1006,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_QuaternionInterpolate,
 	UFBXWI_Receive_Shadows,
 	UFBXWI_RelPath,
+	UFBXWI_RightBarnDoor,
 	UFBXWI_Rotation,
 	UFBXWI_RotationActive,
 	UFBXWI_RotationMax,
@@ -1012,6 +1038,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_ScalingPivot,
 	UFBXWI_SceneInfo,
 	UFBXWI_ShadingModel,
+	UFBXWI_ShadowColor,
 	UFBXWI_Show,
 	UFBXWI_SourceObject,
 	UFBXWI_Texture,
@@ -1019,6 +1046,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_TextureRotationPivot,
 	UFBXWI_TextureScalingPivot,
 	UFBXWI_TextureTypeUse,
+	UFBXWI_TopBarnDoor,
 	UFBXWI_Translation,
 	UFBXWI_TranslationActive,
 	UFBXWI_TranslationMax,
@@ -1056,27 +1084,44 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "AnimationCurveNode", 18 },
 	{ "AnimationLayer", 14 },
 	{ "AnimationStack", 14 },
+	{ "AreaLightShape", 14 },
 	{ "AxisLen", 7 },
 	{ "BBoxMax", 7 },
 	{ "BBoxMin", 7 },
+	{ "BottomBarnDoor", 14 },
 	{ "Bump", 4 },
 	{ "BumpFactor", 10 },
+	{ "CastLightOnObject", 17 },
+	{ "CastShadows", 11 },
 	{ "Casts Shadows", 13 },
 	{ "Color", 5 },
 	{ "CurrentMappingType", 18 },
 	{ "CurrentTextureBlendMode", 23 },
+	{ "DecayStart", 10 },
+	{ "DecayType", 9 },
 	{ "DefaultAttributeIndex", 21 },
 	{ "DiffuseColor", 12 },
 	{ "DiffuseFactor", 13 },
 	{ "DisplacementColor", 17 },
 	{ "DisplacementFactor", 18 },
 	{ "Document", 8 },
+	{ "DrawFrontFacingVolumetricLight", 30 },
+	{ "DrawGroundProjection", 20 },
+	{ "DrawVolumetricLight", 19 },
 	{ "EmissiveColor", 13 },
 	{ "EmissiveFactor", 14 },
+	{ "EnableBarnDoor", 14 },
+	{ "EnableFarAttenuation", 20 },
+	{ "EnableNearAttenuation", 21 },
+	{ "FarAttenuationEnd", 17 },
+	{ "FarAttenuationStart", 19 },
 	{ "FbxFileTexture", 14 },
+	{ "FbxLight", 8 },
 	{ "FbxMesh", 7 },
 	{ "FbxNode", 7 },
 	{ "FbxSurfaceLambert", 17 },
+	{ "FileName", 8 },
+	{ "Fog", 3 },
 	{ "Freeze", 6 },
 	{ "GeometricRotation", 17 },
 	{ "GeometricScaling", 16 },
@@ -1084,10 +1129,15 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "Geometry", 8 },
 	{ "GlobalSettings", 14 },
 	{ "InheritType", 11 },
+	{ "InnerAngle", 10 },
+	{ "Intensity", 9 },
 	{ "LODBox", 6 },
 	{ "Lcl Rotation", 12 },
 	{ "Lcl Scaling", 11 },
 	{ "Lcl Translation", 15 },
+	{ "LeftBarnDoor", 12 },
+	{ "Light", 5 },
+	{ "LightType", 9 },
 	{ "LookAtProperty", 14 },
 	{ "Material", 8 },
 	{ "MaxDampRangeX", 13 },
@@ -1105,9 +1155,12 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "MinDampStrengthZ", 16 },
 	{ "Model", 5 },
 	{ "MultiLayer", 10 },
+	{ "NearAttenuationEnd", 18 },
+	{ "NearAttenuationStart", 20 },
 	{ "NegativePercentShapeSupport", 27 },
 	{ "NodeAttribute", 13 },
 	{ "NormalMap", 9 },
+	{ "OuterAngle", 10 },
 	{ "Path", 4 },
 	{ "PostRotation", 12 },
 	{ "PreRotation", 11 },
@@ -1119,6 +1172,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "QuaternionInterpolate", 21 },
 	{ "Receive Shadows", 15 },
 	{ "RelPath", 7 },
+	{ "RightBarnDoor", 13 },
 	{ "Rotation", 8 },
 	{ "RotationActive", 14 },
 	{ "RotationMax", 11 },
@@ -1150,6 +1204,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "ScalingPivot", 12 },
 	{ "SceneInfo", 9 },
 	{ "ShadingModel", 12 },
+	{ "ShadowColor", 11 },
 	{ "Show", 4 },
 	{ "SourceObject", 12 },
 	{ "Texture", 7 },
@@ -1157,6 +1212,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "TextureRotationPivot", 20 },
 	{ "TextureScalingPivot", 19 },
 	{ "TextureTypeUse", 14 },
+	{ "TopBarnDoor", 11 },
 	{ "Translation", 11 },
 	{ "TranslationActive", 17 },
 	{ "TranslationMax", 14 },
@@ -1259,7 +1315,7 @@ typedef struct {
 
 UFBXWI_LIST_TYPE(ufbxwi_object_type_list, ufbxwi_object_type);
 
-typedef void ufbxwi_element_init_data_fn(void *data);
+typedef bool ufbxwi_element_init_data_fn(ufbxw_scene *scene, void *data);
 typedef struct ufbxwi_element_type_desc ufbxwi_element_type_desc;
 
 typedef struct {
@@ -1345,6 +1401,8 @@ typedef struct {
 	int32_t inherit_type;
 	bool visibility;
 	bool visibility_inheritance;
+
+	int32_t default_attribute_index;
 } ufbxwi_node;
 
 typedef struct {
@@ -1362,14 +1420,28 @@ typedef struct {
 } ufbxwi_mesh;
 
 typedef struct {
+	union {
+		ufbxwi_element_data element;
+		ufbxwi_node_attribute attrib;
+	};
+
+	// TODO: Light data
+} ufbxwi_light;
+
+typedef struct {
 	ufbxwi_element_data element;
 	ufbxwi_conn_list textures;
 	ufbxwi_id_list conn_nodes;
+	ufbxw_string shading_model;
+	bool multi_layer;
 } ufbxwi_material;
 
 typedef struct {
 	ufbxwi_element_data element;
 	ufbxwi_conn_list conn_materials;
+	ufbxw_string type;
+	ufbxw_string filename;
+	ufbxw_string relative_filename;
 } ufbxwi_texture;
 
 typedef struct {
@@ -1442,7 +1514,7 @@ static const ufbxwi_prop_type_desc ufbxwi_prop_types[] = {
 	{ "KTime", "Time", UFBXW_PROP_DATA_INT64 },
 	{ "UByte", "", UFBXW_PROP_DATA_INT64 },
 	{ "ULongLong", "", UFBXW_PROP_DATA_INT64 },
-	{ "float", "", UFBXW_PROP_DATA_REAL },
+	{ "Float", "", UFBXW_PROP_DATA_REAL },
 	{ "double", "Number", UFBXW_PROP_DATA_REAL },
 	{ "Number", "", UFBXW_PROP_DATA_REAL },
 	{ "Vector2D", "Vector2", UFBXW_PROP_DATA_VEC2 },
@@ -1518,11 +1590,15 @@ typedef struct {
 	int32_t int_neg1;
 	ufbxw_real double_1;
 	ufbxw_real double_10;
+	ufbxw_real double_20;
+	ufbxw_real double_45;
+	ufbxw_real double_50;
+	ufbxw_real double_100;
 	ufbxw_vec3 vec3_1;
 	ufbxw_vec3 vec3_color;
 	ufbxw_string string_empty;
 	ufbxw_string string_default;
-	ufbxw_string string_Lambert;
+	ufbxw_string string_lambert;
 } ufbxwi_prop_defaults;
 
 static const ufbxwi_prop_defaults ufbxwi_prop_default_data = {
@@ -1532,11 +1608,15 @@ static const ufbxwi_prop_defaults ufbxwi_prop_default_data = {
 	-1,
 	(ufbxw_real)1.0,
 	(ufbxw_real)10.0,
+	(ufbxw_real)20.0,
+	(ufbxw_real)45.0,
+	(ufbxw_real)50.0,
+	(ufbxw_real)100.0,
 	{ 1.0f, 1.0f, 1.0f },
 	{ (ufbxw_real)0.8, (ufbxw_real)0.8, (ufbxw_real)0.8 },
 	{ ufbxwi_empty_char, 0 },
 	{ "default", 7 },
-	{ "Lambert", 7 },
+	{ "lambert", 7 },
 };
 
 enum {
@@ -1618,14 +1698,14 @@ static const ufbxwi_prop_desc ufbxwi_node_props[] = {
 	{ UFBXWI_UpVectorProperty, UFBXW_PROP_TYPE_OBJECT, },
 	{ UFBXWI_Show, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 	{ UFBXWI_NegativePercentShapeSupport, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
-	{ UFBXWI_DefaultAttributeIndex, UFBXW_PROP_TYPE_INT, ufbxwi_default(int_neg1) },
+	{ UFBXWI_DefaultAttributeIndex, UFBXW_PROP_TYPE_INT, ufbxwi_field(ufbxwi_node, default_attribute_index), ufbxwi_default(int_neg1) },
 	{ UFBXWI_Freeze, UFBXW_PROP_TYPE_BOOL, },
 	{ UFBXWI_LODBox, UFBXW_PROP_TYPE_BOOL, },
 	{ UFBXWI_Lcl_Translation, UFBXW_PROP_TYPE_LCL_TRANSLATION, ufbxwi_field(ufbxwi_node, lcl_translation), 0, UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_Lcl_Rotation, UFBXW_PROP_TYPE_LCL_ROTATION, ufbxwi_field(ufbxwi_node, lcl_rotation), 0, UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_Lcl_Scaling, UFBXW_PROP_TYPE_LCL_SCALING, ufbxwi_field(ufbxwi_node, lcl_scaling), ufbxwi_default(vec3_1), UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_Visibility, UFBXW_PROP_TYPE_VISIBILITY, ufbxwi_field(ufbxwi_node, visibility), ufbxwi_default(bool_true), UFBXW_PROP_FLAG_ANIMATABLE },
-	{ UFBXWI_Visibility_Inheritance, UFBXW_PROP_TYPE_VISIBILITY_INHERITANCE, ufbxwi_field(ufbxwi_node, visibility_inheritance), ufbxwi_default(bool_true), UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_Visibility_Inheritance, UFBXW_PROP_TYPE_VISIBILITY_INHERITANCE, ufbxwi_field(ufbxwi_node, visibility_inheritance), ufbxwi_default(bool_true) },
 };
 
 static const ufbxwi_prop_desc ufbxwi_mesh_props[] = {
@@ -1637,8 +1717,38 @@ static const ufbxwi_prop_desc ufbxwi_mesh_props[] = {
 	{ UFBXWI_Receive_Shadows, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 };
 
+static const ufbxwi_prop_desc ufbxwi_light_props[] = {
+	{ UFBXWI_Color, UFBXW_PROP_TYPE_COLOR, ufbxwi_default(vec3_1), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_LightType, UFBXW_PROP_TYPE_ENUM, },
+	{ UFBXWI_CastLightOnObject, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_DrawVolumetricLight, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_DrawGroundProjection, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_DrawFrontFacingVolumetricLight, UFBXW_PROP_TYPE_BOOL, },
+	{ UFBXWI_Intensity, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_100), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_InnerAngle, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_OuterAngle, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_45), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_Fog, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_50), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_DecayType, UFBXW_PROP_TYPE_ENUM, },
+	{ UFBXWI_DecayStart, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FileName, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_empty) },
+	{ UFBXWI_EnableNearAttenuation, UFBXW_PROP_TYPE_BOOL, },
+	{ UFBXWI_NearAttenuationStart, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_NearAttenuationEnd, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_EnableFarAttenuation, UFBXW_PROP_TYPE_BOOL, },
+	{ UFBXWI_FarAttenuationStart, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FarAttenuationEnd, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_CastShadows, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_ShadowColor, UFBXW_PROP_TYPE_COLOR, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_AreaLightShape, UFBXW_PROP_TYPE_ENUM, },
+	{ UFBXWI_LeftBarnDoor, UFBXW_PROP_TYPE_FLOAT, ufbxwi_default(double_20), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_RightBarnDoor, UFBXW_PROP_TYPE_FLOAT, ufbxwi_default(double_20), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_TopBarnDoor, UFBXW_PROP_TYPE_FLOAT, ufbxwi_default(double_20), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_BottomBarnDoor, UFBXW_PROP_TYPE_FLOAT, ufbxwi_default(double_20), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_EnableBarnDoor, UFBXW_PROP_TYPE_USER_BOOL, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+};
+
 static const ufbxwi_prop_desc ufbxwi_material_lambert_props[] = {
-	{ UFBXWI_ShadingModel, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_Lambert) },
+	{ UFBXWI_ShadingModel, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_lambert) },
 	{ UFBXWI_MultiLayer, UFBXW_PROP_TYPE_BOOL, },
 	{ UFBXWI_EmissiveColor, UFBXW_PROP_TYPE_COLOR, },
 	{ UFBXWI_EmissiveFactor, UFBXW_PROP_TYPE_NUMBER, },
@@ -1674,8 +1784,6 @@ static const ufbxwi_prop_desc ufbxwi_file_texture_props[] = {
 	{ UFBXWI_UVSet, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_default) },
 	{ UFBXWI_UseMaterial, UFBXW_PROP_TYPE_BOOL },
 	{ UFBXWI_UseMipMap, UFBXW_PROP_TYPE_BOOL },
-	{ UFBXWI_Path, UFBXW_PROP_TYPE_XREFURL, ufbxwi_default(string_empty), 0, UFBXWI_PROP_FLAG_EXCLUDE_FROM_TEMPLATE },
-	{ UFBXWI_RelPath, UFBXW_PROP_TYPE_XREFURL, ufbxwi_default(string_empty), 0, UFBXWI_PROP_FLAG_EXCLUDE_FROM_TEMPLATE },
 };
 
 static const ufbxwi_prop_desc ufbxwi_document_props[] = {
@@ -1710,9 +1818,9 @@ static const ufbxwi_element_type_info ufbxwi_element_type_infos[] = {
 	{ sizeof(ufbxwi_node), UFBXWI_CONN_BIT_TYPE_NODE }, // NODE
 	{ sizeof(ufbxwi_node_attribute), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE }, // NODE_ATTRIBUTE
 	{ sizeof(ufbxwi_mesh), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE }, // MESH
+	{ sizeof(ufbxwi_light), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE }, // LIGHT
 	{ sizeof(ufbxwi_material), UFBXWI_CONN_BIT_TYPE_MATERIAL }, // MATERIAL
 	{ sizeof(ufbxwi_texture), UFBXWI_CONN_BIT_TYPE_TEXTURE }, // TEXTURE
-	{ sizeof(ufbxwi_texture), UFBXWI_CONN_BIT_TYPE_TEXTURE }, // FILE_TEXTURE
 	{ sizeof(ufbxwi_template) }, // TEMPLATE
 	{ 0 }, // SCENE_INFO
 	{ 0 }, // GLOBAL_SETTINGS
@@ -2011,13 +2119,30 @@ static void ufbxwi_conn_clear(ufbxw_scene *scene, ufbxwi_conn_type type, const v
 	}
 }
 
-static void ufbxwi_init_node_data(void *data)
+static bool ufbxwi_init_node(ufbxw_scene *scene, void *data)
 {
 	ufbxwi_node *node = (ufbxwi_node*)data;
 	node->lcl_scaling = ufbxwi_one_vec3;
 	node->geometric_scaling = ufbxwi_one_vec3;
 	node->visibility = true;
 	node->visibility_inheritance = true;
+	return true;
+}
+
+static bool ufbxwi_init_material_lambert(ufbxw_scene *scene, void *data)
+{
+	ufbxwi_material *material = (ufbxwi_material*)data;
+	material->shading_model = ufbxwi_c_str("lambert");
+	return true;
+}
+
+static bool ufbxwi_init_file_texture(ufbxw_scene *scene, void *data)
+{
+	ufbxwi_texture *texture = (ufbxwi_texture*)data;
+	texture->type = ufbxwi_c_str("TextureVideoClip");
+	texture->filename.data = ufbxwi_empty_char;
+	texture->relative_filename.data = ufbxwi_empty_char;
+	return true;
 }
 
 enum {
@@ -2045,7 +2170,7 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 	},
 	{
 		UFBXW_ELEMENT_NODE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, UFBXWI_Model, UFBXWI_Model, UFBXWI_FbxNode,
-		ufbxwi_node_props, ufbxwi_arraycount(ufbxwi_node_props), &ufbxwi_init_node_data,
+		ufbxwi_node_props, ufbxwi_arraycount(ufbxwi_node_props), &ufbxwi_init_node,
 		0,
 	},
 	{
@@ -2054,7 +2179,12 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 		0,
 	},
 	{
-		UFBXW_ELEMENT_SCENE_INFO, UFBXWI_TOKEN_NONE, UFBXWI_SceneInfo, UFBXWI_UserData, UFBXWI_SceneInfo, UFBXWI_TOKEN_NONE,
+		UFBXW_ELEMENT_LIGHT, UFBXWI_TOKEN_NONE, UFBXWI_Light, UFBXWI_NodeAttribute, UFBXWI_NodeAttribute, UFBXWI_FbxLight,
+		ufbxwi_light_props, ufbxwi_arraycount(ufbxwi_light_props), NULL,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_SCENE_INFO, UFBXWI_TOKEN_NONE, UFBXWI_UserData, UFBXWI_SceneInfo, UFBXWI_SceneInfo, UFBXWI_TOKEN_NONE,
 		NULL, 0, NULL,
 		UFBXWI_ELEMENT_FLAG_ALLOW_NO_OBJECT_ID,
 	},
@@ -2070,12 +2200,12 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 	},
 	{
 		UFBXW_ELEMENT_MATERIAL, UFBXWI_FbxSurfaceLambert, UFBXWI_TOKEN_EMPTY, UFBXWI_Material, UFBXWI_Material, UFBXWI_FbxSurfaceLambert,
-		ufbxwi_material_lambert_props, ufbxwi_arraycount(ufbxwi_material_lambert_props), NULL,
+		ufbxwi_material_lambert_props, ufbxwi_arraycount(ufbxwi_material_lambert_props), &ufbxwi_init_material_lambert,
 		UFBXWI_ELEMENT_TYPE_FLAG_EAGER_PROPS,
 	},
 	{
-		UFBXW_ELEMENT_FILE_TEXTURE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_EMPTY, UFBXWI_Texture, UFBXWI_Texture, UFBXWI_FbxFileTexture,
-		ufbxwi_file_texture_props, ufbxwi_arraycount(ufbxwi_file_texture_props), NULL,
+		UFBXW_ELEMENT_TEXTURE, UFBXWI_FbxFileTexture, UFBXWI_TOKEN_EMPTY, UFBXWI_Texture, UFBXWI_Texture, UFBXWI_FbxFileTexture,
+		ufbxwi_file_texture_props, ufbxwi_arraycount(ufbxwi_file_texture_props), &ufbxwi_init_file_texture,
 		0,
 	},
 };
@@ -2542,7 +2672,7 @@ static ufbxw_id ufbxwi_create_element(ufbxw_scene *scene, ufbxw_element_type typ
 	element_data->id = id;
 
 	if (element_type->init_fn) {
-		element_type->init_fn(data);
+		ufbxwi_check_return(element_type->init_fn(scene, data), 0);
 	}
 
 	scene->num_elements++;
@@ -2864,44 +2994,6 @@ static void ufbxwi_init_scene(ufbxw_scene *scene)
 	ufbxwi_create_element_types(scene);
 	ufbxwi_create_defaults(scene);
 }
-
-#if 0
-static void ufbxwi_connect_imp(ufbxw_scene *scene, ufbxwi_element *src, ufbxwi_element *dst)
-{
-	ufbxw_id src_id = src->id, dst_id = dst->id;
-	ufbxw_element_type src_type = ufbxwi_id_type(src_id);
-	ufbxw_element_type dst_type = ufbxwi_id_type(dst_id);
-
-	if (dst_type == UFBXW_ELEMENT_NODE) {
-		ufbxwi_node *dst_node = (ufbxwi_node*)dst->data;
-
-		if (src_type == UFBXW_ELEMENT_NODE) {
-			ufbxwi_node *src_node = (ufbxwi_node*)src->data;
-
-			ufbxwi_id_list_add(&scene->ator, &dst_node->children, src_id);
-			src_node->parent = ufbxwi_assert_node(dst_id);
-		}
-	}
-}
-
-static void ufbxwi_disconnect_imp(ufbxw_scene *scene, ufbxwi_element *src, ufbxwi_element *dst)
-{
-	ufbxw_id src_id = src->id, dst_id = dst->id;
-	ufbxw_element_type src_type = ufbxwi_id_type(src_id);
-	ufbxw_element_type dst_type = ufbxwi_id_type(dst_id);
-
-	if (dst_type == UFBXW_ELEMENT_NODE) {
-		ufbxwi_node *dst_node = (ufbxwi_node*)dst->data;
-
-		if (src_type == UFBXW_ELEMENT_NODE) {
-			ufbxwi_node *src_node = (ufbxwi_node*)src->data;
-
-			ufbxwi_id_list_remove(&scene->ator, &dst_node->children, dst_id);
-			src_node->parent = ufbxw_null_node;
-		}
-	}
-}
-#endif
 
 // -- Saving
 
@@ -3405,8 +3497,15 @@ static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element,
 	ufbxwi_token obj_type = et->object_type;
 
 	if (type == UFBXW_ELEMENT_NODE) {
-		// TODO
-		sub_type = UFBXWI_Mesh;
+		ufbxwi_node *node = (ufbxwi_node*)element->data;
+
+		ufbxwi_element *attrib = ufbxwi_get_element(scene, node->attribute);
+		if (attrib) {
+			const ufbxwi_element_type *attrib_et = &scene->element_types.data[attrib->type_id];
+			sub_type = attrib_et->sub_type;
+		} else {
+			sub_type = UFBXWI_TOKEN_EMPTY; // TODO: What is the correct thing here?
+		}
 	}
 
 	ufbxw_string obj_type_str = scene->string_pool.tokens.data[obj_type];
@@ -3445,6 +3544,15 @@ static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element,
 		ufbxwi_dom_close(sc);
 	} else if (type == UFBXW_ELEMENT_GLOBAL_SETTINGS) {
 		ufbxwi_dom_value(sc, "Version", "I", 1000);
+	} else if (type == UFBXW_ELEMENT_MATERIAL) {
+		const ufbxwi_material *material = (const ufbxwi_material*)element->data;
+		ufbxwi_dom_value(sc, "Version", "I", 120);
+		ufbxwi_dom_value(sc, "ShadingModel", "S", material->shading_model);
+		ufbxwi_dom_value(sc, "MultiLayer", "I", material->multi_layer ? 1 : 0);
+	} else if (type == UFBXW_ELEMENT_TEXTURE) {
+		const ufbxwi_texture *texture = (const ufbxwi_texture*)element->data;
+		ufbxwi_dom_value(sc, "Type", "S", texture->type);
+		ufbxwi_dom_value(sc, "Version", "I", 202);
 	}
 
 	const ufbxwi_element_type *elem_type = &scene->element_types.data[element->type_id];
@@ -3473,7 +3581,18 @@ static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element,
 		// TODO: Use actual values for these
 		ufbxwi_dom_value(sc, "Shading", "c", 'T');
 		ufbxwi_dom_value(sc, "Culling", "C", "CullingOff");
+	}
 
+	if (type == UFBXW_ELEMENT_LIGHT) {
+		// TODO: Use actual values for these
+		ufbxwi_dom_value(sc, "TypeFlags", "C", "Light");
+		ufbxwi_dom_value(sc, "GeometryVersion", "I", 124);
+	}
+
+	if (type == UFBXW_ELEMENT_TEXTURE) {
+		const ufbxwi_texture *texture = (const ufbxwi_texture*)element->data;
+		ufbxwi_dom_value(sc, "FileName", "S", texture->filename);
+		ufbxwi_dom_value(sc, "RelativeFilename", "S", texture->relative_filename);
 	}
 
 	ufbxwi_dom_close(sc);
