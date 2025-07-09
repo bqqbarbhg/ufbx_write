@@ -10,6 +10,7 @@
 	<Type Name="ufbxwi_element_type_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
 	<Type Name="ufbxwi_object_type_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
 	<Type Name="ufbxwi_save_object_type_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
+	<Type Name="ufbxw_keyframe_real_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
 	<Type Name="ufbxwi_props">
 		<DisplayString>{{ count={count} }}</DisplayString>
 		<Expand>
@@ -33,6 +34,10 @@
 			<Item Name="index">(unsigned)id</Item>
 			<Item Name="props">props</Item>
 			<Item Name="data" Condition="(ufbxw_element_type)(id &gt;&gt; 48) == UFBXW_ELEMENT_NODE">(ufbxwi_node*)data</Item>
+			<Item Name="data" Condition="(ufbxw_element_type)(id &gt;&gt; 48) == UFBXW_ELEMENT_ANIM_CURVE">(ufbxwi_anim_curve*)data</Item>
+			<Item Name="data" Condition="(ufbxw_element_type)(id &gt;&gt; 48) == UFBXW_ELEMENT_ANIM_PROP">(ufbxwi_anim_prop*)data</Item>
+			<Item Name="data" Condition="(ufbxw_element_type)(id &gt;&gt; 48) == UFBXW_ELEMENT_ANIM_LAYER">(ufbxwi_anim_layer*)data</Item>
+			<Item Name="data" Condition="(ufbxw_element_type)(id &gt;&gt; 48) == UFBXW_ELEMENT_ANIM_STACK">(ufbxwi_anim_stack*)data</Item>
 		</Expand>
 	</Type>
 </AutoVisualizer>

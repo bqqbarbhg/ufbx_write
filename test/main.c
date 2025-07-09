@@ -47,6 +47,40 @@ int main(int argc, char **argv)
 	ufbxw_connect(scene, material, node.id);
 	ufbxw_connect_prop(scene, texture, "", material, "TransparentColor");
 
+	ufbxw_anim_layer anim_layer = ufbxw_get_default_anim_layer(scene);
+
+	typedef struct {
+		double time;
+		ufbxw_vec3 translation;
+		ufbxw_vec3 rotation;
+		ufbxw_vec3 scaling;
+		ufbxw_real intensity;
+	} keyframe_t;
+
+	static const keyframe_t keys[] = {
+		{ 0.0, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0 }, { 1.0, 1.0, 1.0 }, 100.0 },
+		{ 0.5, { 1.2, -0.5, 0.0 }, { 0.0, 90.0, 0.0 }, { 2.0, 2.0, 2.0 }, 80.0 },
+		{ 1.0, { 1.0, 1.0, 0.0 }, { 90.0, 90.0, 0.0 }, { 1.0, 1.0, 1.0 }, 60.0 },
+	};
+
+	ufbxw_anim_prop anim_t = ufbxw_node_animate_translation(scene, node, anim_layer);
+	ufbxw_anim_prop anim_r = ufbxw_node_animate_rotation(scene, node, anim_layer);
+	ufbxw_anim_prop anim_s = ufbxw_node_animate_scaling(scene, node, anim_layer);
+	ufbxw_anim_prop anim_i = ufbxw_animate_prop(scene, light, "Intensity", anim_layer);
+
+	for (size_t i = 0; i < 3; i++) {
+		ufbxw_ktime time = (ufbxw_ktime)(keys[i].time * (double)UFBXW_KTIME_SECOND);
+		ufbxw_vec3 value_t = keys[i].translation;
+		ufbxw_vec3 value_r = keys[i].rotation;
+		ufbxw_vec3 value_s = keys[i].scaling;
+		ufbxw_real value_i = keys[i].intensity;
+
+		ufbxw_anim_add_keyframe_vec3(scene, anim_t, time, value_t, UFBXW_KEYFRAME_CUBIC_AUTO);
+		ufbxw_anim_add_keyframe_vec3(scene, anim_r, time, value_r, UFBXW_KEYFRAME_CUBIC_AUTO);
+		ufbxw_anim_add_keyframe_vec3(scene, anim_s, time, value_s, UFBXW_KEYFRAME_CUBIC_AUTO);
+		ufbxw_anim_add_keyframe_real(scene, anim_i, time, value_i, UFBXW_KEYFRAME_LINEAR);
+	}
+
 #if 0
 	ufbxw_node parent = ufbxw_create_node(scene);
 	ufbxw_set_name(scene, parent.id, "Parent");

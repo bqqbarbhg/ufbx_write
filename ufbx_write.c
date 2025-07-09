@@ -914,6 +914,10 @@ typedef enum ufbxwi_token {
 	UFBXWI_ActiveAnimStackName,
 	UFBXWI_AmbientColor,
 	UFBXWI_AmbientFactor,
+	UFBXWI_AnimCurve,
+	UFBXWI_AnimCurveNode,
+	UFBXWI_AnimLayer,
+	UFBXWI_AnimStack,
 	UFBXWI_AnimationCurve,
 	UFBXWI_AnimationCurveNode,
 	UFBXWI_AnimationLayer,
@@ -922,6 +926,8 @@ typedef enum ufbxwi_token {
 	UFBXWI_AxisLen,
 	UFBXWI_BBoxMax,
 	UFBXWI_BBoxMin,
+	UFBXWI_BlendMode,
+	UFBXWI_BlendModeBypass,
 	UFBXWI_BottomBarnDoor,
 	UFBXWI_Bump,
 	UFBXWI_BumpFactor,
@@ -934,6 +940,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_DecayStart,
 	UFBXWI_DecayType,
 	UFBXWI_DefaultAttributeIndex,
+	UFBXWI_Description,
 	UFBXWI_DiffuseColor,
 	UFBXWI_DiffuseFactor,
 	UFBXWI_DisplacementColor,
@@ -949,6 +956,9 @@ typedef enum ufbxwi_token {
 	UFBXWI_EnableNearAttenuation,
 	UFBXWI_FarAttenuationEnd,
 	UFBXWI_FarAttenuationStart,
+	UFBXWI_FbxAnimCurveNode,
+	UFBXWI_FbxAnimLayer,
+	UFBXWI_FbxAnimStack,
 	UFBXWI_FbxFileTexture,
 	UFBXWI_FbxLight,
 	UFBXWI_FbxMesh,
@@ -972,6 +982,9 @@ typedef enum ufbxwi_token {
 	UFBXWI_LeftBarnDoor,
 	UFBXWI_Light,
 	UFBXWI_LightType,
+	UFBXWI_LocalStart,
+	UFBXWI_LocalStop,
+	UFBXWI_Lock,
 	UFBXWI_LookAtProperty,
 	UFBXWI_Material,
 	UFBXWI_MaxDampRangeX,
@@ -989,6 +1002,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_MinDampStrengthZ,
 	UFBXWI_Model,
 	UFBXWI_MultiLayer,
+	UFBXWI_Mute,
 	UFBXWI_NearAttenuationEnd,
 	UFBXWI_NearAttenuationStart,
 	UFBXWI_NegativePercentShapeSupport,
@@ -1005,9 +1019,12 @@ typedef enum ufbxwi_token {
 	UFBXWI_Primary_Visibility,
 	UFBXWI_QuaternionInterpolate,
 	UFBXWI_Receive_Shadows,
+	UFBXWI_ReferenceStart,
+	UFBXWI_ReferenceStop,
 	UFBXWI_RelPath,
 	UFBXWI_RightBarnDoor,
 	UFBXWI_Rotation,
+	UFBXWI_RotationAccumulationMode,
 	UFBXWI_RotationActive,
 	UFBXWI_RotationMax,
 	UFBXWI_RotationMaxX,
@@ -1024,6 +1041,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_RotationStiffnessX,
 	UFBXWI_RotationStiffnessY,
 	UFBXWI_RotationStiffnessZ,
+	UFBXWI_ScaleAccumulationMode,
 	UFBXWI_Scaling,
 	UFBXWI_ScalingActive,
 	UFBXWI_ScalingMax,
@@ -1040,6 +1058,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_ShadingModel,
 	UFBXWI_ShadowColor,
 	UFBXWI_Show,
+	UFBXWI_Solo,
 	UFBXWI_SourceObject,
 	UFBXWI_Texture,
 	UFBXWI_Texture_alpha,
@@ -1069,8 +1088,13 @@ typedef enum ufbxwi_token {
 	UFBXWI_VectorDisplacementFactor,
 	UFBXWI_Visibility,
 	UFBXWI_Visibility_Inheritance,
+	UFBXWI_Weight,
 	UFBXWI_WrapModeU,
 	UFBXWI_WrapModeV,
+	UFBXWI_d,
+	UFBXWI_d_X,
+	UFBXWI_d_Y,
+	UFBXWI_d_Z,
 	UFBXWI_TOKEN_COUNT,
 	UFBXWI_TOKEN_FORCE_32BIT = 0x7fffffff,
 } ufbxwi_token;
@@ -1080,6 +1104,10 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "ActiveAnimStackName", 19 },
 	{ "AmbientColor", 12 },
 	{ "AmbientFactor", 13 },
+	{ "AnimCurve", 9 },
+	{ "AnimCurveNode", 13 },
+	{ "AnimLayer", 9 },
+	{ "AnimStack", 9 },
 	{ "AnimationCurve", 14 },
 	{ "AnimationCurveNode", 18 },
 	{ "AnimationLayer", 14 },
@@ -1088,6 +1116,8 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "AxisLen", 7 },
 	{ "BBoxMax", 7 },
 	{ "BBoxMin", 7 },
+	{ "BlendMode", 9 },
+	{ "BlendModeBypass", 15 },
 	{ "BottomBarnDoor", 14 },
 	{ "Bump", 4 },
 	{ "BumpFactor", 10 },
@@ -1100,6 +1130,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "DecayStart", 10 },
 	{ "DecayType", 9 },
 	{ "DefaultAttributeIndex", 21 },
+	{ "Description", 11 },
 	{ "DiffuseColor", 12 },
 	{ "DiffuseFactor", 13 },
 	{ "DisplacementColor", 17 },
@@ -1115,6 +1146,9 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "EnableNearAttenuation", 21 },
 	{ "FarAttenuationEnd", 17 },
 	{ "FarAttenuationStart", 19 },
+	{ "FbxAnimCurveNode", 16 },
+	{ "FbxAnimLayer", 12 },
+	{ "FbxAnimStack", 12 },
 	{ "FbxFileTexture", 14 },
 	{ "FbxLight", 8 },
 	{ "FbxMesh", 7 },
@@ -1138,6 +1172,9 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "LeftBarnDoor", 12 },
 	{ "Light", 5 },
 	{ "LightType", 9 },
+	{ "LocalStart", 10 },
+	{ "LocalStop", 9 },
+	{ "Lock", 4 },
 	{ "LookAtProperty", 14 },
 	{ "Material", 8 },
 	{ "MaxDampRangeX", 13 },
@@ -1155,6 +1192,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "MinDampStrengthZ", 16 },
 	{ "Model", 5 },
 	{ "MultiLayer", 10 },
+	{ "Mute", 4 },
 	{ "NearAttenuationEnd", 18 },
 	{ "NearAttenuationStart", 20 },
 	{ "NegativePercentShapeSupport", 27 },
@@ -1171,9 +1209,12 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "Primary Visibility", 18 },
 	{ "QuaternionInterpolate", 21 },
 	{ "Receive Shadows", 15 },
+	{ "ReferenceStart", 14 },
+	{ "ReferenceStop", 13 },
 	{ "RelPath", 7 },
 	{ "RightBarnDoor", 13 },
 	{ "Rotation", 8 },
+	{ "RotationAccumulationMode", 24 },
 	{ "RotationActive", 14 },
 	{ "RotationMax", 11 },
 	{ "RotationMaxX", 12 },
@@ -1190,6 +1231,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "RotationStiffnessX", 18 },
 	{ "RotationStiffnessY", 18 },
 	{ "RotationStiffnessZ", 18 },
+	{ "ScaleAccumulationMode", 21 },
 	{ "Scaling", 7 },
 	{ "ScalingActive", 13 },
 	{ "ScalingMax", 10 },
@@ -1206,6 +1248,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "ShadingModel", 12 },
 	{ "ShadowColor", 11 },
 	{ "Show", 4 },
+	{ "Solo", 4 },
 	{ "SourceObject", 12 },
 	{ "Texture", 7 },
 	{ "Texture alpha", 13 },
@@ -1235,8 +1278,13 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "VectorDisplacementFactor", 24 },
 	{ "Visibility", 10 },
 	{ "Visibility Inheritance", 22 },
+	{ "Weight", 6 },
 	{ "WrapModeU", 9 },
 	{ "WrapModeV", 9 },
+	{ "d", 1 },
+	{ "d|X", 3 },
+	{ "d|Y", 3 },
+	{ "d|Z", 3 },
 };
 
 // Not including none
@@ -1369,8 +1417,11 @@ UFBXWI_LIST_TYPE(ufbxwi_element_list, ufbxwi_element);
 UFBXWI_LIST_TYPE(ufbxw_node_list, ufbxw_node);
 UFBXWI_LIST_TYPE(ufbxw_material_list, ufbxw_material);
 
+UFBXWI_LIST_TYPE(ufbxw_keyframe_real_list, ufbxw_keyframe_real);
+
 typedef struct {
 	ufbxw_id id;
+	ufbxwi_conn_list anim_props;
 	ufbxwi_conn_list user_conns_src;
 	ufbxwi_conn_list user_conns_dst;
 } ufbxwi_element_data;
@@ -1446,8 +1497,47 @@ typedef struct {
 
 typedef struct {
 	ufbxwi_element_data element;
+	ufbxwi_conn prop;
+
+	// TODO: Less wasteful implementation
+	ufbxw_keyframe_real_list keys;
+
+} ufbxwi_anim_curve;
+
+typedef struct {
+	ufbxwi_element_data element;
+	ufbxwi_conn_list curves;
+	ufbxw_anim_layer layer;
+	ufbxwi_conn prop;
+	ufbxw_real defaults[4];
+} ufbxwi_anim_prop;
+
+typedef struct {
+	ufbxwi_element_data element;
+	ufbxwi_conn_list anim_props;
+	ufbxw_anim_stack stack;
+	ufbxw_real weight;
+} ufbxwi_anim_layer;
+
+typedef struct {
+	ufbxwi_element_data element;
+	ufbxwi_id_list layers;
+} ufbxwi_anim_stack;
+
+typedef struct {
+	ufbxwi_element_data element;
 	ufbxwi_token type;
 } ufbxwi_template;
+
+typedef struct {
+	ufbxwi_element_data element;
+	int a;
+} ufbxwi_scene_info;
+
+typedef struct {
+	ufbxwi_element_data element;
+	int b;
+} ufbxwi_global_settings;
 
 typedef struct {
 	ufbxwi_element_data element;
@@ -1467,6 +1557,9 @@ struct ufbxw_scene {
 	ufbxwi_object_type_list object_types;
 	ufbxwi_element_type_list element_types;
 	ufbxwi_prop_type_list prop_types;
+
+	ufbxw_anim_stack default_anim_stack;
+	ufbxw_anim_layer default_anim_layer;
 
 	// TODO: Something better, hash set
 	ufbxwi_id_list tmp_ids;
@@ -1786,6 +1879,30 @@ static const ufbxwi_prop_desc ufbxwi_file_texture_props[] = {
 	{ UFBXWI_UseMipMap, UFBXW_PROP_TYPE_BOOL },
 };
 
+static const ufbxwi_prop_desc ufbxwi_anim_prop_props[] = {
+	{ UFBXWI_d, UFBXW_PROP_TYPE_COMPOUND },
+};
+
+static const ufbxwi_prop_desc ufbxwi_anim_layer_props[] = {
+	{ UFBXWI_Weight, UFBXW_PROP_TYPE_NUMBER, ufbxwi_field(ufbxwi_anim_layer, weight), ufbxwi_default(double_100), UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_Mute, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_Solo, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_Lock, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_Color, UFBXW_PROP_TYPE_COLOR_RGB, ufbxwi_default(vec3_color), },
+	{ UFBXWI_BlendMode, UFBXW_PROP_TYPE_ENUM, },
+	{ UFBXWI_RotationAccumulationMode, UFBXW_PROP_TYPE_ENUM, },
+	{ UFBXWI_ScaleAccumulationMode, UFBXW_PROP_TYPE_ENUM, },
+	{ UFBXWI_BlendModeBypass, UFBXW_PROP_TYPE_ULONGLONG, },
+};
+
+static const ufbxwi_prop_desc ufbxwi_anim_stack_props[] = {
+	{ UFBXWI_Description, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_empty) },
+	{ UFBXWI_LocalStart, UFBXW_PROP_TYPE_TIME, },
+	{ UFBXWI_LocalStop, UFBXW_PROP_TYPE_TIME, },
+	{ UFBXWI_ReferenceStart, UFBXW_PROP_TYPE_TIME, },
+	{ UFBXWI_ReferenceStop, UFBXW_PROP_TYPE_TIME, },
+};
+
 static const ufbxwi_prop_desc ufbxwi_document_props[] = {
 	{ UFBXWI_SourceObject, UFBXW_PROP_TYPE_OBJECT },
 	{ UFBXWI_ActiveAnimStackName, UFBXW_PROP_TYPE_STRING },
@@ -1795,17 +1912,28 @@ static const ufbxwi_prop_desc ufbxwi_document_props[] = {
 #define UFBXWI_CONN_BIT_ELEMENT UINT64_C(0x1)
 #define UFBXWI_CONN_BIT_PROPERTY UINT64_C(0x2)
 
+#define UFBXWI_CONN_BIT_TYPE_ANY UINT64_C(0x0)
 #define UFBXWI_CONN_BIT_TYPE_NODE UINT64_C(0x10)
 #define UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE UINT64_C(0x20)
 #define UFBXWI_CONN_BIT_TYPE_MATERIAL UINT64_C(0x40)
 #define UFBXWI_CONN_BIT_TYPE_TEXTURE UINT64_C(0x80)
+#define UFBXWI_CONN_BIT_TYPE_ANIM_CURVE UINT64_C(0x100)
+#define UFBXWI_CONN_BIT_TYPE_ANIM_PROP UINT64_C(0x200)
+#define UFBXWI_CONN_BIT_TYPE_ANIM_LAYER UINT64_C(0x400)
+#define UFBXWI_CONN_BIT_TYPE_ANIM_STACK UINT64_C(0x800)
 
 #define UFBXWI_CONN_BIT_ELEMENT_NODE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_NODE)
 #define UFBXWI_CONN_BIT_ELEMENT_NODE_ATTRIBUTE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE)
 #define UFBXWI_CONN_BIT_ELEMENT_MATERIAL (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_MATERIAL)
 #define UFBXWI_CONN_BIT_ELEMENT_TEXTURE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_TEXTURE)
+#define UFBXWI_CONN_BIT_ELEMENT_ANIM_CURVE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_ANIM_CURVE)
+#define UFBXWI_CONN_BIT_ELEMENT_ANIM_PROP (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_ANIM_PROP)
+#define UFBXWI_CONN_BIT_ELEMENT_ANIM_LAYER (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_ANIM_LAYER)
+#define UFBXWI_CONN_BIT_ELEMENT_ANIM_STACK (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_ANIM_STACK)
 
+#define UFBXWI_CONN_BIT_PROPERTY_ANY (UFBXWI_CONN_BIT_PROPERTY | UFBXWI_CONN_BIT_TYPE_ANY)
 #define UFBXWI_CONN_BIT_PROPERTY_MATERIAL (UFBXWI_CONN_BIT_PROPERTY | UFBXWI_CONN_BIT_TYPE_MATERIAL)
+#define UFBXWI_CONN_BIT_PROPERTY_ANIM_PROP (UFBXWI_CONN_BIT_PROPERTY | UFBXWI_CONN_BIT_TYPE_ANIM_PROP)
 
 typedef struct {
 	uint16_t data_size;
@@ -1815,16 +1943,20 @@ typedef struct {
 static const ufbxwi_element_type_info ufbxwi_element_type_infos[] = {
 	{ 0 }, // 0
 	{ 0 }, // CUSTOM
-	{ sizeof(ufbxwi_node), UFBXWI_CONN_BIT_TYPE_NODE }, // NODE
-	{ sizeof(ufbxwi_node_attribute), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE }, // NODE_ATTRIBUTE
-	{ sizeof(ufbxwi_mesh), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE }, // MESH
-	{ sizeof(ufbxwi_light), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE }, // LIGHT
-	{ sizeof(ufbxwi_material), UFBXWI_CONN_BIT_TYPE_MATERIAL }, // MATERIAL
-	{ sizeof(ufbxwi_texture), UFBXWI_CONN_BIT_TYPE_TEXTURE }, // TEXTURE
-	{ sizeof(ufbxwi_template) }, // TEMPLATE
-	{ 0 }, // SCENE_INFO
-	{ 0 }, // GLOBAL_SETTINGS
-	{ sizeof(ufbxwi_document) }, // DOCUMENT
+	{ sizeof(ufbxwi_node), UFBXWI_CONN_BIT_TYPE_NODE },
+	{ sizeof(ufbxwi_node_attribute), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE },
+	{ sizeof(ufbxwi_mesh), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE },
+	{ sizeof(ufbxwi_light), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE },
+	{ sizeof(ufbxwi_material), UFBXWI_CONN_BIT_TYPE_MATERIAL },
+	{ sizeof(ufbxwi_texture), UFBXWI_CONN_BIT_TYPE_TEXTURE },
+	{ sizeof(ufbxwi_anim_curve), UFBXWI_CONN_BIT_TYPE_ANIM_CURVE },
+	{ sizeof(ufbxwi_anim_prop), UFBXWI_CONN_BIT_TYPE_ANIM_PROP },
+	{ sizeof(ufbxwi_anim_layer), UFBXWI_CONN_BIT_TYPE_ANIM_LAYER },
+	{ sizeof(ufbxwi_anim_stack), UFBXWI_CONN_BIT_TYPE_ANIM_STACK },
+	{ sizeof(ufbxwi_template) },
+	{ sizeof(ufbxwi_scene_info) },
+	{ sizeof(ufbxwi_global_settings) },
+	{ sizeof(ufbxwi_document) },
 };
 
 ufbxw_static_assert(ufbxwi_element_type_infos_count, ufbxwi_arraycount(ufbxwi_element_type_infos) == UFBXW_ELEMENT_TYPE_COUNT);
@@ -1865,6 +1997,10 @@ static const ufbxwi_connection_info ufbxwi_connection_infos[] = {
 	{ "Node Attribute", UFBXWI_CONN_BIT_ELEMENT_NODE_ATTRIBUTE, UFBXWI_CONN_BIT_ELEMENT_NODE, ufbxwi_conn_id_list(ufbxwi_node_attribute, instances), ufbxwi_conn_id(ufbxwi_node, attribute) },
 	{ "Node Material", UFBXWI_CONN_BIT_ELEMENT_MATERIAL, UFBXWI_CONN_BIT_ELEMENT_NODE, ufbxwi_conn_id_list_ex(ufbxwi_material, conn_nodes, UFBXWI_CONN_TYPE_UNORDERED), ufbxwi_conn_id_list_ex(ufbxwi_node, materials, UFBXWI_CONN_TYPE_SPARSE) },
 	{ "Material Texture", UFBXWI_CONN_BIT_ELEMENT_TEXTURE, UFBXWI_CONN_BIT_PROPERTY_MATERIAL, ufbxwi_conn_conn_list_ex(ufbxwi_texture, conn_materials, UFBXWI_CONN_TYPE_UNORDERED), ufbxwi_conn_conn_list(ufbxwi_material, textures) },
+	{ "Animated Property", UFBXWI_CONN_BIT_ELEMENT_ANIM_PROP, UFBXWI_CONN_BIT_PROPERTY_ANY, ufbxwi_conn_conn(ufbxwi_anim_prop, prop), ufbxwi_conn_conn_list_ex(ufbxwi_element_data, anim_props, UFBXWI_CONN_TYPE_UNORDERED) },
+	{ "Animation Curve Property", UFBXWI_CONN_BIT_ELEMENT_ANIM_CURVE, UFBXWI_CONN_BIT_PROPERTY_ANIM_PROP, ufbxwi_conn_conn(ufbxwi_anim_curve, prop), ufbxwi_conn_conn_list(ufbxwi_anim_prop, curves) },
+	{ "Animation Property Layer", UFBXWI_CONN_BIT_ELEMENT_ANIM_PROP, UFBXWI_CONN_BIT_ELEMENT_ANIM_LAYER, ufbxwi_conn_id(ufbxwi_anim_prop, layer), ufbxwi_conn_id_list_ex(ufbxwi_anim_layer, anim_props, UFBXWI_CONN_TYPE_UNORDERED) },
+	{ "Animation Layer Stack", UFBXWI_CONN_BIT_ELEMENT_ANIM_LAYER, UFBXWI_CONN_BIT_ELEMENT_ANIM_STACK, ufbxwi_conn_id(ufbxwi_anim_layer, stack), ufbxwi_conn_id_list(ufbxwi_anim_stack, layers) },
 	{ "User", UFBXWI_CONN_BIT_ANYTHING, UFBXWI_CONN_BIT_ANYTHING, ufbxwi_conn_conn_list(ufbxwi_element_data, user_conns_src), ufbxwi_conn_conn_list(ufbxwi_element_data, user_conns_dst) },
 };
 
@@ -2145,6 +2281,13 @@ static bool ufbxwi_init_file_texture(ufbxw_scene *scene, void *data)
 	return true;
 }
 
+static bool ufbxwi_init_anim_layer(ufbxw_scene *scene, void *data)
+{
+	ufbxwi_anim_layer *layer = (ufbxwi_anim_layer*)data;
+	layer->weight = (ufbxw_real)100.0;
+	return true;
+}
+
 enum {
 	UFBXWI_ELEMENT_TYPE_FLAG_EAGER_PROPS = 0x1,
 };
@@ -2199,6 +2342,26 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 		UFBXWI_ELEMENT_FLAG_ALLOW_NO_OBJECT_ID,
 	},
 	{
+		UFBXW_ELEMENT_ANIM_CURVE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_EMPTY, UFBXWI_AnimationCurve, UFBXWI_AnimCurve, UFBXWI_TOKEN_NONE,
+		NULL, 0, NULL,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_ANIM_PROP, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_EMPTY, UFBXWI_AnimationCurveNode, UFBXWI_AnimCurveNode, UFBXWI_FbxAnimCurveNode,
+		ufbxwi_anim_prop_props, ufbxwi_arraycount(ufbxwi_anim_prop_props), NULL,
+		UFBXWI_ELEMENT_TYPE_FLAG_EAGER_PROPS,
+	},
+	{
+		UFBXW_ELEMENT_ANIM_LAYER, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_EMPTY, UFBXWI_AnimationLayer, UFBXWI_AnimLayer, UFBXWI_FbxAnimLayer,
+		ufbxwi_anim_layer_props, ufbxwi_arraycount(ufbxwi_anim_layer_props), &ufbxwi_init_anim_layer,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_ANIM_STACK, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_EMPTY, UFBXWI_AnimationStack, UFBXWI_AnimStack, UFBXWI_FbxAnimStack,
+		ufbxwi_anim_stack_props, ufbxwi_arraycount(ufbxwi_anim_stack_props), NULL,
+		0,
+	},
+	{
 		UFBXW_ELEMENT_MATERIAL, UFBXWI_FbxSurfaceLambert, UFBXWI_TOKEN_EMPTY, UFBXWI_Material, UFBXWI_Material, UFBXWI_FbxSurfaceLambert,
 		ufbxwi_material_lambert_props, ufbxwi_arraycount(ufbxwi_material_lambert_props), &ufbxwi_init_material_lambert,
 		UFBXWI_ELEMENT_TYPE_FLAG_EAGER_PROPS,
@@ -2232,7 +2395,7 @@ static bool ufbxwi_props_rehash(ufbxw_scene *scene, ufbxwi_props *props, size_t 
 
 		uint32_t hash = ufbxwi_hash_token(token);
 		for (uint32_t scan = 0; ; scan++) {
-			uint32_t slot = (hash + scan*scan) & mask;
+			uint32_t slot = (hash + scan) & mask;
 			if (new_slots[slot].token == 0) {
 				new_slots[slot] = old_slots[i];
 				break;
@@ -2257,7 +2420,7 @@ static ufbxwi_prop *ufbxwi_props_find_prop(ufbxwi_props *props, ufbxwi_token tok
 	uint32_t hash = ufbxwi_hash_token(token);
 	ufbxwi_prop *slots = props->props;
 	for (uint32_t scan = 0; ; scan++) {
-		uint32_t slot = (hash + scan*scan) & mask;
+		uint32_t slot = (hash + scan) & mask;
 		if (slots[slot].token == token) {
 			return &slots[slot];
 		} else if (slots[slot].token == 0) {
@@ -2279,7 +2442,7 @@ static ufbxwi_prop *ufbxwi_props_add_prop(ufbxw_scene *scene, ufbxwi_props *prop
 	uint32_t hash = ufbxwi_hash_token(token);
 	ufbxwi_prop *slots = props->props;
 	for (uint32_t scan = 0; ; scan++) {
-		uint32_t slot = (hash + scan*scan) & mask;
+		uint32_t slot = (hash + scan) & mask;
 		if (slots[slot].token == token) {
 			prop = &slots[slot];
 			break;
@@ -2292,8 +2455,8 @@ static ufbxwi_prop *ufbxwi_props_add_prop(ufbxw_scene *scene, ufbxwi_props *prop
 	if (prop->token == 0) {
 		prop->token = (uint32_t)token;
 		prop->order = ++props->order_counter;
+		props->count++;
 	}
-	props->count++;
 
 	return prop;
 }
@@ -2856,10 +3019,107 @@ static void ufbxwi_collect_src_connections(const ufbxw_scene *scene, ufbxwi_allo
 	ufbxwi_conn_collect_conns(scene, ator, conns, dst_type, dst_data);
 }
 
-static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node_data(ufbxw_scene *scene, ufbxw_node node) { return (ufbxwi_node*)ufbxwi_get_element_data(scene, node.id); }
-static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh_data(ufbxw_scene *scene, ufbxw_mesh mesh) { return (ufbxwi_mesh*)ufbxwi_get_element_data(scene, mesh.id); }
+static ufbxw_anim_prop ufbxwi_animate_prop(ufbxw_scene *scene, ufbxw_id id, ufbxwi_token prop, ufbxw_anim_layer layer)
+{
+	ufbxwi_element *element = ufbxwi_get_element(scene, id);
+	if (!element) return ufbxw_null_anim_prop;
 
-static ufbxwi_forceinline ufbxw_node ufbxwi_assert_node(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_NODE); ufbxw_node node = { id }; return node; }
+	ufbxwi_prop *p = ufbxwi_element_find_prop(scene, element, prop);
+	if (!p) return ufbxw_null_anim_prop;
+
+	size_t curve_count = 0;
+
+	ufbxwi_prop_type prop_type = scene->prop_types.data[p->type];
+	switch (prop_type.data_type) {
+	case UFBXW_PROP_DATA_BOOL:
+	case UFBXW_PROP_DATA_INT32:
+	case UFBXW_PROP_DATA_INT64:
+	case UFBXW_PROP_DATA_REAL:
+	case UFBXW_PROP_DATA_REAL_STRING:
+	case UFBXW_PROP_DATA_USER_REAL:
+	case UFBXW_PROP_DATA_USER_INT:
+	case UFBXW_PROP_DATA_USER_ENUM:
+		curve_count = 1;
+		break;
+
+	case UFBXW_PROP_DATA_VEC2:
+		curve_count = 2;
+		break;
+
+	case UFBXW_PROP_DATA_VEC3:
+		curve_count = 3;
+		break;
+	}
+
+	if (curve_count == 0) return ufbxw_null_anim_prop;
+
+	const char *anim_name = "";
+	switch (p->token) {
+	case UFBXWI_Lcl_Translation:
+		anim_name = "T";
+		break;
+	case UFBXWI_Lcl_Rotation:
+		anim_name = "R";
+		break;
+	case UFBXWI_Lcl_Scaling:
+		anim_name = "S";
+		break;
+	default:
+		anim_name = scene->string_pool.tokens.data[p->token].data;
+		break;
+	}
+
+	ufbxw_anim_prop anim = { ufbxw_create_element(scene, UFBXW_ELEMENT_ANIM_PROP) };
+	ufbxw_set_name(scene, anim.id, anim_name);
+
+	ufbxwi_connect_imp(scene, UFBXW_CONNECTION_ANIM_PROPERTY, anim.id, id, 0, prop, 0);
+
+	if (layer.id != 0) {
+		ufbxwi_connect(scene, UFBXW_CONNECTION_ANIM_PROP_LAYER, anim.id, layer.id, 0);
+	}
+
+	static const ufbxwi_token curve_props[] = {
+		UFBXWI_d_X, UFBXWI_d_Y, UFBXWI_d_Z,
+	};
+
+	ufbxwi_token first_curve_prop = curve_props[0];
+
+	// For single channel propertes, use the property name
+	// TODO: Flexible buffer
+	char name_buf[256];
+	if (curve_count == 1) {
+		ufbxw_string prop_name = scene->string_pool.tokens.data[prop];
+		int name_len = snprintf(name_buf, sizeof(name_buf), "d|%s", prop_name.data);
+		first_curve_prop = ufbxwi_intern_token(&scene->string_pool, name_buf, (size_t)name_len);
+	}
+
+	for (size_t i = 0; i < curve_count; i++) {
+		ufbxw_anim_curve curve = { ufbxw_create_element(scene, UFBXW_ELEMENT_ANIM_CURVE) };
+
+		ufbxwi_token prop_name = i == 0 ? first_curve_prop : curve_props[i];
+
+		// Manually add the properties so we can point them to the known default values
+		ufbxwi_element *anim_elem = ufbxwi_get_element(scene, anim.id);
+		ufbxwi_prop *p = ufbxwi_props_add_prop(scene, &anim_elem->props, prop_name);
+		p->type = UFBXW_PROP_TYPE_NUMBER;
+		p->flags = UFBXW_PROP_FLAG_ANIMATABLE;
+		p->value_offset = (int32_t)(offsetof(ufbxwi_anim_prop, defaults) + i * sizeof(ufbxw_real));
+
+		ufbxwi_connect_imp(scene, UFBXW_CONNECTION_ANIM_CURVE_PROP, curve.id, anim.id, 0, prop_name, 0);
+	}
+
+	return anim;
+}
+
+static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node_data(ufbxw_scene *scene, ufbxw_node id) { return (ufbxwi_node*)ufbxwi_get_element_data(scene, id.id); }
+static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh_data(ufbxw_scene *scene, ufbxw_mesh id) { return (ufbxwi_mesh*)ufbxwi_get_element_data(scene, id.id); }
+static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve(ufbxw_scene *scene, ufbxw_anim_curve id) { return (ufbxwi_anim_curve*)ufbxwi_get_element_data(scene, id.id); }
+static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop(ufbxw_scene *scene, ufbxw_anim_prop id) { return (ufbxwi_anim_prop*)ufbxwi_get_element_data(scene, id.id); }
+static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer(ufbxw_scene *scene, ufbxw_anim_layer id) { return (ufbxwi_anim_layer*)ufbxwi_get_element_data(scene, id.id); }
+static ufbxwi_forceinline ufbxwi_anim_stack *ufbxwi_get_anim_stack(ufbxw_scene *scene, ufbxw_anim_stack id) { return (ufbxwi_anim_stack*)ufbxwi_get_element_data(scene, id.id); }
+
+static ufbxwi_forceinline ufbxw_node ufbxwi_assert_node(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_NODE); ufbxw_node v = { id }; return v; }
+static ufbxwi_forceinline ufbxw_anim_curve ufbxwi_assert_anim_curve(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_ANIM_CURVE); ufbxw_anim_curve v = { id }; return v; }
 
 static bool ufbwi_init_tokens(ufbxw_scene *scene)
 {
@@ -2972,6 +3232,18 @@ static void ufbxwi_create_defaults(ufbxw_scene *scene)
 		ufbxw_id id = ufbxw_create_element(scene, UFBXW_ELEMENT_DOCUMENT);
 
 		ufbxw_set_string(scene, id, "ActiveAnimStackName", "Take 001");
+	}
+
+	if (!scene->opts.no_default_anim_stack) {
+		ufbxw_anim_stack default_stack = ufbxw_create_anim_stack(scene);
+		ufbxw_set_name(scene, default_stack.id, "Take 001");
+		scene->default_anim_stack = default_stack;
+	}
+
+	if (!scene->opts.no_default_anim_layer) {
+		ufbxw_anim_layer default_layer = ufbxw_create_anim_layer(scene, scene->default_anim_stack);
+		ufbxw_set_name(scene, default_layer.id, "BaseLayer");
+		scene->default_anim_layer = default_layer;
 	}
 }
 
@@ -3368,11 +3640,12 @@ static void ufbxwi_save_props(ufbxw_save_context *sc, const void *data_buffer, c
 			}
 
 			// Skip writing if the value matches the template
+			// TODO: Force saving properties that are animated
 			if (tmpl != NULL && tmpl->type == base->type) {
 				const void *base_data = ufbxwi_resolve_value_offset(data_buffer, base->value_offset);
 				const void *tmpl_data = ufbxwi_resolve_value_offset(template_buffer, tmpl->value_offset);
 				size_t data_size = ufbxwi_prop_data_infos[scene->prop_types.data[base->type].data_type].size;
-				if (!memcmp(base_data, tmpl_data, data_size)) {
+				if (data_size == 0 || !memcmp(base_data, tmpl_data, data_size)) {
 					continue;
 				}
 			}
@@ -3484,6 +3757,10 @@ static void ufbxwi_save_template(ufbxw_save_context *sc, ufbxwi_element *element
 	ufbxwi_dom_close(sc);
 }
 
+static void ufbxwi_save_anim_curve_keys(ufbxw_save_context *sc, ufbxwi_element *element)
+{
+}
+
 static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element, uint32_t flags)
 {
 	ufbxw_scene *scene = sc->scene;
@@ -3593,6 +3870,12 @@ static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element,
 		const ufbxwi_texture *texture = (const ufbxwi_texture*)element->data;
 		ufbxwi_dom_value(sc, "FileName", "S", texture->filename);
 		ufbxwi_dom_value(sc, "RelativeFilename", "S", texture->relative_filename);
+	}
+
+	if (type == UFBXW_ELEMENT_ANIM_CURVE) {
+		ufbxwi_dom_value(sc, "Default", "D", 0.0); // Type?
+		ufbxwi_dom_value(sc, "KeyVer", "I", 4009);
+		ufbxwi_save_anim_curve_keys(sc, element);
 	}
 
 	ufbxwi_dom_close(sc);
@@ -4222,6 +4505,19 @@ ufbxw_abi ufbxw_string ufbxw_get_string(ufbxw_scene *scene, ufbxw_id id, const c
 	return ret;
 }
 
+ufbxw_abi ufbxw_anim_prop ufbxw_animate_prop(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_anim_layer layer)
+{
+	return ufbxw_animate_prop_len(scene, id, prop, strlen(prop), layer);
+}
+
+ufbxw_abi ufbxw_anim_prop ufbxw_animate_prop_len(ufbxw_scene *scene, ufbxw_id id, const char *prop, size_t prop_len, ufbxw_anim_layer layer)
+{
+	ufbxwi_token token = ufbxwi_intern_token(&scene->string_pool, prop, prop_len);
+	if (!token) return ufbxw_null_anim_prop;
+
+	return ufbxwi_animate_prop(scene, id, token, layer);
+}
+
 ufbxw_abi ufbxw_node ufbxw_create_node(ufbxw_scene *scene)
 {
 	ufbxw_node node = { ufbxw_create_element(scene, UFBXW_ELEMENT_NODE) };
@@ -4291,6 +4587,21 @@ ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling(ufbxw_scene *scene, ufbxw_node node)
 	return data->lcl_scaling;
 }
 
+ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_translation(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer)
+{
+	return ufbxwi_animate_prop(scene, node.id, UFBXWI_Lcl_Translation, layer);
+}
+
+ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer)
+{
+	return ufbxwi_animate_prop(scene, node.id, UFBXWI_Lcl_Rotation, layer);
+}
+
+ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer)
+{
+	return ufbxwi_animate_prop(scene, node.id, UFBXWI_Lcl_Scaling, layer);
+}
+
 ufbxw_abi void ufbxw_node_set_parent(ufbxw_scene *scene, ufbxw_node node, ufbxw_node parent)
 {
 	if (parent.id == ufbxw_null_id) {
@@ -4323,6 +4634,170 @@ ufbxw_abi void ufbxw_mesh_add_instance(ufbxw_scene *scene, ufbxw_mesh mesh, ufbx
 {
 	ufbxwi_connect(scene, UFBXW_CONNECTION_NODE_ATTRIBUTE, mesh.id, node.id, 0);
 	// ufbxw_connect(scene, mesh.id, node.id);
+}
+
+ufbxw_abi ufbxw_anim_stack ufbxw_get_default_anim_stack(ufbxw_scene *scene)
+{
+	return scene->default_anim_stack;
+}
+
+ufbxw_abi ufbxw_anim_stack ufbxw_create_anim_stack(ufbxw_scene *scene)
+{
+	ufbxw_anim_stack stack = { ufbxw_create_element(scene, UFBXW_ELEMENT_ANIM_STACK) };
+	return stack;
+}
+
+ufbxw_abi ufbxw_anim_layer ufbxw_anim_stack_get_layer(ufbxw_scene *scene, ufbxw_anim_stack stack, size_t index)
+{
+	ufbxwi_anim_stack *s = ufbxwi_get_anim_stack(scene, stack);
+	if (s && index < s->layers.count) {
+		ufbxw_anim_layer layer = { s->layers.data[index] };
+		return layer;
+	} else {
+		return ufbxw_null_anim_layer;
+	}
+}
+
+ufbxw_abi ufbxw_anim_layer ufbxw_get_default_anim_layer(ufbxw_scene *scene)
+{
+	return scene->default_anim_layer;
+}
+
+ufbxw_abi ufbxw_anim_layer ufbxw_create_anim_layer(ufbxw_scene *scene, ufbxw_anim_stack stack)
+{
+	ufbxw_anim_layer layer = { ufbxw_create_element(scene, UFBXW_ELEMENT_ANIM_LAYER) };
+
+	if (stack.id != 0) {
+		ufbxw_anim_layer_set_stack(scene, layer, stack);
+	}
+
+	return layer;
+}
+
+ufbxw_abi void ufbxw_anim_layer_set_weight(ufbxw_scene *scene, ufbxw_anim_layer layer, ufbxw_real weight)
+{
+	ufbxwi_anim_layer *l = ufbxwi_get_anim_layer(scene, layer);
+	l->weight = weight;
+}
+
+ufbxw_abi void ufbxw_anim_layer_set_stack(ufbxw_scene *scene, ufbxw_anim_layer layer, ufbxw_anim_stack stack)
+{
+	ufbxwi_connect(scene, UFBXW_CONNECTION_ANIM_LAYER_STACK, layer.id, stack.id, UFBXWI_CONNECT_FLAG_DISCONNECT_SRC);
+}
+
+ufbxw_abi ufbxw_anim_curve ufbxw_anim_get_curve(ufbxw_scene *scene, ufbxw_anim_prop anim, size_t index)
+{
+	ufbxwi_anim_prop *p = ufbxwi_get_anim_prop(scene, anim);
+	if (p && index < p->curves.count) {
+		ufbxw_anim_curve curve = { p->curves.data[index].id };
+		return curve;
+	} else {
+		return ufbxw_null_anim_curve;
+	}
+}
+
+ufbxw_abi void ufbxw_anim_add_keyframe_real(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_ktime time, ufbxw_real value, uint32_t type)
+{
+	ufbxwi_anim_prop *ap = ufbxwi_get_anim_prop(scene, anim);
+	if (!ap || ap->curves.count < 1) return;
+
+	ufbxwi_conn *curves = ap->curves.data;
+	ufbxw_anim_curve_add_keyframe(scene, ufbxwi_assert_anim_curve(curves[0].id), time, value, type);
+}
+
+ufbxw_abi void ufbxw_anim_add_keyframe_vec2(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_ktime time, ufbxw_vec2 value, uint32_t type)
+{
+	ufbxwi_anim_prop *ap = ufbxwi_get_anim_prop(scene, anim);
+	if (!ap || ap->curves.count < 2) return;
+
+	ufbxwi_conn *curves = ap->curves.data;
+	ufbxw_anim_curve_add_keyframe(scene, ufbxwi_assert_anim_curve(curves[0].id), time, value.x, type);
+	ufbxw_anim_curve_add_keyframe(scene, ufbxwi_assert_anim_curve(curves[1].id), time, value.y, type);
+}
+
+ufbxw_abi void ufbxw_anim_add_keyframe_vec3(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_ktime time, ufbxw_vec3 value, uint32_t type)
+{
+	ufbxwi_anim_prop *ap = ufbxwi_get_anim_prop(scene, anim);
+	if (!ap || ap->curves.count < 3) return;
+
+	ufbxwi_conn *curves = ap->curves.data;
+	ufbxw_anim_curve_add_keyframe(scene, ufbxwi_assert_anim_curve(curves[0].id), time, value.x, type);
+	ufbxw_anim_curve_add_keyframe(scene, ufbxwi_assert_anim_curve(curves[1].id), time, value.y, type);
+	ufbxw_anim_curve_add_keyframe(scene, ufbxwi_assert_anim_curve(curves[2].id), time, value.z, type);
+}
+
+ufbxw_abi void ufbxw_anim_add_keyframe_real_key(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_keyframe_real key)
+{
+	ufbxwi_anim_prop *ap = ufbxwi_get_anim_prop(scene, anim);
+	if (!ap || ap->curves.count < 1) return;
+
+	ufbxwi_conn *curves = ap->curves.data;
+	ufbxw_anim_curve_add_keyframe_key(scene, ufbxwi_assert_anim_curve(curves[0].id), key);
+}
+
+ufbxw_abi void ufbxw_anim_add_keyframe_vec2_key(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_keyframe_vec2 key)
+{
+	ufbxwi_anim_prop *ap = ufbxwi_get_anim_prop(scene, anim);
+	if (!ap || ap->curves.count < 2) return;
+
+	ufbxwi_conn *curves = ap->curves.data;
+
+	{
+		ufbxw_keyframe_real k = { key.time, key.value.x, key.flags, key.weight_left, key.weight_right, key.slope_left.x, key.slope_right.x };
+		ufbxw_anim_curve_add_keyframe_key(scene, ufbxwi_assert_anim_curve(curves[0].id), k);
+	}
+
+	{
+		ufbxw_keyframe_real k = { key.time, key.value.y, key.flags, key.weight_left, key.weight_right, key.slope_left.y, key.slope_right.y };
+		ufbxw_anim_curve_add_keyframe_key(scene, ufbxwi_assert_anim_curve(curves[1].id), k);
+	}
+}
+
+ufbxw_abi void ufbxw_anim_add_keyframe_vec3_key(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_keyframe_vec3 key)
+{
+	ufbxwi_anim_prop *ap = ufbxwi_get_anim_prop(scene, anim);
+	if (!ap || ap->curves.count < 2) return;
+
+	ufbxwi_conn *curves = ap->curves.data;
+
+	{
+		ufbxw_keyframe_real k = { key.time, key.value.x, key.flags, key.weight_left, key.weight_right, key.slope_left.x, key.slope_right.x };
+		ufbxw_anim_curve_add_keyframe_key(scene, ufbxwi_assert_anim_curve(curves[0].id), k);
+	}
+
+	{
+		ufbxw_keyframe_real k = { key.time, key.value.y, key.flags, key.weight_left, key.weight_right, key.slope_left.y, key.slope_right.y };
+		ufbxw_anim_curve_add_keyframe_key(scene, ufbxwi_assert_anim_curve(curves[1].id), k);
+	}
+
+	{
+		ufbxw_keyframe_real k = { key.time, key.value.z, key.flags, key.weight_left, key.weight_right, key.slope_left.z, key.slope_right.z };
+		ufbxw_anim_curve_add_keyframe_key(scene, ufbxwi_assert_anim_curve(curves[2].id), k);
+	}
+}
+
+ufbxw_abi void ufbxw_anim_set_layer(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_anim_layer layer)
+{
+	ufbxwi_connect(scene, UFBXW_CONNECTION_ANIM_PROP_LAYER, anim.id, layer.id, UFBXWI_CONNECT_FLAG_DISCONNECT_SRC);
+}
+
+ufbxw_abi void ufbxw_anim_curve_add_keyframe(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_ktime time, ufbxw_real value, uint32_t type)
+{
+	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
+	if (!c) return;
+
+	// TODO: Pass by pointer to some implementation function
+	// TODO: Assert that type does not depend on user tangents
+	ufbxw_keyframe_real key = { time, value, type };
+	ufbxw_anim_curve_add_keyframe_key(scene, curve, key);
+}
+
+ufbxw_abi void ufbxw_anim_curve_add_keyframe_key(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_keyframe_real key)
+{
+	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
+	if (!c) return;
+
+	ufbxwi_list_push_copy(&scene->ator, &c->keys, ufbxw_keyframe_real, &key);
 }
 
 ufbxw_abi ufbxw_id ufbxw_get_scene_info_id(ufbxw_scene *scene)

@@ -106,6 +106,11 @@ typedef enum ufbxw_element_type {
 
 	UFBXW_ELEMENT_TEXTURE,
 
+	UFBXW_ELEMENT_ANIM_CURVE,
+	UFBXW_ELEMENT_ANIM_PROP,
+	UFBXW_ELEMENT_ANIM_LAYER,
+	UFBXW_ELEMENT_ANIM_STACK,
+
 	UFBXW_ELEMENT_TEMPLATE,
 	UFBXW_ELEMENT_SCENE_INFO,
 	UFBXW_ELEMENT_GLOBAL_SETTINGS,
@@ -118,24 +123,32 @@ typedef uint64_t ufbxw_id;
 typedef struct ufbxw_node { ufbxw_id id; } ufbxw_node;
 typedef struct ufbxw_mesh { ufbxw_id id; } ufbxw_mesh;
 typedef struct ufbxw_material { ufbxw_id id; } ufbxw_material;
+typedef struct ufbxw_anim_prop { ufbxw_id id; } ufbxw_anim_prop;
+typedef struct ufbxw_anim_curve { ufbxw_id id; } ufbxw_anim_curve;
+typedef struct ufbxw_anim_layer { ufbxw_id id; } ufbxw_anim_layer;
+typedef struct ufbxw_anim_stack { ufbxw_id id; } ufbxw_anim_stack ;
+
+typedef int64_t ufbxw_ktime;
 
 #define ufbxw_null_id ((ufbxw_id)0)
 #define ufbxw_null_node ((ufbxw_node){0})
 #define ufbxw_null_mesh ((ufbxw_mesh){0})
 #define ufbxw_null_material ((ufbxw_material){0})
+#define ufbxw_null_anim_prop ((ufbxw_anim_prop){0})
+#define ufbxw_null_anim_curve ((ufbxw_anim_curve){0})
+#define ufbxw_null_anim_layer ((ufbxw_anim_layer){0})
+#define ufbxw_null_anim_stack ((ufbxw_anim_stack){0})
 
 typedef enum ufbxw_connection_type {
-	UFBXW_CONNECTION_NODE_PARENT = 1, // NODE* -> NODE
-	UFBXW_CONNECTION_NODE_ATTRIBUTE,  // NODE_ATTRIBUTE -> NODE*
-	UFBXW_CONNECTION_MATERIAL,        // MATERIAL* -> NODE*
-	UFBXW_CONNECTION_TEXTURE,         // TEXTURE* -> MATERIAL(property)*
-#if 0 // TODO
-	UFBXW_CONNECTION_ANIM_PROPERTY,   // ANIM_CURVE_NODE -> ANY(property)
-	UFBXW_CONNECTION_ANIM_NODE,       // ANIM_CURVE* -> ANIM_CURVE_NODE
-	UFBXW_CONNECTION_ANIM_LAYER,      // ANIM_CURVE_NODE* -> ANIM_LAYER
-	UFBXW_CONNECTION_ANIM_STACK,      // ANIM_LAYER* -> ANIM_STACK
-#endif
-	UFBXW_CONNECTION_CUSTOM,          // ANY* -> ANY*
+	UFBXW_CONNECTION_NODE_PARENT = 1,  // NODE* -> NODE
+	UFBXW_CONNECTION_NODE_ATTRIBUTE,   // NODE_ATTRIBUTE -> NODE*
+	UFBXW_CONNECTION_MATERIAL,         // MATERIAL* -> NODE*
+	UFBXW_CONNECTION_TEXTURE,          // TEXTURE* -> MATERIAL(property)*
+	UFBXW_CONNECTION_ANIM_PROPERTY,    // ANIM_PROP* -> ANY(property)*
+	UFBXW_CONNECTION_ANIM_CURVE_PROP,  // ANIM_CURVE* -> ANIM_PROP
+	UFBXW_CONNECTION_ANIM_PROP_LAYER,  // ANIM_PROP* -> ANIM_LAYER
+	UFBXW_CONNECTION_ANIM_LAYER_STACK, // ANIM_LAYER* -> ANIM_STACK
+	UFBXW_CONNECTION_CUSTOM,           // ANY* -> ANY*
 
 	UFBXW_CONNECTION_TYPE_COUNT,
 } ufbxw_connection_type;
@@ -170,6 +183,8 @@ typedef struct ufbxw_scene_opts {
 	bool no_default_scene_info;
 	bool no_default_global_settings;
 	bool no_default_document;
+	bool no_default_anim_stack;
+	bool no_default_anim_layer;
 
 	uint32_t _end_zero;
 } ufbxw_scene_opts;
@@ -286,6 +301,75 @@ typedef struct ufbxw_prop_type_desc {
 	ufbxw_string sub_type;
 } ufbxw_prop_type_desc;
 
+typedef enum ufbxw_keyframe_flags {
+	UFBXW_KEYFRAME_INTERPOLATION_CONSTANT = 0x1,
+	UFBXW_KEYFRAME_INTERPOLATION_CONSTANT_NEXT = 0x2,
+	UFBXW_KEYFRAME_INTERPOLATION_LINEAR = 0x4,
+	UFBXW_KEYFRAME_INTERPOLATION_CUBIC = 0x8,
+
+	UFBXW_KEYFRAME_TANGENT_AUTO = 0x10,
+	UFBXW_KEYFRAME_TANGENT_AUTO_UNCLAMPED = 0x20,
+	UFBXW_KEYFRAME_TANGENT_AUTO_LEGACY = 0x40,
+	UFBXW_KEYFRAME_TANGENT_AUTO_LEGACY_CLAMPED = 0x80,
+	UFBXW_KEYFRAME_TANGENT_USER = 0x100,
+	UFBXW_KEYFRAME_TANGENT_BROKEN = 0x200,
+	UFBXW_KEYFRAME_TANGENT_TCB = 0x400,
+
+	UFBXW_KEYFRAME_WEIGHTED_LEFT = 0x1000,
+	UFBXW_KEYFRAME_WEIGHTED_RIGHT = 0x2000,
+	UFBXW_KEYFRAME_WEIGHTED_BOTH = 0x4000,
+
+	UFBXW_KEYFRAME_TANGENT_SHOW_LEFT = 0x10000,
+	UFBXW_KEYFRAME_TANGENT_SHOW_RIGHT = 0x20000,
+	UFBXW_KEYFRAME_TANGENT_SHOW_BOTH = 0x40000,
+} ufbxw_keyframe_flags;
+
+// Simple keyframe types
+typedef enum ufbxw_keyframe_type {
+	UFBXW_KEYFRAME_CONSTANT = UFBXW_KEYFRAME_INTERPOLATION_CONSTANT,
+	UFBXW_KEYFRAME_CONSTANT_NEXT = UFBXW_KEYFRAME_INTERPOLATION_CONSTANT_NEXT,
+	UFBXW_KEYFRAME_LINEAR = UFBXW_KEYFRAME_INTERPOLATION_LINEAR,
+	UFBXW_KEYFRAME_CUBIC_AUTO = UFBXW_KEYFRAME_INTERPOLATION_CUBIC | UFBXW_KEYFRAME_TANGENT_AUTO,
+	UFBXW_KEYFRAME_CUBIC_AUTO_BROKEN = UFBXW_KEYFRAME_INTERPOLATION_CUBIC | UFBXW_KEYFRAME_TANGENT_AUTO | UFBXW_KEYFRAME_TANGENT_BROKEN,
+	UFBXW_KEYFRAME_CUBIC_USER_UNIFIED = UFBXW_KEYFRAME_INTERPOLATION_CUBIC | UFBXW_KEYFRAME_TANGENT_USER,
+	UFBXW_KEYFRAME_CUBIC_USER_BROKEN = UFBXW_KEYFRAME_INTERPOLATION_CUBIC | UFBXW_KEYFRAME_TANGENT_USER | UFBXW_KEYFRAME_TANGENT_BROKEN,
+} ufbxw_keyframe_type;
+
+typedef struct ufbxw_keyframe_real {
+	ufbxw_ktime time;
+	ufbxw_real value;
+	uint32_t flags;
+
+	ufbxw_real weight_left;
+	ufbxw_real weight_right;
+	ufbxw_real slope_left;
+	ufbxw_real slope_right;
+} ufbxw_keyframe_real;
+
+typedef struct ufbxw_keyframe_vec2 {
+	ufbxw_ktime time;
+	ufbxw_vec2 value;
+	uint32_t flags;
+
+	ufbxw_real weight_left;
+	ufbxw_real weight_right;
+	ufbxw_vec2 slope_left;
+	ufbxw_vec2 slope_right;
+} ufbxw_keyframe_vec2;
+
+typedef struct ufbxw_keyframe_vec3 {
+	ufbxw_ktime time;
+	ufbxw_vec3 value;
+	uint32_t flags;
+
+	ufbxw_real weight_left;
+	ufbxw_real weight_right;
+	ufbxw_vec3 slope_left;
+	ufbxw_vec3 slope_right;
+} ufbxw_keyframe_vec3;
+
+#define UFBXW_KTIME_SECOND INT64_C(46186158000)
+
 // --
 
 ufbxw_abi ufbxw_scene *ufbxw_create_scene(const ufbxw_scene_opts *opts);
@@ -336,6 +420,9 @@ ufbxw_abi ufbxw_vec3 ufbxw_get_vec3(ufbxw_scene *scene, ufbxw_id id, const char 
 ufbxw_abi ufbxw_vec4 ufbxw_get_vec4(ufbxw_scene *scene, ufbxw_id id, const char *prop);
 ufbxw_abi ufbxw_string ufbxw_get_string(ufbxw_scene *scene, ufbxw_id id, const char *prop);
 
+ufbxw_abi ufbxw_anim_prop ufbxw_animate_prop(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_anim_layer layer);
+ufbxw_abi ufbxw_anim_prop ufbxw_animate_prop_len(ufbxw_scene *scene, ufbxw_id id, const char *prop, size_t prop_len, ufbxw_anim_layer layer);
+
 // -- Node
 
 ufbxw_abi ufbxw_node ufbxw_create_node(ufbxw_scene *scene);
@@ -354,12 +441,51 @@ ufbxw_abi ufbxw_vec3 ufbxw_node_get_translation(ufbxw_scene *scene, ufbxw_node n
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation(ufbxw_scene *scene, ufbxw_node node);
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling(ufbxw_scene *scene, ufbxw_node node);
 
+ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_translation(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer);
+ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer);
+ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer);
+
 // -- Mesh
 
 ufbxw_abi ufbxw_mesh ufbxw_create_mesh(ufbxw_scene *scene);
 ufbxw_abi ufbxw_mesh ufbxw_as_mesh(ufbxw_id id);
 
 ufbxw_abi void ufbxw_mesh_add_instance(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_node node);
+
+// -- Animation stack
+
+ufbxw_abi ufbxw_anim_stack ufbxw_get_default_anim_stack(ufbxw_scene *scene);
+ufbxw_abi ufbxw_anim_stack ufbxw_create_anim_stack(ufbxw_scene *scene);
+
+ufbxw_abi ufbxw_anim_layer ufbxw_anim_stack_get_layer(ufbxw_scene *scene, ufbxw_anim_stack stack, size_t index);
+
+// -- Animation layer
+
+ufbxw_abi ufbxw_anim_layer ufbxw_get_default_anim_layer(ufbxw_scene *scene);
+ufbxw_abi ufbxw_anim_layer ufbxw_create_anim_layer(ufbxw_scene *scene, ufbxw_anim_stack stack);
+
+ufbxw_abi void ufbxw_anim_layer_set_weight(ufbxw_scene *scene, ufbxw_anim_layer layer, ufbxw_real weight);
+
+ufbxw_abi void ufbxw_anim_layer_set_stack(ufbxw_scene *scene, ufbxw_anim_layer layer, ufbxw_anim_stack stack);
+
+// -- Animation property
+
+ufbxw_abi ufbxw_anim_curve ufbxw_anim_get_curve(ufbxw_scene *scene, ufbxw_anim_prop anim, size_t index);
+
+ufbxw_abi void ufbxw_anim_add_keyframe_real(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_ktime time, ufbxw_real value, uint32_t type);
+ufbxw_abi void ufbxw_anim_add_keyframe_vec2(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_ktime time, ufbxw_vec2 value, uint32_t type);
+ufbxw_abi void ufbxw_anim_add_keyframe_vec3(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_ktime time, ufbxw_vec3 value, uint32_t type);
+
+ufbxw_abi void ufbxw_anim_add_keyframe_real_key(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_keyframe_real key);
+ufbxw_abi void ufbxw_anim_add_keyframe_vec2_key(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_keyframe_vec2 key);
+ufbxw_abi void ufbxw_anim_add_keyframe_vec3_key(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_keyframe_vec3 key);
+
+ufbxw_abi void ufbxw_anim_set_layer(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_anim_layer layer);
+
+// -- Animation curve
+
+ufbxw_abi void ufbxw_anim_curve_add_keyframe(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_ktime time, ufbxw_real value, uint32_t type);
+ufbxw_abi void ufbxw_anim_curve_add_keyframe_key(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_keyframe_real key);
 
 // -- Scene info
 

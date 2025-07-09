@@ -8,7 +8,7 @@ path = os.path.join(script_path, "..", "ufbx_write.c")
 tokens = { "": "TOKEN_EMPTY" }
 
 def to_token(s):
-    return re.sub(r"\s+", "_", s)
+    return re.sub(r"[\s|]+", "_", s)
 
 def collect_line(line):
     for m in re.finditer(r"(?<![\"A-Z])T\"([^\"]*)\"", line):
