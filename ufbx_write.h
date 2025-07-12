@@ -370,6 +370,57 @@ typedef struct ufbxw_keyframe_vec3 {
 
 #define UFBXW_KTIME_SECOND INT64_C(46186158000)
 
+typedef enum ufbxw_attribute_mapping {
+	UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX,
+	UFBXW_ATTRIBUTE_MAPPING_VERTEX,
+	UFBXW_ATTRIBUTE_MAPPING_FACE,
+} ufbxw_attribute_mapping;
+
+// --
+
+typedef size_t ufbxw_int32_stream_fn(void *user, int32_t *dst, size_t offset, size_t count);
+typedef size_t ufbxw_vec3_stream_fn(void *user, ufbxw_vec3 *dst, size_t offset, size_t count);
+
+typedef union ufbxw_buffer_data_imp {
+	ufbxw_int32_stream_fn *stream_int32;
+	ufbxw_vec3_stream_fn *stream_vec3;
+	int32_t const_int32;
+	ufbxw_real const_real;
+	size_t stride;
+	uint64_t transform_id;
+} ufbxw_buffer_data_imp;
+
+typedef struct ufbxw_buffer_data {
+	const void *data;
+	uint16_t type;
+	uint16_t source;
+	uint16_t flags;
+	ufbxw_buffer_data_imp imp;
+} ufbxw_buffer_data;
+
+typedef struct ufbxw_buffer {
+	size_t count;
+	ufbxw_buffer_data data;
+} ufbxw_buffer;
+
+typedef struct ufbxw_buffer_int32 { ufbxw_buffer buffer; } ufbxw_buffer_int32;
+typedef struct ufbxw_buffer_int64 { ufbxw_buffer buffer; } ufbxw_buffer_int64;
+typedef struct ufbxw_buffer_real { ufbxw_buffer buffer; } ufbxw_buffer_real;
+typedef struct ufbxw_buffer_vec2 { ufbxw_buffer buffer; } ufbxw_buffer_vec2;
+typedef struct ufbxw_buffer_vec3 { ufbxw_buffer buffer; } ufbxw_buffer_vec3;
+typedef struct ufbxw_buffer_vec4 { ufbxw_buffer buffer; } ufbxw_buffer_vec4;
+
+ufbxw_abi ufbxw_buffer_int32 ufbxw_int32_array(const int32_t *data, size_t count);
+ufbxw_abi ufbxw_buffer_int32 ufbxw_int32_stream(ufbxw_int32_stream_fn *fn, void *user, size_t count);
+
+ufbxw_abi ufbxw_buffer_int32 ufbxw_int32_const(int32_t value, size_t count);
+
+ufbxw_abi ufbxw_buffer_vec3 ufbxw_vec3_array(const ufbxw_vec3 *data, size_t count);
+ufbxw_abi ufbxw_buffer_vec3 ufbxw_float3_array(const float *data, size_t count);
+
+ufbxw_abi ufbxw_buffer_vec3 ufbxw_vec3_stream(ufbxw_vec3_stream_fn *fn, void *user, size_t count);
+ufbxw_abi ufbxw_buffer_vec3 ufbxw_vec3_defer_stream(ufbxw_vec3_stream_fn *fn, void *user, size_t count);
+
 // --
 
 ufbxw_abi ufbxw_scene *ufbxw_create_scene(const ufbxw_scene_opts *opts);
@@ -449,6 +500,29 @@ ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_scaling(ufbxw_scene *scene, ufbxw_n
 
 ufbxw_abi ufbxw_mesh ufbxw_create_mesh(ufbxw_scene *scene);
 ufbxw_abi ufbxw_mesh ufbxw_as_mesh(ufbxw_id id);
+
+ufbxw_abi void ufbxw_mesh_set_vertices(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_buffer_vec3 vertices);
+
+ufbxw_abi void ufbxw_mesh_set_triangles(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_buffer_int32 indices);
+ufbxw_abi void ufbxw_mesh_set_polygons(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_buffer_int32 indices, ufbxw_buffer_int32 face_sizes);
+ufbxw_abi void ufbxw_mesh_set_fbx_polygon_vertex_order(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_buffer_int32 polygon_vertex_order);
+
+ufbxw_abi void ufbxw_mesh_set_normals(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_buffer_vec3 normals, ufbxw_attribute_mapping mapping);
+
+ufbxw_abi void ufbxw_mesh_set_uvs(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t layer, ufbxw_buffer_vec2 uvs, ufbxw_attribute_mapping mapping);
+ufbxw_abi void ufbxw_mesh_set_tangents(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t layer, ufbxw_buffer_vec3 uvs, ufbxw_attribute_mapping mapping);
+ufbxw_abi void ufbxw_mesh_set_bitangents(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t layer, ufbxw_buffer_vec3 uvs, ufbxw_attribute_mapping mapping);
+
+ufbxw_abi void ufbxw_mesh_set_colors(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t layer, ufbxw_buffer_vec4 colors, ufbxw_attribute_mapping mapping);
+
+ufbxw_abi void ufbxw_mesh_set_constant_material(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t material_index);
+ufbxw_abi void ufbxw_mesh_set_face_materials(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_buffer_int32 material_indices);
+
+// Indices
+ufbxw_abi void ufbxw_mesh_set_triangles(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_buffer_int32 indices);
+ufbxw_abi void ufbxw_mesh_set_fbx_polygon_vertex_order(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_buffer_int32 polygon_vertex_order);
+
+ufbxw_abi void ufbxw_mesh_weld_vertices(ufbxw_scene *scene, ufbxw_mesh mesh);
 
 ufbxw_abi void ufbxw_mesh_add_instance(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_node node);
 

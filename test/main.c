@@ -1,10 +1,16 @@
 #include "../ufbx_write.h"
 
+#define array_count(arr) (sizeof(arr) / sizeof(*(arr)))
+
 static ufbxw_vec3 make_vec3(ufbxw_real x, ufbxw_real y, ufbxw_real z)
 {
 	ufbxw_vec3 v = { x, y, z };
 	return v;
 }
+
+typedef struct {
+	float x, y, z;
+} vector3_t;
 
 int main(int argc, char **argv)
 {
@@ -23,6 +29,26 @@ int main(int argc, char **argv)
 
 	ufbxw_mesh mesh = ufbxw_create_mesh(scene);
 	ufbxw_set_name(scene, mesh.id, "Cube");
+
+	vector3_t vertices[] = {
+		{ -1.0f, 0.0f, -1.0f, },
+		{ +1.0f, 0.0f, -1.0f, },
+		{ -1.0f, 0.0f, +1.0f, },
+		{ +1.0f, 0.0f, +1.0f, },
+	};
+	int32_t indices[] = {
+		0, 1, 3, 2,
+	};
+	int32_t face_sizes[] = {
+		4,
+	};
+
+	ufbxw_mesh_set_vertices(scene, mesh,
+		ufbxw_float3_array(&vertices[0].x, array_count(vertices)));
+
+	ufbxw_mesh_set_polygons(scene, mesh,
+		ufbxw_int32_array(indices, array_count(indices)),
+		ufbxw_int32_array(face_sizes, array_count(face_sizes)));
 
 	ufbxw_mesh_add_instance(scene, mesh, node);
 
@@ -68,7 +94,7 @@ int main(int argc, char **argv)
 	ufbxw_anim_prop anim_s = ufbxw_node_animate_scaling(scene, node, anim_layer);
 	ufbxw_anim_prop anim_i = ufbxw_animate_prop(scene, light, "Intensity", anim_layer);
 
-	for (size_t i = 0; i < 3; i++) {
+	for (size_t i = 0; i < array_count(keys); i++) {
 		ufbxw_ktime time = (ufbxw_ktime)(keys[i].time * (double)UFBXW_KTIME_SECOND);
 		ufbxw_vec3 value_t = keys[i].translation;
 		ufbxw_vec3 value_r = keys[i].rotation;
