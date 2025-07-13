@@ -15,13 +15,15 @@ typedef struct {
 int main(int argc, char **argv)
 {
 	ufbxw_scene *scene = ufbxw_create_scene(NULL);
-	ufbxw_node parent = ufbxw_create_node(scene);
-	ufbxw_set_name(scene, parent.id, "Parent");
 
 	ufbxw_node node = ufbxw_create_node(scene);
 	ufbxw_set_name(scene, node.id, "Node");
 
+#if 0
+	ufbxw_node parent = ufbxw_create_node(scene);
+	ufbxw_set_name(scene, parent.id, "Parent");
 	ufbxw_connect(scene, node.id, parent.id);
+#endif
 
 	ufbxw_vec3 pos = { 1.0f, 2.0f, 3.0f };
 
@@ -66,6 +68,7 @@ int main(int argc, char **argv)
 
 	ufbxw_mesh_add_instance(scene, mesh, node);
 
+#if 0
 	ufbxw_id material = ufbxw_create_element_ex(scene, UFBXW_ELEMENT_MATERIAL, "FbxSurfaceLambert");
 	ufbxw_set_name(scene, material, "MyLambert");
 	ufbxw_set_vec3(scene, material, "DiffuseColor", make_vec3(0.2, 0.4, 0.6));
@@ -120,6 +123,7 @@ int main(int argc, char **argv)
 		ufbxw_anim_add_keyframe_vec3(scene, anim_s, time, value_s, UFBXW_KEYFRAME_CUBIC_AUTO);
 		ufbxw_anim_add_keyframe_real(scene, anim_i, time, value_i, UFBXW_KEYFRAME_LINEAR);
 	}
+#endif
 
 #if 0
 	ufbxw_node parent = ufbxw_create_node(scene);

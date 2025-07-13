@@ -1306,7 +1306,7 @@ uint32_t ufbxwi_hash_token(ufbxwi_token token)
 UFBXWI_LIST_TYPE(ufbxwi_uint32_list, uint32_t);
 
 #define ufbxwi_empty_int_buffer ((ufbxw_int_buffer){NULL,0})
-#define ufbxwi_empty_vec3_buffer ((ufbxw_vec3_buffer){NULL,0})
+#define ufbxwi_empty_vec3_buffer ((ufbxw_vec3_buffer){0})
 
 typedef enum {
 	UFBXWI_BUFFER_TYPE_NONE,
@@ -1326,6 +1326,16 @@ static const uint8_t ufbxwi_buffer_type_size[] = {
 	sizeof(ufbxw_vec2),
 	sizeof(ufbxw_vec3),
 	sizeof(ufbxw_vec4),
+};
+
+static const uint8_t ufbxwi_buffer_type_components[] = {
+	0,
+	1,
+	1,
+	1,
+	2,
+	3,
+	4,
 };
 
 static ufbxwi_forceinline ufbxw_id ufbxwi_make_buffer_id(ufbxwi_buffer_type type, uint32_t generation, size_t index)
@@ -1506,6 +1516,7 @@ static ufbxw_buffer_id ufbxwi_create_ownded_buffer(ufbxwi_buffer_pool *pool, ufb
 	ufbxwi_check_return_err(pool->error, data, 0);
 
 	buffer->state = UFBXWI_BUFFER_STATE_OWNED;
+	buffer->count = count;
 	buffer->data.owned.data = data;
 	buffer->data.owned.alloc_size = alloc_size;
 
@@ -3690,6 +3701,9 @@ typedef struct {
 	ufbxw_save_opts opts;
 
 	ufbxw_scene *scene;
+
+	ufbxwi_buffer_pool buffers;
+
 	ufbxw_write_stream stream;
 
 	uint32_t depth;
@@ -3895,6 +3909,37 @@ static void ufbxwi_ascii_dom_write(ufbxw_save_context *sc, const char *tag, cons
 	ufbxwi_write(sc, "\n", 1);
 }
 
+static void ufbxwi_ascii_dom_write_array(ufbxw_save_context *sc, const char *tag, ufbxw_buffer_id buffer_id)
+{
+	ufbxwi_buffer *buffer = ufbxwi_get_buffer(&sc->buffers, buffer_id);
+	if (!buffer) return;
+
+	ufbxwi_ascii_indent(sc);
+
+	ufbxwi_write(sc, tag, strlen(tag));
+	ufbxwi_write(sc, ": ", 2);
+
+	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer_id);
+	size_t components = ufbxwi_buffer_type_components[type];
+	size_t scalar_count = buffer->count * components;
+
+	char prefix[64];
+	int prefix_len = snprintf(prefix, sizeof(prefix), "*%zu {\n", scalar_count);
+	ufbxwi_write(sc, prefix, (size_t)prefix_len);
+
+	sc->depth++;
+
+	ufbxwi_ascii_indent(sc);
+	ufbxwi_write(sc, "a: ", 3);
+
+	sc->depth--;
+
+	ufbxwi_write(sc, "\n", 1);
+
+	ufbxwi_ascii_indent(sc);
+	ufbxwi_write(sc, "}\n", 2);
+}
+
 static void ufbxwi_ascii_dom_close(ufbxw_save_context *sc)
 {
 	ufbxwi_ascii_indent(sc);
@@ -3961,6 +4006,15 @@ static void ufbxwi_dom_value(ufbxw_save_context *sc, const char *tag, const char
 	}
 
 	va_end(args);
+}
+
+static void ufbxwi_dom_array(ufbxw_save_context *sc, const char *tag, ufbxw_buffer_id buffer)
+{
+	if (sc->opts.ascii) {
+		ufbxwi_ascii_dom_write_array(sc, tag, buffer);
+	} else {
+		// TODO
+	}
 }
 
 enum {
@@ -4164,8 +4218,16 @@ static void ufbxwi_save_template(ufbxw_save_context *sc, ufbxwi_element *element
 	ufbxwi_dom_close(sc);
 }
 
+static void ufbxwi_save_mesh_data(ufbxw_save_context *sc, ufbxwi_element *element)
+{
+	ufbxwi_mesh *mesh = element->data;
+
+	ufbxwi_dom_array(sc, "Vertices", mesh->vertices.id);
+}
+
 static void ufbxwi_save_anim_curve_keys(ufbxw_save_context *sc, ufbxwi_element *element)
 {
+
 }
 
 static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element, uint32_t flags)
@@ -4265,6 +4327,10 @@ static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element,
 		// TODO: Use actual values for these
 		ufbxwi_dom_value(sc, "Shading", "c", 'T');
 		ufbxwi_dom_value(sc, "Culling", "C", "CullingOff");
+	}
+
+	if (type == UFBXW_ELEMENT_MESH) {
+		ufbxwi_save_mesh_data(sc, element);
 	}
 
 	if (type == UFBXW_ELEMENT_LIGHT) {
@@ -4571,6 +4637,11 @@ static void ufbxwi_save_init(ufbxw_save_context *sc)
 static bool ufbxwi_save_imp(ufbxw_save_context *sc)
 {
 	if (sc->opts.version == 0) sc->opts.version = 7500;
+
+	// TODO: Proper hanling
+	memcpy(&sc->buffers, &sc->scene->buffers, sizeof(ufbxwi_buffer_pool));
+	sc->buffers.ator = &sc->ator;
+	sc->buffers.error = &sc->error;
 
 	size_t buffer_size = 0x10000;
 	sc->buffer = ufbxwi_alloc(&sc->ator, char, buffer_size);
@@ -5151,7 +5222,7 @@ ufbxw_abi void ufbxw_mesh_set_fbx_polygon_vertex_order(ufbxw_scene *scene, ufbxw
 ufbxw_vec3_buffer ufbxw_mesh_get_vertices(ufbxw_scene *scene, ufbxw_mesh mesh)
 {
 	ufbxwi_mesh *md = ufbxwi_get_mesh_data(scene, mesh);
-	ufbxwi_check_return(md);
+	ufbxwi_check_return(md, ufbxwi_empty_vec3_buffer);
 }
 
 ufbxw_int_buffer ufbxw_mesh_get_vertex_indices(ufbxw_scene *scene, ufbxw_mesh mesh);
