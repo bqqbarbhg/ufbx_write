@@ -4577,31 +4577,6 @@ static void ufbxwi_save_connections(ufbxw_save_context *sc)
 		}
 	}
 
-#if 0
-	ufbxwi_for_list(ufbxwi_element, dst_element, scene->elements) {
-		ufbxw_id dst_id = dst_element->id;
-		ufbxw_element_type dst_type = ufbxwi_id_type(dst_id);
-
-		ufbxwi_for_list(ufbxw_id, p_src_id, dst_element->connections_src) {
-			ufbxw_id src_id = *p_src_id;
-			ufbxwi_element *src_element = ufbxwi_get_element(scene, src_id);
-			ufbxw_assert(src_element);
-
-			if (sc->opts.ascii) {
-				const ufbxwi_element_type *src_et = &scene->element_types.data[src_element->type_id];
-				const ufbxwi_element_type *dst_et = &scene->element_types.data[dst_element->type_id];
-				const char *src_type = scene->string_pool.tokens.data[src_et->fbx_type].data;
-				const char *dst_type = scene->string_pool.tokens.data[dst_et->fbx_type].data;
-				const char *src_name = src_element->name.data;
-				const char *dst_name = dst_element->name.data;
-				ufbxwi_dom_comment(sc, "\n\t;%s::%s, %s::%s\n", src_type, src_name, dst_type, dst_name);
-			}
-
-			ufbxwi_dom_value(sc, "C", "CLL", "OO", src_id, dst_id);
-		}
-	}
-#endif
-
 	ufbxwi_dom_close(sc);
 }
 
