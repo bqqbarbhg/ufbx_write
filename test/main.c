@@ -12,6 +12,17 @@ typedef struct {
 	float x, y, z;
 } vector3_t;
 
+static size_t vec3_count_stream(void *user, ufbxw_vec3 *dst, size_t dst_size, size_t offset)
+{
+	for (size_t i = 0; i < dst_size; i++) {
+		ufbxw_real t = (ufbxw_real)(offset + i);
+		dst[i].x = t + 0.25;
+		dst[i].y = t + 0.5;
+		dst[i].z = t + 0.75;
+	}
+	return dst_size;
+}
+
 int main(int argc, char **argv)
 {
 	ufbxw_scene *scene = ufbxw_create_scene(NULL);
@@ -19,14 +30,11 @@ int main(int argc, char **argv)
 	ufbxw_node node = ufbxw_create_node(scene);
 	ufbxw_set_name(scene, node.id, "Node");
 
-#if 0
 	ufbxw_node parent = ufbxw_create_node(scene);
 	ufbxw_set_name(scene, parent.id, "Parent");
-	ufbxw_connect(scene, node.id, parent.id);
-#endif
+	ufbxw_node_set_parent(scene, node, parent);
 
 	ufbxw_vec3 pos = { 1.0f, 2.0f, 3.0f };
-
 	ufbxw_node_set_translation(scene, node, pos);
 
 	ufbxw_mesh mesh = ufbxw_create_mesh(scene);
@@ -47,6 +55,9 @@ int main(int argc, char **argv)
 	int32_t triangle_indices[] = {
 		0, 1, 2, 2, 1, 3,
 	};
+	int32_t polygon_vertices[] = {
+		0, 2, 3, ~1,
+	};
 
 	ufbxw_vec3_buffer vertex_buffer = ufbxw_create_vec3_buffer(scene, array_count(vertices));
 
@@ -59,12 +70,8 @@ int main(int argc, char **argv)
 
 	ufbxw_mesh_set_vertices(scene, mesh, vertex_buffer);
 
-	ufbxw_mesh_set_polygons(scene, mesh,
-		ufbxw_copy_int_array(scene, indices, array_count(indices)),
-		ufbxw_copy_int_array(scene, face_offsets, array_count(face_offsets)));
-
-	ufbxw_mesh_set_triangles(scene, mesh,
-		ufbxw_external_int_array(scene, triangle_indices, array_count(triangle_indices)));
+	ufbxw_mesh_set_fbx_polygon_vertex_index(scene, mesh,
+		ufbxw_external_int_array(scene, polygon_vertices, array_count(polygon_vertices)));
 
 	ufbxw_mesh_add_instance(scene, mesh, node);
 
