@@ -39,16 +39,30 @@ int main(int argc, char **argv)
 	int32_t indices[] = {
 		0, 1, 3, 2,
 	};
-	int32_t face_sizes[] = {
-		4,
+	int32_t face_offsets[] = {
+		0, 4,
+	};
+	int32_t triangle_indices[] = {
+		0, 1, 2, 2, 1, 3,
 	};
 
-	ufbxw_mesh_set_vertices(scene, mesh,
-		ufbxw_float3_array(&vertices[0].x, array_count(vertices)));
+	ufbxw_vec3_buffer vertex_buffer = ufbxw_create_vec3_buffer(scene, array_count(vertices));
+
+	ufbxw_vec3_list dst_data = ufbxw_edit_vec3_buffer(scene, vertex_buffer);
+	for (size_t i = 0; i < array_count(vertices); i++) {
+		dst_data.data[i].x = vertices[i].x;
+		dst_data.data[i].y = vertices[i].y;
+		dst_data.data[i].z = vertices[i].z;
+	}
+
+	ufbxw_mesh_set_vertices(scene, mesh, vertex_buffer);
 
 	ufbxw_mesh_set_polygons(scene, mesh,
-		ufbxw_int32_array(indices, array_count(indices)),
-		ufbxw_int32_array(face_sizes, array_count(face_sizes)));
+		ufbxw_copy_int_array(scene, indices, array_count(indices)),
+		ufbxw_copy_int_array(scene, face_offsets, array_count(face_offsets)));
+
+	ufbxw_mesh_set_triangles(scene, mesh,
+		ufbxw_external_int_array(scene, triangle_indices, array_count(triangle_indices)));
 
 	ufbxw_mesh_add_instance(scene, mesh, node);
 
