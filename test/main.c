@@ -71,7 +71,7 @@ int main(int argc, char **argv)
 	ufbxw_mesh_set_vertices(scene, mesh, vertex_buffer);
 
 	ufbxw_mesh_set_fbx_polygon_vertex_index(scene, mesh,
-		ufbxw_external_int_array(scene, polygon_vertices, array_count(polygon_vertices)));
+		ufbxw_view_int_array(scene, polygon_vertices, array_count(polygon_vertices)));
 
 	ufbxw_mesh_add_instance(scene, mesh, node);
 

@@ -1352,6 +1352,10 @@ typedef enum {
 	UFBXWI_BUFFER_STATE_STREAM,
 } ufbxwi_buffer_state;
 
+typedef enum {
+	UFBXWI_BUFFER_FLAG_TEMPORARY = 0x1,
+} ufbxwi_buffer_state;
+
 typedef union {
 	ufbxw_int_stream_fn *int_fn;
 	ufbxw_vec3_stream_fn *vec3_fn;
@@ -1361,6 +1365,7 @@ typedef struct {
 	ufbxw_buffer_id id;
 	ufbxwi_buffer_state state;
 	size_t count;
+	uint32_t flags;
 
 	uint32_t refcount;
 	uint32_t user_refcount;
@@ -1580,13 +1585,14 @@ static ufbxw_buffer_id ufbxwi_create_copy_buffer(ufbxwi_buffer_pool *pool, ufbxw
 	return id;
 }
 
-static ufbxw_buffer_id ufbxwi_create_external_buffer(ufbxwi_buffer_pool *pool, ufbxwi_buffer_type type, const void *data, size_t count)
+static ufbxw_buffer_id ufbxwi_create_external_buffer(ufbxwi_buffer_pool *pool, ufbxwi_buffer_type type, const void *data, size_t count, uint32_t flags)
 {
 	ufbxw_buffer_id id = ufbxwi_create_buffer(pool, type);
 	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
 	if (!buffer) return id;
 
 	buffer->state = UFBXWI_BUFFER_STATE_EXTERNAL;
+	buffer->flags = flags;
 	buffer->data.external.data = data;
 	buffer->data.external.data_size = count * ufbxwi_buffer_type_infos[type].size;
 	buffer->count = count;
@@ -1658,19 +1664,6 @@ static void ufbxwi_set_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id *p_dst, 
 	*p_dst = src;
 }
 
-static void ufbxwi_set_buffer_from_user(ufbxwi_buffer_pool *pool, ufbxw_buffer_id *p_dst, ufbxw_buffer_id src)
-{
-	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, src);
-	ufbxw_assert(buffer);
-	ufbxw_assert(buffer->user_refcount > 0);
-	ufbxw_assert(buffer->refcount > 0);
-	buffer->user_refcount--;
-
-	if (*p_dst == src) return;
-	ufbxwi_free_buffer(pool, *p_dst);
-	*p_dst = src;
-}
-
 static bool ufbxwi_make_buffer_owned(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
 {
 	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
@@ -1690,11 +1683,29 @@ static bool ufbxwi_make_buffer_owned(ufbxwi_buffer_pool *pool, ufbxw_buffer_id i
 	}
 
 	ufbxwi_reset_buffer(pool, buffer);
+	buffer->flags &= ~UFBXWI_BUFFER_FLAG_TEMPORARY;
 	buffer->state = UFBXWI_BUFFER_STATE_OWNED;
 	buffer->data.owned.data = data;
 	buffer->data.owned.alloc_size = alloc_size;
 
 	return true;
+}
+
+static void ufbxwi_set_buffer_from_user(ufbxwi_buffer_pool *pool, ufbxw_buffer_id *p_dst, ufbxw_buffer_id src)
+{
+	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, src);
+	ufbxw_assert(buffer);
+	ufbxw_assert(buffer->user_refcount > 0);
+	ufbxw_assert(buffer->refcount > 0);
+	buffer->user_refcount--;
+
+	if (buffer->flags & UFBXWI_BUFFER_FLAG_TEMPORARY) {
+		ufbxwi_make_buffer_owned(pool, src);
+	}
+
+	if (*p_dst == src) return;
+	ufbxwi_free_buffer(pool, *p_dst);
+	*p_dst = src;
 }
 
 static ufbxwi_forceinline ufbxw_buffer_id ufbxwi_to_user_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
@@ -4831,13 +4842,19 @@ ufbxw_abi ufbxw_int_buffer ufbxw_copy_int_array(ufbxw_scene *scene, const int32_
 	return ufbxwi_to_user_int_buffer(&scene->buffers, id);
 }
 
-ufbxw_abi ufbxw_int_buffer ufbxw_external_int_array(ufbxw_scene *scene, const int32_t *data, size_t count)
+ufbxw_abi ufbxw_int_buffer ufbxw_view_int_array(ufbxw_scene *scene, const int32_t *data, size_t count)
 {
-	ufbxw_buffer_id id = ufbxwi_create_external_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_INT, data, count);
+	ufbxw_buffer_id id = ufbxwi_create_external_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_INT, data, count, UFBXWI_BUFFER_FLAG_TEMPORARY);
 	return ufbxwi_to_user_int_buffer(&scene->buffers, id);
 }
 
-ufbxw_abi ufbxw_int_buffer ufbxw_defer_int_stream(ufbxw_scene *scene, ufbxw_int_stream_fn *fn, void *user, size_t count)
+ufbxw_abi ufbxw_int_buffer ufbxw_external_int_array(ufbxw_scene *scene, const int32_t *data, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_external_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_INT, data, count, 0);
+	return ufbxwi_to_user_int_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_int_buffer ufbxw_external_int_stream(ufbxw_scene *scene, ufbxw_int_stream_fn *fn, void *user, size_t count)
 {
 	ufbxwi_stream_fn stream_fn;
 	stream_fn.int_fn = fn;
@@ -4857,13 +4874,19 @@ ufbxw_abi ufbxw_vec3_buffer ufbxw_copy_vec3_array(ufbxw_scene *scene, const ufbx
 	return ufbxwi_to_user_vec3_buffer(&scene->buffers, id);
 }
 
-ufbxw_abi ufbxw_vec3_buffer ufbxw_external_vec3_array(ufbxw_scene *scene, const ufbxw_vec3 *data, size_t count)
+ufbxw_abi ufbxw_vec3_buffer ufbxw_view_vec3_array(ufbxw_scene *scene, const ufbxw_vec3 *data, size_t count)
 {
-	ufbxw_buffer_id id = ufbxwi_create_external_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC3, data, count);
+	ufbxw_buffer_id id = ufbxwi_create_external_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC3, data, count, UFBXWI_BUFFER_FLAG_TEMPORARY);
 	return ufbxwi_to_user_vec3_buffer(&scene->buffers, id);
 }
 
-ufbxw_abi ufbxw_vec3_buffer ufbxw_defer_vec3_stream(ufbxw_scene *scene, ufbxw_vec3_stream_fn *fn, void *user, size_t count)
+ufbxw_abi ufbxw_vec3_buffer ufbxw_external_vec3_array(ufbxw_scene *scene, const ufbxw_vec3 *data, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_external_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC3, data, count, 0);
+	return ufbxwi_to_user_vec3_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_vec3_buffer ufbxw_external_vec3_stream(ufbxw_scene *scene, ufbxw_vec3_stream_fn *fn, void *user, size_t count)
 {
 	ufbxwi_stream_fn stream_fn;
 	stream_fn.vec3_fn = fn;
@@ -5327,7 +5350,7 @@ ufbxw_abi void ufbxw_mesh_set_triangles(ufbxw_scene *scene, ufbxw_mesh mesh, ufb
 	ufbxw_assert(index_count % 3 == 0);
 
 	size_t tri_count = index_count / 3;
-	ufbxw_int_buffer face_offsets = ufbxw_defer_int_stream(scene, &ufbxwi_stream_triangle_faces, NULL, tri_count + 1);
+	ufbxw_int_buffer face_offsets = ufbxw_external_int_stream(scene, &ufbxwi_stream_triangle_faces, NULL, tri_count + 1);
 	ufbxwi_check(face_offsets.id);
 
 	ufbxwi_mesh *md = ufbxwi_get_mesh_data(scene, mesh);
