@@ -41,22 +41,42 @@ int main(int argc, char **argv)
 	ufbxw_set_name(scene, mesh.id, "Cube");
 
 	vector3_t vertices[] = {
-		{ -1.0f, 0.0f, -1.0f, },
-		{ +1.0f, 0.0f, -1.0f, },
-		{ -1.0f, 0.0f, +1.0f, },
-		{ +1.0f, 0.0f, +1.0f, },
+		{ -1.0f, 0.0f, 0.0f, },
+		{ +1.0f, 0.0f, 0.0f, },
+		{ -1.0f, 0.0f, 1.0f, },
+		{ +1.0f, 0.0f, 1.0f, },
+		{ -1.0f, 0.0f, 2.0f, },
+		{ +1.0f, 0.0f, 2.0f, },
 	};
 	int32_t indices[] = {
-		0, 1, 3, 2,
+		0, 2, 3, 1, 2, 4, 5, 3,
 	};
 	int32_t face_offsets[] = {
-		0, 4,
-	};
-	int32_t triangle_indices[] = {
-		0, 1, 2, 2, 1, 3,
+		4, 8,
 	};
 	int32_t polygon_vertices[] = {
-		0, 2, 3, ~1,
+		0, 2, 3, ~1, 2, 4, 5, ~3,
+	};
+	int32_t triangle_indices[] = {
+		0, 2, 1, 1, 2, 3, 2, 4, 3, 3, 4, 5,
+	};
+	ufbxw_vec3 normals[] = {
+		{ 0.0f, 1.0f, 0.0f },
+		{ 0.0f, 1.0f, 0.0f },
+		{ 0.0f, 1.0f, 0.0f },
+		{ 0.0f, 1.0f, 0.0f },
+		{ 0.0f, 1.0f, 0.0f },
+		{ 0.0f, 1.0f, 0.0f },
+	};
+	ufbxw_vec2 uvs[] = {
+		{ 0.0f, 0.0f, },
+		{ 0.0f, 0.5f, },
+		{ 1.0f, 0.5f, },
+		{ 1.0f, 0.0f, },
+		{ 0.0f, 0.5f, },
+		{ 0.0f, 1.0f, },
+		{ 1.0f, 1.0f, },
+		{ 1.0f, 0.5f, },
 	};
 
 	ufbxw_vec3_buffer vertex_buffer = ufbxw_create_vec3_buffer(scene, array_count(vertices));
@@ -70,8 +90,26 @@ int main(int argc, char **argv)
 
 	ufbxw_mesh_set_vertices(scene, mesh, vertex_buffer);
 
-	ufbxw_mesh_set_fbx_polygon_vertex_index(scene, mesh,
-		ufbxw_view_int_array(scene, polygon_vertices, array_count(polygon_vertices)));
+	ufbxw_int_buffer indices_buf = ufbxw_view_int_array(scene, indices, array_count(indices));
+	ufbxw_int_buffer offsets_buf = ufbxw_view_int_array(scene, face_offsets, array_count(face_offsets));
+	ufbxw_mesh_set_polygons(scene, mesh, indices_buf, offsets_buf);
+
+	ufbxw_vec3_buffer normals_buffer = ufbxw_view_vec3_array(scene, normals, array_count(normals));
+	ufbxw_mesh_set_normals(scene, mesh, normals_buffer, UFBXW_ATTRIBUTE_MAPPING_VERTEX);
+
+	ufbxw_vec2_buffer uvs_buffer = ufbxw_external_vec2_array(scene, uvs, array_count(uvs));
+	ufbxw_mesh_set_uvs(scene, mesh, 0, uvs_buffer, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
+
+#if 0
+
+	ufbxw_mesh_attribute_desc desc = { 0 };
+	desc.name = ufbxw_str("UV Map");
+	desc.values = uvs_buffer.id;
+	desc.mapping = UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX;
+	desc.generate_indices = true;
+
+	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_UV, 0, &desc);
+#endif
 
 	ufbxw_mesh_add_instance(scene, mesh, node);
 

@@ -69,6 +69,12 @@
 	#define ufbxwi_analysis_assert(cond) (void)0
 #endif
 
+#if defined(UFBXW_REGRESSION) || defined(UFBXW_DEV) || defined(UFBXW_UBSAN)
+	#define ufbxwi_dev_assert(cond) ufbxw_assert(cond)
+#else
+	#define ufbxwi_dev_assert(cond) (void)0
+#endif
+
 #define ufbxwi_unreachable(reason) do { ufbxw_assert(0 && reason); } while (0)
 
 #if defined(__GNUC__) && !defined(__clang__)
@@ -282,6 +288,64 @@ static ufbxwi_forceinline size_t ufbxwi_max_sz(size_t a, size_t b) { return a < 
 #define ufbxwi_arraycount(arr) (sizeof(arr) / sizeof(*(arr)))
 #define ufbxwi_for(m_type, m_name, m_begin, m_num) for (m_type *m_name = m_begin, *m_name##_end = ufbxwi_add_ptr(m_name, m_num); m_name != m_name##_end; m_name++)
 #define ufbxwi_for_ptr(m_type, m_name, m_begin, m_num) for (m_type **m_name = m_begin, **m_name##_end = ufbxwi_add_ptr(m_name, m_num); m_name != m_name##_end; m_name++)
+
+typedef bool ufbxwi_less_fn(void *user, const void *a, const void *b);
+
+static ufbxwi_forceinline void ufbxwi_swap(void *a, void *b, size_t size)
+{
+#if UFBXWI_HAS_ALIASING && !defined(__CHERI__) // CHERI needs to copy pointer metadata tag bits..
+	ufbxwi_dev_assert(size % 4 == 0 && (uintptr_t)a % 4 == 0 && (uintptr_t)b % 4 == 0);
+	char *ca = (char*)a, *cb = (char*)b;
+	for (size_t i = 0; i < size; i += 4, ca += 4, cb += 4) {
+		ufbxwi_aliasing_u32 *ua = (ufbxwi_aliasing_u32*)ca, *ub = (ufbxwi_aliasing_u32*)cb;
+		uint32_t va = *ua, vb = *ub;
+		*ua = vb;
+		*ub = va;
+	}
+#else
+	union {
+		void *align_ptr;
+		uintptr_t align_uptr;
+		uint64_t align_u64;
+		char data[256];
+	} tmp;
+	ufbxwi_dev_assert(size <= sizeof(tmp));
+	memcpy(tmp.data, a, size);
+	memcpy(a, b, size);
+	memcpy(b, tmp.data, size);
+#endif
+}
+
+static ufbxwi_noinline void ufbxwi_unstable_sort(void *in_data, size_t size, size_t stride, ufbxwi_less_fn *less_fn, void *less_user)
+{
+	if (size <= 1) return;
+
+	char *data = (char*)in_data;
+	size_t start = (size - 1) >> 1;
+	size_t end = size - 1;
+	for (;;) {
+		size_t root = start;
+		size_t child;
+		while ((child = root*2 + 1) <= end) {
+			size_t next = less_fn(less_user, data + child * stride, data + root * stride) ? root : child;
+			if (child + 1 <= end && less_fn(less_user, data + next * stride, data + (child + 1) * stride)) {
+				next = child + 1;
+			}
+			if (next == root) break;
+			ufbxwi_swap(data + root * stride, data + next * stride, stride);
+			root = next;
+		}
+
+		if (start > 0) {
+			start--;
+		} else if (end > 0) {
+			ufbxwi_swap(data + end * stride, data, stride);
+			end--;
+		} else {
+			break;
+		}
+	}
+}
 
 // WARNING: Evaluates `m_list` twice!
 #define ufbxwi_for_list(m_type, m_name, m_list) for (m_type *m_name = (m_list).data, *m_name##_end = ufbxwi_add_ptr(m_name, (m_list).count); m_name != m_name##_end; m_name++)
@@ -1341,6 +1405,21 @@ static ufbxwi_forceinline ufbxw_id ufbxwi_make_buffer_id(ufbxwi_buffer_type type
 	return (ufbxw_id)(((uint64_t)type << 48) | ((uint64_t)generation << 32) | (index));
 }
 
+typedef struct {
+	const void *data;
+	size_t count;
+} ufbxwi_void_span;
+
+typedef struct {
+	void *data;
+	size_t count;
+} ufbxwi_mutable_void_span;
+
+typedef struct {
+	const int32_t *data;
+	size_t count;
+} ufbxwi_int_span;
+
 #define ufbxwi_buffer_id_index(id) (uint32_t)(id)
 #define ufbxwi_buffer_id_type(id) (ufbxw_element_type)(((id) >> 48))
 #define ufbxwi_buffer_id_generation(id) (uint32_t)(((id) >> 32) & 0xffff)
@@ -1358,6 +1437,8 @@ typedef enum {
 
 typedef union {
 	ufbxw_int_stream_fn *int_fn;
+	ufbxw_real_stream_fn *real_fn;
+	ufbxw_vec2_stream_fn *vec2_fn;
 	ufbxw_vec3_stream_fn *vec3_fn;
 } ufbxwi_stream_fn;
 
@@ -1372,6 +1453,12 @@ typedef struct {
 
 	ufbxw_buffer_deleter_fn *deleter_fn;
 	void *deleter_user;
+
+	void *stream_data;
+	uint32_t stream_count;
+	uint32_t stream_capacity;
+	uint32_t stream_offset;
+	uint32_t stream_read_count;
 
 	union {
 		struct {
@@ -1388,11 +1475,6 @@ typedef struct {
 		} stream;
 	} data;
 } ufbxwi_buffer;
-
-typedef struct {
-	const void *data;
-	size_t count;
-} ufbxwi_void_span;
 
 UFBXW_LIST_TYPE(ufbxwi_buffer_list, ufbxwi_buffer);
 
@@ -1426,6 +1508,24 @@ static ufbxwi_forceinline size_t ufbxwi_get_buffer_size(ufbxwi_buffer_pool *pool
 	return buffer ? buffer->count : 0;
 }
 
+static ufbxwi_mutable_void_span ufbxwi_get_buffer_owned_data(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
+{
+	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
+	ufbxwi_mutable_void_span result = { NULL, 0 };
+	if (buffer->state == UFBXWI_BUFFER_STATE_OWNED) {
+		result.data = buffer->data.owned.data;
+		result.count = buffer->count;
+	}
+	return result;
+}
+
+static bool ufbxwi_is_buffer_streaming(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
+{
+	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
+	if (!buffer) return false;
+	return buffer->state == UFBXWI_BUFFER_STATE_STREAM;
+}
+
 static void ufbxwi_reset_buffer(ufbxwi_buffer_pool *pool, ufbxwi_buffer *buffer)
 {
 	if (buffer->deleter_fn != NULL) {
@@ -1451,54 +1551,59 @@ static size_t ufbxwi_buffer_stream_read(void *dst, size_t dst_count, size_t offs
 	switch (type) {
 	case UFBXWI_BUFFER_TYPE_INT:
 		return fn.int_fn(user, dst, dst_count, offset);
-		break;
+	case UFBXWI_BUFFER_TYPE_REAL:
+		return fn.real_fn(user, dst, dst_count, offset);
+	case UFBXWI_BUFFER_TYPE_VEC2:
+		return fn.vec2_fn(user, dst, dst_count, offset);
 	case UFBXWI_BUFFER_TYPE_VEC3:
 		return fn.vec3_fn(user, dst, dst_count, offset);
-		break;
 	}
 	return SIZE_MAX;
 }
 
-static bool ufbxwi_buffer_read_to(ufbxwi_buffer_pool *pool, ufbxwi_buffer *buffer, void *dst, size_t dst_size)
+static size_t ufbxwi_buffer_read_to(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id, void *dst, size_t dst_count, size_t offset)
 {
-	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer->id);
+	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(id);
+	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
 	size_t type_size = ufbxwi_buffer_type_infos[type].size;
+	if (!buffer || dst_count == 0) return 0;
 
-	size_t read_size = buffer->count * type_size;
-	ufbxw_assert(dst_size >= read_size);
+	ufbxw_assert(offset + dst_count <= buffer->count);
 
 	switch (buffer->state) {
 	case UFBXWI_BUFFER_STATE_NONE:
-		return false;
+		return 0;
 	case UFBXWI_BUFFER_STATE_OWNED:
-		memcpy(dst, buffer->data.owned.data, read_size);
-		return true;
+		memcpy(dst, (char*)buffer->data.owned.data + offset * type_size, dst_count * type_size);
+		return dst_count;
 	case UFBXWI_BUFFER_STATE_EXTERNAL:
-		memcpy(dst, buffer->data.external.data, buffer->count * type_size);
-		return true;
+		memcpy(dst, (char*)buffer->data.external.data + offset * type_size, dst_count * type_size);
+		return dst_count;
 	case UFBXWI_BUFFER_STATE_STREAM:
-		for (size_t offset = 0; offset < buffer->count; ) {
-			void *dst_off = (char*)dst + offset * type_size;
-			size_t dst_count = buffer->count - offset;
-			size_t num_read = ufbxwi_buffer_stream_read(dst_off, dst_count, offset, type, buffer->data.stream.fn, buffer->data.stream.user);
-			if (num_read == 0 || num_read == SIZE_MAX) return false;
+		for (size_t off = 0; off < dst_count; ) {
+			void *dst_off = (char*)dst + off * type_size;
+			size_t off_count = dst_count - off;
+			size_t num_read = ufbxwi_buffer_stream_read(dst_off, off_count, offset + off, type, buffer->data.stream.fn, buffer->data.stream.user);
+			if (num_read == 0 || num_read == SIZE_MAX) return off;
 			ufbxw_assert(num_read <= dst_count);
-			offset += num_read;
+			off += num_read;
 		}
-		return true;
+		return dst_count;
 	}
 
-	return false;
+	return 0;
 }
 
-static ufbxwi_void_span ufbxwi_buffer_read(ufbxwi_buffer_pool *pool, ufbxwi_buffer *buffer, void *temp, size_t temp_size, size_t offset)
+static ufbxwi_void_span ufbxwi_buffer_read(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id, void *temp, size_t temp_size, size_t offset)
 {
-	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer->id);
+	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(id);
+	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
 	size_t type_size = ufbxwi_buffer_type_infos[type].size;
 
 	ufbxw_assert(offset <= buffer->count);
 
 	ufbxwi_void_span result = { NULL, 0 };
+	if (!buffer) return result;
 
 	ufbxw_assert(temp_size >= type_size);
 	size_t temp_count = temp_size / type_size;
@@ -1553,7 +1658,7 @@ static ufbxw_buffer_id ufbxwi_create_buffer(ufbxwi_buffer_pool *pool, ufbxwi_buf
 	return id;
 }
 
-static ufbxw_buffer_id ufbxwi_create_ownded_buffer(ufbxwi_buffer_pool *pool, ufbxwi_buffer_type type, size_t count)
+static ufbxw_buffer_id ufbxwi_create_owned_buffer(ufbxwi_buffer_pool *pool, ufbxwi_buffer_type type, size_t count)
 {
 	ufbxw_buffer_id id = ufbxwi_create_buffer(pool, type);
 	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
@@ -1574,7 +1679,7 @@ static ufbxw_buffer_id ufbxwi_create_ownded_buffer(ufbxwi_buffer_pool *pool, ufb
 
 static ufbxw_buffer_id ufbxwi_create_copy_buffer(ufbxwi_buffer_pool *pool, ufbxwi_buffer_type type, const void *data, size_t count)
 {
-	ufbxw_buffer_id id = ufbxwi_create_ownded_buffer(pool, type, count);
+	ufbxw_buffer_id id = ufbxwi_create_owned_buffer(pool, type, count);
 	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
 	if (!buffer) return id;
 
@@ -1619,6 +1724,12 @@ static void ufbxwi_delete_buffer_imp(ufbxwi_buffer_pool *pool, ufbxw_buffer_id i
 	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
 	if (!buffer) return;
 
+	if (buffer->state == UFBXWI_BUFFER_STATE_OWNED) {
+		ufbxwi_free(pool->ator, buffer->data.owned.data);
+	} else if (buffer->state == UFBXWI_BUFFER_STATE_STREAM) {
+		ufbxwi_free(pool->ator, buffer->stream_data);
+	}
+
 	uint32_t generation = ufbxwi_buffer_id_generation(buffer->id);
 	memset(buffer, 0, sizeof(ufbxwi_buffer));
 	buffer->id = ufbxwi_make_buffer_id(UFBXWI_BUFFER_TYPE_NONE, generation, 0);
@@ -1640,6 +1751,16 @@ static void ufbxwi_free_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
 	if (--buffer->refcount == 0) {
 		ufbxwi_delete_buffer_imp(pool, id);
 	}
+}
+
+static void ufbxwi_buffer_set_deleter(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id, ufbxw_buffer_deleter_fn *fn, void *user)
+{
+	ufbxwi_buffer *buf = ufbxwi_get_buffer(pool, id);
+	if (!buf) return;
+
+	ufbxw_assert(buf->deleter_fn == NULL);
+	buf->deleter_fn = fn;
+	buf->deleter_user = user;
 }
 
 static ufbxwi_forceinline ufbxw_buffer_id ufbxwi_make_user_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id src)
@@ -1675,8 +1796,7 @@ static bool ufbxwi_make_buffer_owned(ufbxwi_buffer_pool *pool, ufbxw_buffer_id i
 	void *data = ufbxwi_alloc_size(pool->ator, type_size, buffer->count, &alloc_size);
 	ufbxwi_check_return_err(pool->error, data, false);
 
-	size_t read_size = buffer->count * type_size;
-	if (!ufbxwi_buffer_read_to(pool, buffer, data, read_size)) {
+	if (ufbxwi_buffer_read_to(pool, buffer->id, data, buffer->count, 0) != buffer->count) {
 		ufbxwi_free(pool->ator, data);
 		ufbxwi_fail_err(pool->error, "failed to make buffer owned");
 		return false;
@@ -1693,14 +1813,16 @@ static bool ufbxwi_make_buffer_owned(ufbxwi_buffer_pool *pool, ufbxw_buffer_id i
 
 static void ufbxwi_set_buffer_from_user(ufbxwi_buffer_pool *pool, ufbxw_buffer_id *p_dst, ufbxw_buffer_id src)
 {
-	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, src);
-	ufbxw_assert(buffer);
-	ufbxw_assert(buffer->user_refcount > 0);
-	ufbxw_assert(buffer->refcount > 0);
-	buffer->user_refcount--;
+	if (src) {
+		ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, src);
+		ufbxw_assert(buffer);
+		ufbxw_assert(buffer->user_refcount > 0);
+		ufbxw_assert(buffer->refcount > 0);
+		buffer->user_refcount--;
 
-	if (buffer->flags & UFBXWI_BUFFER_FLAG_TEMPORARY) {
-		ufbxwi_make_buffer_owned(pool, src);
+		if (buffer->flags & UFBXWI_BUFFER_FLAG_TEMPORARY) {
+			ufbxwi_make_buffer_owned(pool, src);
+		}
 	}
 
 	if (*p_dst == src) return;
@@ -1718,7 +1840,92 @@ static ufbxwi_forceinline ufbxw_buffer_id ufbxwi_to_user_buffer(ufbxwi_buffer_po
 }
 
 static ufbxwi_forceinline ufbxw_int_buffer ufbxwi_to_user_int_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id) { ufbxw_int_buffer b = { ufbxwi_to_user_buffer(pool, id) }; return b; }
+static ufbxwi_forceinline ufbxw_real_buffer ufbxwi_to_user_real_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id) { ufbxw_real_buffer b = { ufbxwi_to_user_buffer(pool, id) }; return b; }
+static ufbxwi_forceinline ufbxw_vec2_buffer ufbxwi_to_user_vec2_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id) { ufbxw_vec2_buffer b = { ufbxwi_to_user_buffer(pool, id) }; return b; }
 static ufbxwi_forceinline ufbxw_vec3_buffer ufbxwi_to_user_vec3_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id) { ufbxw_vec3_buffer b = { ufbxwi_to_user_buffer(pool, id) }; return b; }
+
+typedef struct {
+	const void *pos, *end;
+} ufbxwi_void_interator;
+
+typedef struct {
+	const int32_t *pos, *end;
+} ufbxwi_int_interator;
+
+static ufbxwi_noinline bool ufbxwi_start_stream(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
+{
+	ufbxwi_buffer *buf = ufbxwi_get_buffer(pool, id);
+	if (!buf) return false;
+
+	if (buf->state != UFBXWI_BUFFER_STATE_STREAM) {
+		switch (buf->state) {
+		case UFBXWI_BUFFER_STATE_NONE:
+			break;
+		case UFBXWI_BUFFER_STATE_OWNED:
+			buf->stream_data = buf->data.owned.data;
+			break;
+		case UFBXWI_BUFFER_STATE_EXTERNAL:
+			buf->stream_data = (void*)buf->data.external.data;
+			break;
+		}
+
+		buf->stream_count = (uint32_t)buf->count;
+		return true;
+	}
+
+	ufbxw_assert(!buf->stream_data);
+
+	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(id);
+	size_t type_size = ufbxwi_buffer_type_infos[type].size;
+	uint32_t capacity = 16 * 1024 / type_size;
+
+	// TODO: Pool these
+	void *data = ufbxwi_alloc_size(pool->ator, type_size, capacity, NULL);
+	ufbxwi_check_return_err(pool->error, data, false);
+
+	buf->stream_data = data;
+	buf->stream_capacity = capacity;
+	buf->stream_count = 0;
+	return true;
+}
+
+static ufbxwi_noinline ufbxwi_void_interator ufbxwi_advance_stream_imp(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id, const void *pos)
+{
+	ufbxwi_buffer *buf = ufbxwi_get_buffer(pool, id);
+	ufbxwi_void_interator it = { NULL, 0 };
+	if (!buf) return it;
+
+	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(id);
+	size_t type_size = ufbxwi_buffer_type_infos[type].size;
+	char *stream_data = (char*)buf->stream_data;
+
+	if (pos) {
+		size_t read_count = ufbxwi_to_size((char*)pos - stream_data) / type_size;
+		ufbxw_assert(read_count >= buf->stream_read_count && read_count <= buf->stream_count);
+		buf->stream_read_count = (uint32_t)read_count;
+	}
+
+	if (buf->state == UFBXWI_BUFFER_STATE_STREAM && buf->stream_read_count == buf->stream_count) {
+		buf->stream_offset += buf->stream_read_count;
+
+		size_t to_read = ufbxwi_min_sz(buf->stream_capacity, buf->count - buf->stream_offset);
+		size_t num_read = ufbxwi_buffer_read_to(pool, id, buf->stream_data, to_read, buf->stream_offset);
+		buf->stream_read_count = 0;
+		buf->stream_count = (uint32_t)num_read;
+	}
+
+	it.pos = stream_data + buf->stream_read_count * type_size;
+	it.end = stream_data + buf->stream_count * type_size;
+	return it;
+}
+
+#define ufbxwi_advance_stream(m_pool, m_id, m_iterator) do { \
+		ufbxwi_void_interator mi_it = ufbxwi_advance_stream_imp((m_pool), (m_id), (m_iterator).pos); \
+		(m_iterator).pos = mi_it.pos; \
+		(m_iterator).end = mi_it.end; \
+	} while(0)
+
+#define ufbxwi_commit_stream(m_pool, m_id, m_iterator) ufbxwi_advance_stream_imp((m_pool), (m_id), (m_iterator).pos)
 
 // -- Prop types
 
@@ -1881,6 +2088,21 @@ typedef struct {
 } ufbxwi_node_attribute;
 
 typedef struct {
+	ufbxw_mesh_attribute attribute;
+	int32_t set;
+
+	ufbxw_attribute_mapping mapping;
+	ufbxw_string name;
+
+	ufbxw_buffer_id values;
+	ufbxw_buffer_id indices;
+
+	ufbxw_buffer_id values_w;
+} ufbxwi_mesh_attribute;
+
+UFBXWI_LIST_TYPE(ufbxwi_mesh_attribute_list, ufbxwi_mesh_attribute);
+
+typedef struct {
 	union {
 		ufbxwi_element_data element;
 		ufbxwi_node_attribute attrib;
@@ -1891,6 +2113,8 @@ typedef struct {
 	ufbxw_int_buffer vertex_indices;
 	ufbxw_int_buffer face_offsets;
 	ufbxw_int_buffer polygon_vertex_index;
+
+	ufbxwi_mesh_attribute_list attributes;
 
 } ufbxwi_mesh;
 
@@ -3694,14 +3918,164 @@ static void ufbxwi_init_scene(ufbxw_scene *scene)
 	ufbxwi_create_defaults(scene);
 }
 
-// -- Geometry
+// -- Mesh
+
+typedef enum {
+	UFBXWI_MESH_ATTRIBUTE_TYPE_NONE = 0x01,
+	UFBXWI_MESH_ATTRIBUTE_TYPE_INT = 0x02,
+	UFBXWI_MESH_ATTRIBUTE_TYPE_REAL = 0x04,
+	UFBXWI_MESH_ATTRIBUTE_TYPE_VEC2 = 0x08,
+	UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 = 0x10,
+	UFBXWI_MESH_ATTRIBUTE_TYPE_VEC4 = 0x20,
+
+	UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES = 0x100,
+	UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES = 0x200,
+
+	UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W = 0x1000,
+} ufbxwi_mesh_attribute_flags;
+
+typedef struct {
+	const char *layer_element_name;
+	const char *values_name;
+	const char *indices_name;
+	int32_t version;
+	int32_t order;
+	uint32_t flags;
+} ufbxwi_mesh_attribute_info;
+
+typedef struct {
+	const char *name;
+} ufbxwi_attribute_mapping_info;
+
+static const ufbxwi_mesh_attribute_info ufbxwi_mesh_attribute_infos[] = {
+	{ NULL }, // Invalid
+	{ "LayerElementNormal", "Normals", NULL, 102, 1, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
+	{ "LayerElementUV", "UV", "UVIndex", 101, 5, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC2 | UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES },
+	{ "LayerElementTangent", "Tangent", NULL, 102, 3, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
+	{ "LayerElementBinormal", "Binormal", NULL, 102, 2, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
+	{ "LayerElementColor", "Color", "ColorIndex", 101, 4, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC4 | UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES },
+	{ "LayerElementSmoothing", "Smoothing", "", 102, 6, UFBXWI_MESH_ATTRIBUTE_TYPE_INT | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES },
+	{ "LayerElementMaterial", NULL, "Materials", 102, 7, UFBXWI_MESH_ATTRIBUTE_TYPE_NONE | UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES },
+};
+
+static const ufbxwi_attribute_mapping_info ufbxwi_attribute_mapping_infos[] = {
+	{ NULL }, // Invalid
+	{ "ByPolygonVertex" },
+	{ "ByVertice" },
+	{ "ByEdge" },
+	{ "ByPolygon" },
+	{ "AllSame" },
+};
 
 static size_t ufbxwi_stream_triangle_faces(void *user, int32_t *dst, size_t dst_size, size_t offset)
 {
 	for (size_t i = 0; i < dst_size; i++) {
-		*dst = (int32_t)((offset + i) * 3);
+		dst[i] = (int32_t)((offset + i) * 3);
 	}
 	return dst_size;
+}
+
+static size_t ufbxwi_stream_real_one(void *user, ufbxw_real *dst, size_t dst_size, size_t offset)
+{
+	for (size_t i = 0; i < dst_size; i++) {
+		dst[i] = 1.0f;
+	}
+	return dst_size;
+}
+
+static ufbxwi_mesh_attribute *ufbxwi_edit_mesh_attribute(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set)
+{
+	ufbxwi_mesh *md = ufbxwi_get_mesh_data(scene, mesh);
+	if (!md) return NULL;
+
+	ufbxwi_for_list(ufbxwi_mesh_attribute, attrib, md->attributes) {
+		if (attrib->attribute == attribute && attrib->set == set) {
+			return attrib;
+		}
+	}
+
+	ufbxwi_mesh_attribute *attrib = ufbxwi_list_push_zero(&scene->ator, &md->attributes, ufbxwi_mesh_attribute);
+	ufbxwi_check_return(attrib, NULL);
+
+	attrib->attribute = attribute;
+	attrib->set = set;
+	return attrib;
+}
+
+typedef struct {
+	uint32_t hash;
+	int32_t index;
+} ufbxwi_index_hash_entry;
+
+static void ufbxwi_generate_indices(ufbxw_scene *scene, ufbxw_mesh_attribute_desc *desc)
+{
+	// Currently not handles, practically not supported
+	ufbxw_assert(!desc->values_w);
+
+	ufbxwi_buffer_type value_type = ufbxwi_buffer_id_type(desc->values);
+	size_t value_size = ufbxwi_buffer_type_infos[value_type].size;
+
+	ufbxwi_check(ufbxwi_make_buffer_owned(&scene->buffers, desc->values));
+	ufbxwi_mutable_void_span values = ufbxwi_get_buffer_owned_data(&scene->buffers, desc->values);
+
+	ufbxw_int_buffer index_buffer = ufbxw_create_int_buffer(scene, values.count);
+	ufbxwi_check(index_buffer.id);
+
+	ufbxw_int_list indices = ufbxw_edit_int_buffer(scene, index_buffer);
+
+	size_t hash_count = 1;
+	while (hash_count < values.count * 2) {
+		hash_count *= 2;
+	}
+
+	size_t value_count = 0;
+
+	ufbxwi_index_hash_entry *hashes = ufbxwi_alloc(&scene->ator, ufbxwi_index_hash_entry, hash_count);
+	ufbxwi_check(hashes);
+	memset(hashes, 0, hash_count * sizeof(ufbxwi_index_hash_entry));
+
+	for (size_t i = 0; i < values.count; i++) {
+		const void *value = (const char*)values.data + i * value_size;
+
+		// TODO: Better aligned hash
+		uint32_t hash = ufbxwi_hash_string((const char*)value, value_size);
+
+		// TODO: Better hashing
+		uint32_t slot = hash;
+		for (;;) {
+			slot = slot & (hash_count - 1);
+			if (hashes[slot].hash == hash) {
+				int32_t index = hashes[slot].index;
+				if (!memcmp((const char*)values.data + index * value_size, value, value_size)) {
+					indices.data[i] = index;
+					break;
+				}
+			} else if (hashes[slot].hash == 0) {
+				int32_t index = (int32_t)value_count++;
+				memcpy((char*)values.data + index * value_size, value, value_size);
+				indices.data[i] = index;
+				hashes[slot].hash = hash;
+				hashes[slot].index = index;
+				break;
+			}
+			slot++;
+		}
+	}
+
+
+	ufbxwi_free(&scene->ator, hashes);
+
+	// Currently assuming these are always user buffers
+	ufbxw_free_buffer(scene, desc->values);
+
+	ufbxw_buffer_id value_buffer = ufbxwi_create_owned_buffer(&scene->buffers, value_type, value_count);
+	ufbxwi_check(value_buffer);
+
+	ufbxwi_mutable_void_span result_values = ufbxwi_get_buffer_owned_data(&scene->buffers, value_buffer);
+	memcpy(result_values.data, values.data, value_count * value_size);
+
+	desc->values = ufbxwi_to_user_buffer(&scene->buffers, value_buffer);
+	desc->indices = index_buffer.id;
 }
 
 // -- Saving
@@ -3712,6 +4086,7 @@ typedef struct {
 } ufbxwi_save_object_type;
 
 UFBXWI_LIST_TYPE(ufbxwi_save_object_type_list, ufbxwi_save_object_type);
+UFBXWI_LIST_TYPE(ufbxwi_mesh_attribute_ptr_list, ufbxwi_mesh_attribute*);
 
 typedef struct {
 	ufbxwi_allocator ator;
@@ -3737,6 +4112,8 @@ typedef struct {
 	ufbxwi_prop_list tmp_prop_list;
 	ufbxwi_save_object_type_list object_types;
 	ufbxwi_conn_list tmp_conns;
+
+	ufbxwi_mesh_attribute_ptr_list tmp_attributes;
 
 } ufbxw_save_context;
 
@@ -3949,7 +4326,7 @@ static void ufbxwi_ascii_dom_write_int_array(ufbxw_save_context *sc, ufbxwi_buff
 	while (offset < buffer->count) {
 		size_t max_read_size = (buffer->count - offset) * type_info.size;
 		size_t read_size = ufbxwi_min_sz(max_read_size, temp_size);
-		ufbxwi_void_span span = ufbxwi_buffer_read(&sc->buffers, buffer, temp, read_size, offset);
+		ufbxwi_void_span span = ufbxwi_buffer_read(&sc->buffers, buffer->id, temp, read_size, offset);
 		size_t span_count = span.count * type_info.components;
 
 		for (size_t begin = 0; begin < span_count; ) {
@@ -3996,7 +4373,7 @@ static void ufbxwi_ascii_dom_write_real_array(ufbxw_save_context *sc, ufbxwi_buf
 	while (offset < buffer->count) {
 		size_t max_read_size = (buffer->count - offset) * type_info.size;
 		size_t read_size = ufbxwi_min_sz(max_read_size, temp_size);
-		ufbxwi_void_span span = ufbxwi_buffer_read(&sc->buffers, buffer, temp, read_size, offset);
+		ufbxwi_void_span span = ufbxwi_buffer_read(&sc->buffers, buffer->id, temp, read_size, offset);
 		size_t span_count = span.count * type_info.components;
 
 		for (size_t begin = 0; begin < span_count; ) {
@@ -4140,6 +4517,8 @@ static void ufbxwi_dom_array(ufbxw_save_context *sc, const char *tag, ufbxw_buff
 	} else {
 		// TODO
 	}
+
+	ufbxwi_free_buffer(&sc->buffers, buffer);
 }
 
 enum {
@@ -4343,6 +4722,95 @@ static void ufbxwi_save_template(ufbxw_save_context *sc, ufbxwi_element *element
 	ufbxwi_dom_close(sc);
 }
 
+static bool ufbxwi_less_mesh_attribute_ptr_order(void *user, const void *va, const void *vb)
+{
+	const ufbxwi_mesh_attribute *a = *(const ufbxwi_mesh_attribute**)va, *b = *(const ufbxwi_mesh_attribute**)vb;
+	(void)user;
+
+	int32_t a_order = ufbxwi_mesh_attribute_infos[a->attribute].order;
+	int32_t b_order = ufbxwi_mesh_attribute_infos[b->attribute].order;
+	if (a_order != b_order) return a_order < b_order;
+	if (a->attribute != b->attribute) return a->attribute < b->attribute;
+	return a->set < b->set;
+}
+
+static bool ufbxwi_less_mesh_attribute_ptr_set(void *user, const void *va, const void *vb)
+{
+	const ufbxwi_mesh_attribute *a = *(const ufbxwi_mesh_attribute**)va, *b = *(const ufbxwi_mesh_attribute**)vb;
+	(void)user;
+
+	if (a->set == b->set) return a->set < b->set;
+
+	int32_t a_order = ufbxwi_mesh_attribute_infos[a->attribute].order;
+	int32_t b_order = ufbxwi_mesh_attribute_infos[b->attribute].order;
+	if (a_order != b_order) return a_order < b_order;
+	return a->attribute < b->attribute;
+}
+
+typedef struct {
+	ufbxwi_buffer_pool *buffers;
+	ufbxw_buffer_id indices;
+	ufbxw_buffer_id face_offsets;
+} ufbxwi_polygon_vertex_index_stream;
+
+static void ufbxwi_deleter_free(void *user, void *data)
+{
+	ufbxwi_allocator *ator = (ufbxwi_allocator*)user;
+	ufbxwi_free(ator, data);
+}
+
+static size_t ufbxwi_stream_polygon_vertex_index(void *user, int32_t *dst, size_t dst_size, size_t offset)
+{
+	ufbxwi_polygon_vertex_index_stream *stream = (ufbxwi_polygon_vertex_index_stream*)user;
+
+	size_t num_read = ufbxwi_buffer_read_to(stream->buffers, stream->indices, dst, dst_size, offset);
+	int32_t min_index = (int32_t)offset;
+	int32_t max_index = (int32_t)(offset + num_read);
+
+	ufbxwi_int_interator face_offsets = { 0 };
+	for (;;) {
+		if (face_offsets.pos == face_offsets.end) {
+			ufbxwi_advance_stream(stream->buffers, stream->face_offsets, face_offsets);
+			if (face_offsets.pos == face_offsets.end) break;
+		}
+
+		int32_t ix = *face_offsets.pos - 1;
+		if (ix >= max_index) break;
+		face_offsets.pos++;
+
+		if (ix >= 0) {
+			dst[ix - min_index] = ~dst[ix - min_index];
+		}
+	}
+
+	ufbxwi_commit_stream(stream->buffers, stream->face_offsets, face_offsets);
+
+	return num_read;
+}
+
+static ufbxw_buffer_id ufbxwi_create_polygon_vertex_index_stream(ufbxwi_buffer_pool *buffers, ufbxw_int_buffer indices, ufbxw_int_buffer face_offsets)
+{
+	ufbxwi_polygon_vertex_index_stream *stream = ufbxwi_alloc(buffers->ator, ufbxwi_polygon_vertex_index_stream, 1);
+	ufbxwi_check_return_err(buffers->error, stream, 0);
+	memset(stream, 0, sizeof(ufbxwi_polygon_vertex_index_stream));
+
+	stream->buffers = buffers;
+	stream->indices = indices.id;
+	stream->face_offsets = face_offsets.id;
+
+	size_t index_count = ufbxwi_get_buffer_size(buffers, indices.id);
+
+	ufbxwi_start_stream(buffers, face_offsets.id);
+
+	ufbxwi_stream_fn stream_fn;
+	stream_fn.int_fn = &ufbxwi_stream_polygon_vertex_index;
+	ufbxw_buffer_id index_buffer = ufbxwi_create_stream_buffer(buffers, UFBXWI_BUFFER_TYPE_INT, stream_fn, stream, index_count);
+	ufbxwi_check_return_err(buffers->error, index_buffer, 0);
+	ufbxwi_buffer_set_deleter(buffers, index_buffer, &ufbxwi_deleter_free, buffers->ator);
+
+	return index_buffer;
+}
+
 static void ufbxwi_save_mesh_data(ufbxw_save_context *sc, ufbxwi_element *element)
 {
 	ufbxwi_mesh *mesh = element->data;
@@ -4352,9 +4820,67 @@ static void ufbxwi_save_mesh_data(ufbxw_save_context *sc, ufbxwi_element *elemen
 	if (mesh->polygon_vertex_index.id != 0) {
 		ufbxwi_dom_array(sc, "PolygonVertexIndex", mesh->polygon_vertex_index.id);
 	} else {
+		ufbxw_buffer_id index_buffer = ufbxwi_create_polygon_vertex_index_stream(&sc->buffers, mesh->vertex_indices, mesh->face_offsets);
+		ufbxwi_dom_array(sc, "PolygonVertexIndex", index_buffer);
 	}
 
 	ufbxwi_dom_value(sc, "GeometryVersion", "I", 124);
+
+	ufbxwi_check_err(&sc->error, ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_attributes, ufbxwi_mesh_attribute*, mesh->attributes.count));
+	for (size_t i = 0; i < mesh->attributes.count; i++) {
+		sc->tmp_attributes.data[i] = &mesh->attributes.data[i];
+	}
+
+	ufbxwi_unstable_sort(sc->tmp_attributes.data, sc->tmp_attributes.count, sizeof(ufbxwi_mesh_attribute*), &ufbxwi_less_mesh_attribute_ptr_order, NULL);
+
+	ufbxwi_for_ptr_list(ufbxwi_mesh_attribute, p_attrib, sc->tmp_attributes) {
+		ufbxwi_mesh_attribute *attrib = *p_attrib;
+		const ufbxwi_mesh_attribute_info *info = &ufbxwi_mesh_attribute_infos[attrib->attribute];
+
+		ufbxwi_dom_open(sc, info->layer_element_name, "I", attrib->set);
+
+		ufbxwi_dom_value(sc, "Version", "I", info->version);
+		ufbxwi_dom_value(sc, "Name", "S", &attrib->name);
+		ufbxwi_dom_value(sc, "MappingInformationType", "C", ufbxwi_attribute_mapping_infos[attrib->mapping].name);
+		ufbxwi_dom_value(sc, "ReferenceInformationType", "C", attrib->indices ? "IndexToDirect" : "Direct");
+
+		if (attrib->values) {
+			ufbxwi_dom_array(sc, info->values_name, attrib->values);
+		}
+		if (attrib->values_w) {
+			// TODO: Generic `sc` format function
+			char values_w_name[128];
+			snprintf(values_w_name, sizeof(values_w_name), "%sW", info->values_name);
+			ufbxwi_dom_array(sc, values_w_name, attrib->values_w);
+		}
+		if (attrib->indices) {
+			ufbxwi_dom_array(sc, info->indices_name, attrib->indices);
+		}
+
+		ufbxwi_dom_close(sc);
+	}
+
+	ufbxwi_unstable_sort(sc->tmp_attributes.data, sc->tmp_attributes.count, sizeof(ufbxwi_mesh_attribute*), &ufbxwi_less_mesh_attribute_ptr_set, NULL);
+
+	int32_t prev_set = INT32_MIN;
+	ufbxwi_for_ptr_list(ufbxwi_mesh_attribute, p_attrib, sc->tmp_attributes) {
+		ufbxwi_mesh_attribute *attrib = *p_attrib;
+		const ufbxwi_mesh_attribute_info *info = &ufbxwi_mesh_attribute_infos[attrib->attribute];
+
+		if (attrib->set != prev_set) {
+			if (prev_set > INT32_MIN) ufbxwi_dom_close(sc);
+
+			ufbxwi_dom_open(sc, "Layer", "I", attrib->set);
+			ufbxwi_dom_value(sc, "Version", "I", 100);
+			prev_set = attrib->set;
+		}
+
+		ufbxwi_dom_open(sc, "LayerElement", "");
+		ufbxwi_dom_value(sc, "Type", "C", info->layer_element_name);
+		ufbxwi_dom_value(sc, "TypedIndex", "I", prev_set);
+		ufbxwi_dom_close(sc);
+	}
+	if (prev_set > INT32_MIN) ufbxwi_dom_close(sc);
 }
 
 static void ufbxwi_save_anim_curve_keys(ufbxw_save_context *sc, ufbxwi_element *element)
@@ -4822,17 +5348,12 @@ ufbxw_abi void ufbxw_free_buffer(ufbxw_scene *scene, ufbxw_buffer_id buffer)
 
 ufbxw_abi void ufbxw_buffer_set_deleter(ufbxw_scene *scene, ufbxw_buffer_id buffer, ufbxw_buffer_deleter_fn *fn, void *user)
 {
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(&scene->buffers, buffer);
-	if (!buf) return;
-
-	ufbxw_assert(buf->deleter_fn == NULL);
-	buf->deleter_fn = fn;
-	buf->deleter_user = user;
+	ufbxwi_buffer_set_deleter(&scene->buffers, buffer, fn, user);
 }
 
 ufbxw_abi ufbxw_int_buffer ufbxw_create_int_buffer(ufbxw_scene *scene, size_t count)
 {
-	ufbxw_buffer_id id = ufbxwi_create_ownded_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_INT, count);
+	ufbxw_buffer_id id = ufbxwi_create_owned_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_INT, count);
 	return ufbxwi_to_user_int_buffer(&scene->buffers, id);
 }
 
@@ -4862,9 +5383,73 @@ ufbxw_abi ufbxw_int_buffer ufbxw_external_int_stream(ufbxw_scene *scene, ufbxw_i
 	return ufbxwi_to_user_int_buffer(&scene->buffers, id);
 }
 
+ufbxw_abi ufbxw_real_buffer ufbxw_create_real_buffer(ufbxw_scene *scene, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_owned_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_REAL, count);
+	return ufbxwi_to_user_real_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_real_buffer ufbxw_copy_real_array(ufbxw_scene *scene, const ufbxw_real *data, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_copy_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_REAL, data, count);
+	return ufbxwi_to_user_real_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_real_buffer ufbxw_view_real_array(ufbxw_scene *scene, const ufbxw_real *data, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_external_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_REAL, data, count, UFBXWI_BUFFER_FLAG_TEMPORARY);
+	return ufbxwi_to_user_real_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_real_buffer ufbxw_external_real_array(ufbxw_scene *scene, const ufbxw_real *data, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_external_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_REAL, data, count, 0);
+	return ufbxwi_to_user_real_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_real_buffer ufbxw_external_real_stream(ufbxw_scene *scene, ufbxw_real_stream_fn *fn, void *user, size_t count)
+{
+	ufbxwi_stream_fn stream_fn;
+	stream_fn.real_fn = fn;
+	ufbxw_buffer_id id = ufbxwi_create_stream_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_REAL, stream_fn, user, count);
+	return ufbxwi_to_user_real_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_vec2_buffer ufbxw_create_vec2_buffer(ufbxw_scene *scene, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_owned_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC2, count);
+	return ufbxwi_to_user_vec2_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_vec2_buffer ufbxw_copy_vec2_array(ufbxw_scene *scene, const ufbxw_vec2 *data, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_copy_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC2, data, count);
+	return ufbxwi_to_user_vec2_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_vec2_buffer ufbxw_view_vec2_array(ufbxw_scene *scene, const ufbxw_vec2 *data, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_external_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC2, data, count, UFBXWI_BUFFER_FLAG_TEMPORARY);
+	return ufbxwi_to_user_vec2_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_vec2_buffer ufbxw_external_vec2_array(ufbxw_scene *scene, const ufbxw_vec2 *data, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_external_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC2, data, count, 0);
+	return ufbxwi_to_user_vec2_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_vec2_buffer ufbxw_external_vec2_stream(ufbxw_scene *scene, ufbxw_vec2_stream_fn *fn, void *user, size_t count)
+{
+	ufbxwi_stream_fn stream_fn;
+	stream_fn.vec2_fn = fn;
+	ufbxw_buffer_id id = ufbxwi_create_stream_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC2, stream_fn, user, count);
+	return ufbxwi_to_user_vec2_buffer(&scene->buffers, id);
+}
+
 ufbxw_abi ufbxw_vec3_buffer ufbxw_create_vec3_buffer(ufbxw_scene *scene, size_t count)
 {
-	ufbxw_buffer_id id = ufbxwi_create_ownded_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC3, count);
+	ufbxw_buffer_id id = ufbxwi_create_owned_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC3, count);
 	return ufbxwi_to_user_vec3_buffer(&scene->buffers, id);
 }
 
@@ -4897,7 +5482,7 @@ ufbxw_abi ufbxw_vec3_buffer ufbxw_external_vec3_stream(ufbxw_scene *scene, ufbxw
 // TODO: Lock/unlock version for Rust
 ufbxw_abi ufbxw_int_list ufbxw_edit_int_buffer(ufbxw_scene *scene, ufbxw_int_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_VEC3);
+	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_INT);
 	ufbxwi_buffer *buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_int_list result = { NULL, 0 };
 	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
@@ -5381,6 +5966,107 @@ ufbxw_abi void ufbxw_mesh_set_fbx_polygon_vertex_index(ufbxw_scene *scene, ufbxw
 	ufbxwi_set_buffer_from_user(&scene->buffers, &md->polygon_vertex_index.id, polygon_vertex_index.id);
 }
 
+ufbxw_abi void ufbxw_mesh_set_normals(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_vec3_buffer normals, ufbxw_attribute_mapping mapping)
+{
+	ufbxw_mesh_attribute_desc desc = { 0 };
+	desc.values = normals.id;
+	desc.mapping = mapping;
+	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_NORMAL, 0, &desc);
+}
+
+ufbxw_abi void ufbxw_mesh_set_uvs(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec2_buffer uvs, ufbxw_attribute_mapping mapping)
+{
+	ufbxw_mesh_attribute_desc desc = { 0 };
+	desc.values = uvs.id;
+	desc.mapping = mapping;
+	desc.generate_indices = true;
+	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_UV, set, &desc);
+}
+
+ufbxw_abi void ufbxw_mesh_set_uvs_indexed(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec2_buffer uvs, ufbxw_int_buffer indices, ufbxw_attribute_mapping mapping)
+{
+	ufbxw_mesh_attribute_desc desc = { 0 };
+	desc.values = uvs.id;
+	desc.indices = indices.id;
+	desc.mapping = mapping;
+	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_UV, set, &desc);
+}
+
+ufbxw_abi void ufbxw_mesh_set_tangents(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec3_buffer tangents, ufbxw_attribute_mapping mapping)
+{
+	ufbxw_mesh_attribute_desc desc = { 0 };
+	desc.values = tangents.id;
+	desc.mapping = mapping;
+	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_TANGENT, set, &desc);
+}
+
+ufbxw_abi void ufbxw_mesh_set_binormals(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec3_buffer binormals, ufbxw_attribute_mapping mapping)
+{
+	ufbxw_mesh_attribute_desc desc = { 0 };
+	desc.values = binormals.id;
+	desc.mapping = mapping;
+	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_BINORMAL, set, &desc);
+}
+
+ufbxw_abi void ufbxw_mesh_set_colors(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec4_buffer colors, ufbxw_attribute_mapping mapping)
+{
+	ufbxw_mesh_attribute_desc desc = { 0 };
+	desc.values = colors.id;
+	desc.mapping = mapping;
+	desc.generate_indices = true;
+	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_COLOR, set, &desc);
+}
+
+ufbxw_abi void ufbxw_mesh_set_colors_indexed(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec4_buffer colors, ufbxw_int_buffer indices, ufbxw_attribute_mapping mapping)
+{
+	ufbxw_mesh_attribute_desc desc = { 0 };
+	desc.values = colors.id;
+	desc.indices = indices.id;
+	desc.mapping = mapping;
+	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_COLOR, set, &desc);
+}
+
+ufbxw_abi void ufbxw_mesh_set_attribute(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const ufbxw_mesh_attribute_desc *desc)
+{
+	ufbxw_assert(desc);
+
+	ufbxwi_mesh_attribute *attrib = ufbxwi_edit_mesh_attribute(scene, mesh, attribute, set);
+	if (!attrib) return;
+
+	const ufbxwi_mesh_attribute_info *attrib_info = &ufbxwi_mesh_attribute_infos[attrib->attribute];
+
+	ufbxw_mesh_attribute_desc d = *desc;
+	if (d.generate_indices && !d.indices) {
+		ufbxwi_generate_indices(scene, &d);
+	}
+
+	// TODO: Check forbid/require indices, or bypass
+
+	if ((attrib_info->flags & UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W) != 0 && !d.values_w) {
+		size_t values_count = ufbxwi_get_buffer_size(&scene->buffers, d.values);
+		ufbxw_real_buffer values_w = ufbxw_external_real_stream(scene, &ufbxwi_stream_real_one, NULL, values_count);
+		d.values_w = values_w.id;
+	}
+
+	attrib->mapping = desc->mapping;
+	ufbxwi_intern_string_str(&attrib->name, &scene->string_pool, d.name);
+	ufbxwi_set_buffer_from_user(&scene->buffers, &attrib->values, d.values);
+	ufbxwi_set_buffer_from_user(&scene->buffers, &attrib->indices, d.indices);
+	ufbxwi_set_buffer_from_user(&scene->buffers, &attrib->values_w, d.values_w);
+}
+
+ufbxw_abi void ufbxw_mesh_set_attribute_name(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const char *name)
+{
+	ufbxw_mesh_set_attribute_name_len(scene, mesh, attribute, set, name, strlen(name));
+}
+
+ufbxw_abi void ufbxw_mesh_set_attribute_name_len(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const char *name, size_t name_len)
+{
+	ufbxwi_mesh_attribute *attrib = ufbxwi_edit_mesh_attribute(scene, mesh, attribute, set);
+	if (!attrib) return;
+	ufbxwi_intern_string(&attrib->name, &scene->string_pool, name, name_len);
+}
+
 ufbxw_vec3_buffer ufbxw_mesh_get_vertices(ufbxw_scene *scene, ufbxw_mesh mesh)
 {
 	ufbxwi_mesh *md = ufbxwi_get_mesh_data(scene, mesh);
@@ -5661,6 +6347,11 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 	}
 
 	return true;
+}
+
+ufbxw_abi ufbxw_string ufbxw_str(const char *str)
+{
+	return ufbxwi_c_str(str);
 }
 
 #endif

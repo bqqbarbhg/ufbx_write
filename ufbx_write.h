@@ -385,17 +385,50 @@ typedef struct ufbxw_keyframe_vec3 {
 
 #define UFBXW_KTIME_SECOND INT64_C(46186158000)
 
+typedef enum ufbxw_mesh_attribute {
+	UFBXW_MESH_ATTRIBUTE_NORMAL = 1,
+	UFBXW_MESH_ATTRIBUTE_UV,
+	UFBXW_MESH_ATTRIBUTE_TANGENT,
+	UFBXW_MESH_ATTRIBUTE_BINORMAL,
+	UFBXW_MESH_ATTRIBUTE_COLOR,
+	UFBXW_MESH_ATTRIBUTE_SMOOTHING,
+	UFBXW_MESH_ATTRIBUTE_MATERIAL,
+
+	UFBXW_MESH_ATTRIBUTE_FIRST_CUSTOM,
+} ufbxw_mesh_attribute;
+
 typedef enum ufbxw_attribute_mapping {
+	UFBXW_ATTRIBUTE_MAPPING_NONE,
 	UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX,
 	UFBXW_ATTRIBUTE_MAPPING_VERTEX,
-	UFBXW_ATTRIBUTE_MAPPING_FACE,
+	UFBXW_ATTRIBUTE_MAPPING_EDGE,
+	UFBXW_ATTRIBUTE_MAPPING_POLYGON,
+	UFBXW_ATTRIBUTE_MAPPING_ALL_SAME,
 } ufbxw_attribute_mapping;
+
+typedef struct ufbxw_mesh_attribute_desc {
+	uint32_t _begin_zero;
+
+	ufbxw_attribute_mapping mapping;
+
+	ufbxw_buffer_id values;
+	ufbxw_buffer_id indices;
+
+	ufbxw_string name;
+	ufbxw_buffer_id values_w;
+
+	bool generate_indices;
+
+	uint32_t _end_zero;
+} ufbxw_mesh_attribute_desc;
 
 // --
 
 typedef size_t ufbxw_int_stream_fn(void *user, int32_t *dst, size_t dst_size, size_t offset);
+typedef size_t ufbxw_real_stream_fn(void *user, ufbxw_real *dst, size_t dst_size, size_t offset);
+typedef size_t ufbxw_vec2_stream_fn(void *user, ufbxw_vec2 *dst, size_t dst_size, size_t offset);
 typedef size_t ufbxw_vec3_stream_fn(void *user, ufbxw_vec3 *dst, size_t dst_size, size_t offset);
-typedef size_t ufbxw_buffer_deleter_fn(void *user, void *data);
+typedef void ufbxw_buffer_deleter_fn(void *user, void *data);
 
 ufbxw_abi void ufbxw_retain_buffer(ufbxw_scene *scene, ufbxw_buffer_id buffer);
 ufbxw_abi void ufbxw_free_buffer(ufbxw_scene *scene, ufbxw_buffer_id buffer);
@@ -407,6 +440,18 @@ ufbxw_abi ufbxw_int_buffer ufbxw_copy_int_array(ufbxw_scene *scene, const int32_
 ufbxw_abi ufbxw_int_buffer ufbxw_view_int_array(ufbxw_scene *scene, const int32_t *data, size_t count);
 ufbxw_abi ufbxw_int_buffer ufbxw_external_int_array(ufbxw_scene *scene, const int32_t *data, size_t count);
 ufbxw_abi ufbxw_int_buffer ufbxw_external_int_stream(ufbxw_scene *scene, ufbxw_int_stream_fn *fn, void *user, size_t count);
+
+ufbxw_abi ufbxw_real_buffer ufbxw_create_real_buffer(ufbxw_scene *scene, size_t count);
+ufbxw_abi ufbxw_real_buffer ufbxw_copy_real_array(ufbxw_scene *scene, const ufbxw_real *data, size_t count);
+ufbxw_abi ufbxw_real_buffer ufbxw_view_real_array(ufbxw_scene *scene, const ufbxw_real *data, size_t count);
+ufbxw_abi ufbxw_real_buffer ufbxw_external_real_array(ufbxw_scene *scene, const ufbxw_real *data, size_t count);
+ufbxw_abi ufbxw_real_buffer ufbxw_external_real_stream(ufbxw_scene *scene, ufbxw_real_stream_fn *fn, void *user, size_t count);
+
+ufbxw_abi ufbxw_vec2_buffer ufbxw_create_vec2_buffer(ufbxw_scene *scene, size_t count);
+ufbxw_abi ufbxw_vec2_buffer ufbxw_copy_vec2_array(ufbxw_scene *scene, const ufbxw_vec2 *data, size_t count);
+ufbxw_abi ufbxw_vec2_buffer ufbxw_view_vec2_array(ufbxw_scene *scene, const ufbxw_vec2 *data, size_t count);
+ufbxw_abi ufbxw_vec2_buffer ufbxw_external_vec2_array(ufbxw_scene *scene, const ufbxw_vec2 *data, size_t count);
+ufbxw_abi ufbxw_vec2_buffer ufbxw_external_vec2_stream(ufbxw_scene *scene, ufbxw_vec2_stream_fn *fn, void *user, size_t count);
 
 ufbxw_abi ufbxw_vec3_buffer ufbxw_create_vec3_buffer(ufbxw_scene *scene, size_t count);
 ufbxw_abi ufbxw_vec3_buffer ufbxw_copy_vec3_array(ufbxw_scene *scene, const ufbxw_vec3 *data, size_t count);
@@ -502,8 +547,24 @@ ufbxw_abi ufbxw_mesh ufbxw_as_mesh(ufbxw_id id);
 ufbxw_abi void ufbxw_mesh_set_vertices(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_vec3_buffer vertices);
 
 ufbxw_abi void ufbxw_mesh_set_triangles(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer indices);
-ufbxw_abi void ufbxw_mesh_set_polygons(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer indices, ufbxw_int_buffer face_sizes);
+ufbxw_abi void yfbxw_mesh_set_polygons(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer indices, ufbxw_int_buffer face_offsets);
 ufbxw_abi void ufbxw_mesh_set_fbx_polygon_vertex_index(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer polygon_vertex_index);
+
+ufbxw_abi void ufbxw_mesh_set_normals(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_vec3_buffer normals, ufbxw_attribute_mapping mapping);
+
+ufbxw_abi void ufbxw_mesh_set_uvs(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec2_buffer uvs, ufbxw_attribute_mapping mapping);
+ufbxw_abi void ufbxw_mesh_set_uvs_indexed(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec2_buffer uvs, ufbxw_int_buffer indices, ufbxw_attribute_mapping mapping);
+
+ufbxw_abi void ufbxw_mesh_set_tangents(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec3_buffer tangents, ufbxw_attribute_mapping mapping);
+ufbxw_abi void ufbxw_mesh_set_binormals(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec3_buffer binormals, ufbxw_attribute_mapping mapping);
+
+ufbxw_abi void ufbxw_mesh_set_colors(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec4_buffer colors, ufbxw_attribute_mapping mapping);
+ufbxw_abi void ufbxw_mesh_set_colors_indexed(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec4_buffer colors, ufbxw_int_buffer indices, ufbxw_attribute_mapping mapping);
+
+ufbxw_abi void ufbxw_mesh_set_attribute(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const ufbxw_mesh_attribute_desc *desc);
+
+ufbxw_abi void ufbxw_mesh_set_attribute_name(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const char *name);
+ufbxw_abi void ufbxw_mesh_set_attribute_name_len(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const char *name, size_t name_len);
 
 ufbxw_vec3_buffer ufbxw_mesh_get_vertices(ufbxw_scene *scene, ufbxw_mesh mesh);
 ufbxw_int_buffer ufbxw_mesh_get_vertex_indices(ufbxw_scene *scene, ufbxw_mesh mesh);
@@ -610,6 +671,10 @@ ufbxw_abi bool ufbxw_save_file(ufbxw_scene *scene, const char *path, const ufbxw
 ufbxw_abi bool ufbxw_save_file_len(ufbxw_scene *scene, const char *path, size_t path_len, const ufbxw_save_opts *opts, ufbxw_error *error);
 
 ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error);
+
+// -- Utility
+
+ufbxw_abi ufbxw_string ufbxw_str(const char *str);
 
 #endif
 
