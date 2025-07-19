@@ -1368,6 +1368,9 @@ uint32_t ufbxwi_hash_token(ufbxwi_token token)
 // -- Buffers
 
 UFBXWI_LIST_TYPE(ufbxwi_uint32_list, uint32_t);
+UFBXWI_LIST_TYPE(ufbxwi_ktime_list, ufbxw_ktime);
+UFBXWI_LIST_TYPE(ufbxwi_real_list, ufbxw_real);
+UFBXWI_LIST_TYPE(ufbxwi_float_list, float);
 
 #define ufbxwi_empty_int_buffer ((ufbxw_int_buffer){NULL,0})
 #define ufbxwi_empty_vec3_buffer ((ufbxw_vec3_buffer){0})
@@ -1380,13 +1383,19 @@ typedef enum {
 	UFBXWI_BUFFER_TYPE_VEC2,
 	UFBXWI_BUFFER_TYPE_VEC3,
 	UFBXWI_BUFFER_TYPE_VEC4,
+	UFBXWI_BUFFER_TYPE_FLOAT,
+	UFBXWI_BUFFER_TYPE_KEY_ATTR,
 } ufbxwi_buffer_type;
+
+typedef enum {
+	UFBXWI_BUFFER_TYPE_FLAG_ASCII_INT = 0x1,
+} ufbxwi_buffer_type_flags;
 
 typedef struct {
 	uint8_t size;
 	uint8_t components;
 	uint8_t scalar_type;
-	uint8_t padding;
+	uint8_t flags;
 } ufbxwi_buffer_type_info;
 
 static const ufbxwi_buffer_type_info ufbxwi_buffer_type_infos[] = {
@@ -1397,6 +1406,8 @@ static const ufbxwi_buffer_type_info ufbxwi_buffer_type_infos[] = {
 	{ sizeof(ufbxw_vec2), 2, UFBXWI_BUFFER_TYPE_REAL },
 	{ sizeof(ufbxw_vec3), 3, UFBXWI_BUFFER_TYPE_REAL },
 	{ sizeof(ufbxw_vec4), 4, UFBXWI_BUFFER_TYPE_REAL },
+	{ sizeof(float), 1, UFBXWI_BUFFER_TYPE_FLOAT },
+	{ sizeof(float), 4, UFBXWI_BUFFER_TYPE_FLOAT, UFBXWI_BUFFER_TYPE_FLAG_ASCII_INT },
 };
 
 static ufbxwi_forceinline ufbxw_id ufbxwi_make_buffer_id(ufbxwi_buffer_type type, uint32_t generation, size_t index)
@@ -1435,11 +1446,23 @@ typedef enum {
 	UFBXWI_BUFFER_FLAG_TEMPORARY = 0x1,
 } ufbxwi_buffer_state;
 
+typedef struct {
+	float slope_right;
+	float slope_next_left;
+	uint32_t packed_weight;
+	uint32_t packed_velocity;
+} ufbxwi_key_attr;
+
+typedef size_t ufbxwi_float_stream_fn(void *user, float *dst, size_t dst_size, size_t offset);
+typedef size_t ufbxwi_key_attr_stream_fn(void *user, ufbxwi_key_attr *dst, size_t dst_size, size_t offset);
+
 typedef union {
 	ufbxw_int_stream_fn *int_fn;
 	ufbxw_real_stream_fn *real_fn;
 	ufbxw_vec2_stream_fn *vec2_fn;
 	ufbxw_vec3_stream_fn *vec3_fn;
+	ufbxwi_float_stream_fn *float_fn;
+	ufbxwi_key_attr_stream_fn *key_attr_fn;
 } ufbxwi_stream_fn;
 
 typedef struct {
@@ -1538,11 +1561,20 @@ static void ufbxwi_reset_buffer(ufbxwi_buffer_pool *pool, ufbxwi_buffer *buffer)
 
 	if (buffer->state == UFBXWI_BUFFER_STATE_OWNED) {
 		ufbxwi_free(pool->ator, buffer->data.owned.data);
+	} else if (buffer->state == UFBXWI_BUFFER_STATE_STREAM) {
+		ufbxwi_free(pool->ator, buffer->stream_data);
 	}
 
 	buffer->deleter_fn = NULL;
 	buffer->deleter_user = NULL;
 	buffer->state = UFBXWI_BUFFER_STATE_NONE;
+
+	buffer->stream_data = NULL;
+	buffer->stream_count = 0;
+	buffer->stream_capacity = 0;
+	buffer->stream_offset = 0;
+	buffer->stream_read_count = 0;
+
 	memset(&buffer->data, 0, sizeof(buffer->data));
 }
 
@@ -1550,13 +1582,17 @@ static size_t ufbxwi_buffer_stream_read(void *dst, size_t dst_count, size_t offs
 {
 	switch (type) {
 	case UFBXWI_BUFFER_TYPE_INT:
-		return fn.int_fn(user, dst, dst_count, offset);
+		return fn.int_fn(user, (int32_t*)dst, dst_count, offset);
 	case UFBXWI_BUFFER_TYPE_REAL:
-		return fn.real_fn(user, dst, dst_count, offset);
+		return fn.real_fn(user, (ufbxw_real*)dst, dst_count, offset);
 	case UFBXWI_BUFFER_TYPE_VEC2:
-		return fn.vec2_fn(user, dst, dst_count, offset);
+		return fn.vec2_fn(user, (ufbxw_vec2*)dst, dst_count, offset);
 	case UFBXWI_BUFFER_TYPE_VEC3:
-		return fn.vec3_fn(user, dst, dst_count, offset);
+		return fn.vec3_fn(user, (ufbxw_vec3*)dst, dst_count, offset);
+	case UFBXWI_BUFFER_TYPE_FLOAT:
+		return fn.float_fn(user, (float*)dst, dst_count, offset);
+	case UFBXWI_BUFFER_TYPE_KEY_ATTR:
+		return fn.key_attr_fn(user, (ufbxwi_key_attr*)dst, dst_count, offset);
 	}
 	return SIZE_MAX;
 }
@@ -1724,14 +1760,10 @@ static void ufbxwi_delete_buffer_imp(ufbxwi_buffer_pool *pool, ufbxw_buffer_id i
 	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
 	if (!buffer) return;
 
-	if (buffer->state == UFBXWI_BUFFER_STATE_OWNED) {
-		ufbxwi_free(pool->ator, buffer->data.owned.data);
-	} else if (buffer->state == UFBXWI_BUFFER_STATE_STREAM) {
-		ufbxwi_free(pool->ator, buffer->stream_data);
-	}
-
-	uint32_t generation = ufbxwi_buffer_id_generation(buffer->id);
+	ufbxwi_reset_buffer(pool, buffer);
 	memset(buffer, 0, sizeof(ufbxwi_buffer));
+
+	uint32_t generation = ufbxwi_buffer_id_generation(id);
 	buffer->id = ufbxwi_make_buffer_id(UFBXWI_BUFFER_TYPE_NONE, generation, 0);
 
 	if (generation < 0xffff) {
@@ -1877,7 +1909,7 @@ static ufbxwi_noinline bool ufbxwi_start_stream(ufbxwi_buffer_pool *pool, ufbxw_
 
 	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(id);
 	size_t type_size = ufbxwi_buffer_type_infos[type].size;
-	uint32_t capacity = 16 * 1024 / type_size;
+	uint32_t capacity = (uint32_t)(16 * 1024 / type_size);
 
 	// TODO: Pool these
 	void *data = ufbxwi_alloc_size(pool->ator, type_size, capacity, NULL);
@@ -2043,8 +2075,6 @@ UFBXWI_LIST_TYPE(ufbxwi_element_list, ufbxwi_element);
 UFBXWI_LIST_TYPE(ufbxw_node_list, ufbxw_node);
 UFBXWI_LIST_TYPE(ufbxw_material_list, ufbxw_material);
 
-UFBXWI_LIST_TYPE(ufbxw_keyframe_real_list, ufbxw_keyframe_real);
-
 typedef struct {
 	ufbxw_id id;
 	ufbxwi_conn_list anim_props;
@@ -2144,11 +2174,24 @@ typedef struct {
 } ufbxwi_texture;
 
 typedef struct {
+	uint32_t flags;
+	float weight_left;
+	float weight_right;
+	float slope_left;
+	float slope_right;
+} ufbxwi_anim_key_attr;
+
+UFBXWI_LIST_TYPE(ufbxwi_anim_key_attr_list, ufbxwi_anim_key_attr);
+
+typedef struct {
 	ufbxwi_element_data element;
 	ufbxwi_conn prop;
 
 	// TODO: Less wasteful implementation
-	ufbxw_keyframe_real_list keys;
+	ufbxwi_ktime_list key_times;
+	ufbxwi_float_list key_values;
+	ufbxwi_uint32_list key_attr_indices;
+	ufbxwi_anim_key_attr_list key_attr_data;
 
 } ufbxwi_anim_curve;
 
@@ -2214,7 +2257,7 @@ struct ufbxw_scene {
 	ufbxwi_id_list tmp_ids;
 };
 
-#define ufbxwi_max_size(a, b) (sizeof(a) > sizeof(b) ? sizeof(a) : sizeof(b))
+#define ufbxwi_max_sizeof(a, b) (sizeof(a) > sizeof(b) ? sizeof(a) : sizeof(b))
 
 typedef struct {
 	uint8_t size;
@@ -2236,10 +2279,10 @@ static const ufbxwi_prop_data_info ufbxwi_prop_data_infos[] = {
 	{ sizeof(ufbxw_vec2), sizeof(ufbxw_real) },
 	{ sizeof(ufbxw_vec3), sizeof(ufbxw_real) },
 	{ sizeof(ufbxw_vec4), sizeof(ufbxw_real) },
-	{ sizeof(ufbxw_string), ufbxwi_max_size(char*, size_t) },
+	{ sizeof(ufbxw_string), ufbxwi_max_sizeof(char*, size_t) },
 	{ sizeof(ufbxw_id), sizeof(ufbxw_id) },
-	{ sizeof(ufbxw_real_string), ufbxwi_max_size(ufbxw_real, char*) },
-	{ sizeof(ufbxw_blob), ufbxwi_max_size(void*, size_t) },
+	{ sizeof(ufbxw_real_string), ufbxwi_max_sizeof(ufbxw_real, char*) },
+	{ sizeof(ufbxw_blob), ufbxwi_max_sizeof(void*, size_t) },
 	{ sizeof(ufbxw_user_int), sizeof(int32_t) },
 	{ sizeof(ufbxw_user_real), sizeof(ufbxw_real) },
 	{ sizeof(ufbxw_user_enum), sizeof(int32_t) },
@@ -4357,6 +4400,59 @@ static void ufbxwi_ascii_dom_write_int_array(ufbxw_save_context *sc, ufbxwi_buff
 	}
 }
 
+// TODO: Deduplicate these
+static void ufbxwi_ascii_dom_write_long_array(ufbxw_save_context *sc, ufbxwi_buffer *buffer)
+{
+	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer->id);
+	ufbxwi_buffer_type_info type_info = ufbxwi_buffer_type_infos[type];
+	size_t scalar_count = buffer->count * type_info.components;
+
+	if (scalar_count == 0) {
+		ufbxwi_write(sc, "\n", 1);
+		return;
+	}
+
+	int64_t temp[128];
+	size_t temp_size = sizeof(temp);
+	size_t offset = 0;
+
+	size_t line_count = temp_size / sizeof(int64_t);
+	char fmt_buffer[64];
+
+	while (offset < buffer->count) {
+		size_t max_read_size = (buffer->count - offset) * type_info.size;
+		size_t read_size = ufbxwi_min_sz(max_read_size, temp_size);
+		ufbxwi_void_span span = ufbxwi_buffer_read(&sc->buffers, buffer->id, temp, read_size, offset);
+		size_t span_count = span.count * type_info.components;
+
+		for (size_t begin = 0; begin < span_count; ) {
+			size_t count = ufbxwi_min_sz(span_count - begin, line_count);
+			const int64_t *src = (const int64_t*)span.data + begin;
+			size_t pre_comma_count = count - 1;
+
+			for (size_t i = 0; i < pre_comma_count; i++) {
+				// TODO: Fast int printing
+				int len = snprintf(fmt_buffer, sizeof(fmt_buffer), "%lld,", (long long)src[i]);
+				ufbxwi_write(sc, fmt_buffer, (size_t)len);
+			}
+
+			{
+				int len = snprintf(fmt_buffer, sizeof(fmt_buffer), "%lld", (long long)src[pre_comma_count]);
+				ufbxwi_write(sc, fmt_buffer, (size_t)len);
+				if (offset * type_info.components + begin + count == scalar_count) {
+					ufbxwi_write(sc, "\n", 1);
+				} else {
+					ufbxwi_write(sc, ",\n", 2);
+				}
+			}
+
+			begin += count;
+		}
+
+		offset += span.count;
+	}
+}
+
 static void ufbxwi_ascii_dom_write_real_array(ufbxw_save_context *sc, ufbxwi_buffer *buffer)
 {
 	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer->id);
@@ -4379,6 +4475,53 @@ static void ufbxwi_ascii_dom_write_real_array(ufbxw_save_context *sc, ufbxwi_buf
 		for (size_t begin = 0; begin < span_count; ) {
 			size_t count = ufbxwi_min_sz(span_count - begin, line_count);
 			const ufbxw_real *src = (const ufbxw_real*)span.data + begin;
+			size_t pre_comma_count = count - 1;
+
+			for (size_t i = 0; i < pre_comma_count; i++) {
+				// TODO: Fast float printing
+				int len = snprintf(fmt_buffer, sizeof(fmt_buffer), "%g,", src[i]);
+				ufbxwi_write(sc, fmt_buffer, (size_t)len);
+			}
+
+			{
+				int len = snprintf(fmt_buffer, sizeof(fmt_buffer), "%g", src[pre_comma_count]);
+				ufbxwi_write(sc, fmt_buffer, (size_t)len);
+				if (offset * type_info.components + begin + count == scalar_count) {
+					ufbxwi_write(sc, "\n", 1);
+				} else {
+					ufbxwi_write(sc, ",\n", 2);
+				}
+			}
+
+			begin += count;
+		}
+
+		offset += span.count;
+	}
+}
+
+static void ufbxwi_ascii_dom_write_float_array(ufbxw_save_context *sc, ufbxwi_buffer *buffer)
+{
+	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer->id);
+	ufbxwi_buffer_type_info type_info = ufbxwi_buffer_type_infos[type];
+	size_t scalar_count = buffer->count * type_info.components;
+
+	float temp[128];
+	size_t temp_size = sizeof(temp);
+	size_t offset = 0;
+
+	size_t line_count = temp_size / sizeof(float);
+	char fmt_buffer[64];
+
+	while (offset < buffer->count) {
+		size_t max_read_size = (buffer->count - offset) * type_info.size;
+		size_t read_size = ufbxwi_min_sz(max_read_size, temp_size);
+		ufbxwi_void_span span = ufbxwi_buffer_read(&sc->buffers, buffer->id, temp, read_size, offset);
+		size_t span_count = span.count * type_info.components;
+
+		for (size_t begin = 0; begin < span_count; ) {
+			size_t count = ufbxwi_min_sz(span_count - begin, line_count);
+			const float *src = (const float*)span.data + begin;
 			size_t pre_comma_count = count - 1;
 
 			for (size_t i = 0; i < pre_comma_count; i++) {
@@ -4427,12 +4570,23 @@ static void ufbxwi_ascii_dom_write_array(ufbxw_save_context *sc, const char *tag
 	ufbxwi_ascii_indent(sc);
 	ufbxwi_write(sc, "a: ", 3);
 
-	switch (type_info.scalar_type) {
+	ufbxwi_buffer_type scalar_type = type_info.scalar_type;
+	if ((type_info.flags & UFBXWI_BUFFER_TYPE_FLAG_ASCII_INT) != 0 && sc->opts.version >= 7200) {
+		scalar_type = UFBXWI_BUFFER_TYPE_INT;
+	}
+
+	switch (scalar_type) {
 	case UFBXWI_BUFFER_TYPE_INT:
 		ufbxwi_ascii_dom_write_int_array(sc, buffer);
 		break;
+	case UFBXWI_BUFFER_TYPE_LONG:
+		ufbxwi_ascii_dom_write_long_array(sc, buffer);
+		break;
 	case UFBXWI_BUFFER_TYPE_REAL:
 		ufbxwi_ascii_dom_write_real_array(sc, buffer);
+		break;
+	case UFBXWI_BUFFER_TYPE_FLOAT:
+		ufbxwi_ascii_dom_write_float_array(sc, buffer);
 		break;
 	}
 
@@ -4883,9 +5037,125 @@ static void ufbxwi_save_mesh_data(ufbxw_save_context *sc, ufbxwi_element *elemen
 	if (prev_set > INT32_MIN) ufbxwi_dom_close(sc);
 }
 
+static uint32_t ufbxwi_pack_weight(float weight)
+{
+	if (!(weight >= 0.0f)) weight = 0.0f;
+	if (weight > 1.0f) weight = 1.0f;
+	return (uint32_t)(weight * 10000.0f);
+}
+
+typedef enum {
+	UFBXWI_KEY_INTERPOLATION_CONSTANT = 0x2,
+	UFBXWI_KEY_INTERPOLATION_LINEAR = 0x4,
+	UFBXWI_KEY_INTERPOLATION_CUBIC = 0x8,
+	UFBXWI_KEY_TANGENT_AUTO = 0x100,
+	UFBXWI_KEY_TANGENT_TCB = 0x200,
+	UFBXWI_KEY_TANGENT_USER = 0x400,
+	UFBXWI_KEY_TANGENT_BROKEN = 0x800,
+	UFBXWI_KEY_CONSTANT_NEXT = 0x100,
+	UFBXWI_KEY_CLAMP = 0x1000,
+	UFBXWI_KEY_TIME_INDEPENDENT = 0x2000,
+	UFBXWI_KEY_CLAMP_PROGRESSIVE = 0x4000,
+	UFBXWI_KEY_WEIGHTED_RIGHT = 0x1000000,
+	UFBXWI_KEY_WEIGHTED_NEXT_LEFT = 0x2000000,
+	UFBXWI_KEY_VELOCITY_RIGHT = 0x10000000,
+	UFBXWI_KEY_VELOCITY_NEXT_LEFT = 0x20000000,
+} ufbxwi_key_flags;
+
 static void ufbxwi_save_anim_curve_keys(ufbxw_save_context *sc, ufbxwi_element *element)
 {
+	const ufbxwi_anim_curve *curve = (const ufbxwi_anim_curve*)element->data;
 
+	ufbxw_buffer_id buf_times = ufbxwi_create_external_buffer(&sc->buffers, UFBXWI_BUFFER_TYPE_LONG, curve->key_times.data, curve->key_times.count, 0);
+	ufbxw_buffer_id buf_values = ufbxwi_create_external_buffer(&sc->buffers, UFBXWI_BUFFER_TYPE_FLOAT, curve->key_values.data, curve->key_values.count, 0);
+
+	size_t max_attrs = ufbxwi_min_sz(curve->key_attr_data.count * 2, curve->key_values.count);
+
+	// TODO: Pool these
+	int32_t *key_flags = ufbxwi_alloc(&sc->ator, int32_t, max_attrs);
+	int32_t *key_refcounts = ufbxwi_alloc(&sc->ator, int32_t, max_attrs);
+	ufbxwi_key_attr *key_attrs = ufbxwi_alloc(&sc->ator, ufbxwi_key_attr, max_attrs);
+	ufbxwi_check_err(&sc->error, key_flags && key_refcounts && key_attrs);
+
+	size_t attr_count = 0;
+	size_t key_count = curve->key_values.count;
+	uint32_t prev_prev_ix = ~0u;
+	for (size_t i = 0; i < key_count; i++) {
+		size_t ni = ufbxwi_min_sz(i + 1, key_count - 1);
+		uint32_t prev_ix = curve->key_attr_indices.data[i];
+		uint32_t next_ix = curve->key_attr_indices.data[ni];
+		if (prev_ix == next_ix && prev_ix == prev_prev_ix) {
+			// Simple repeat, must have an attr if `prev_ix` exists.
+			ufbxw_assert(attr_count > 0);
+			key_refcounts[attr_count - 1]++;
+			continue;
+		}
+
+		ufbxwi_anim_key_attr prev_attr = curve->key_attr_data.data[prev_ix];
+		ufbxwi_anim_key_attr next_attr = curve->key_attr_data.data[next_ix];
+
+		float weight_right = prev_attr.weight_right;
+		float weight_next_left = next_attr.weight_left;
+
+		uint32_t flags = 0;
+		if (prev_attr.flags & UFBXW_KEYFRAME_INTERPOLATION_CONSTANT) {
+			flags |= UFBXWI_KEY_INTERPOLATION_CONSTANT;
+		} else if (prev_attr.flags & UFBXW_KEYFRAME_INTERPOLATION_CONSTANT_NEXT) {
+			flags |= UFBXWI_KEY_INTERPOLATION_CONSTANT | UFBXWI_KEY_CONSTANT_NEXT;
+		} else if (prev_attr.flags & UFBXW_KEYFRAME_INTERPOLATION_LINEAR) {
+			flags |= UFBXWI_KEY_INTERPOLATION_LINEAR;
+		} else if (prev_attr.flags & UFBXW_KEYFRAME_INTERPOLATION_CUBIC) {
+			flags |= UFBXWI_KEY_INTERPOLATION_CUBIC;
+		}
+
+		if (prev_attr.flags & UFBXW_KEYFRAME_TANGENT_AUTO) {
+			flags |= UFBXWI_KEY_TANGENT_AUTO | UFBXWI_KEY_TIME_INDEPENDENT | UFBXWI_KEY_CLAMP_PROGRESSIVE;
+		} else if (prev_attr.flags & UFBXW_KEYFRAME_TANGENT_AUTO_UNCLAMPED) {
+			flags |= UFBXWI_KEY_TANGENT_AUTO | UFBXWI_KEY_TIME_INDEPENDENT;
+		} else if (prev_attr.flags & UFBXW_KEYFRAME_TANGENT_AUTO_LEGACY) {
+			flags |= UFBXWI_KEY_TANGENT_AUTO;
+		} else if (prev_attr.flags & UFBXW_KEYFRAME_TANGENT_AUTO_LEGACY_CLAMPED) {
+			flags |= UFBXWI_KEY_TANGENT_AUTO | UFBXWI_KEY_CLAMP;
+		} else if (prev_attr.flags & UFBXW_KEYFRAME_TANGENT_USER) {
+			flags |= UFBXWI_KEY_TANGENT_USER;
+		} else if (prev_attr.flags & UFBXW_KEYFRAME_TANGENT_TCB) {
+			flags |= UFBXWI_KEY_TANGENT_TCB;
+		}
+
+		if (prev_attr.flags & UFBXW_KEYFRAME_TANGENT_BROKEN) flags |= UFBXWI_KEY_TANGENT_BROKEN;
+		if (prev_attr.flags & UFBXW_KEYFRAME_WEIGHTED_RIGHT) flags |= UFBXWI_KEY_WEIGHTED_RIGHT;
+		if (next_attr.flags & UFBXW_KEYFRAME_WEIGHTED_LEFT) flags |= UFBXWI_KEY_WEIGHTED_NEXT_LEFT;
+
+		ufbxwi_key_attr attr;
+		attr.slope_right = prev_attr.slope_right;
+		attr.slope_next_left = next_attr.slope_left;
+		attr.packed_weight = ufbxwi_pack_weight(weight_right) | ufbxwi_pack_weight(weight_next_left) << 16;
+		attr.packed_velocity = 0;
+
+		if (attr_count > 0 && key_flags[attr_count - 1] == flags && !memcmp(&key_attrs[attr_count - 1], &attr, sizeof(ufbxwi_key_attr))) {
+			key_refcounts[attr_count - 1]++;
+		} else {
+			key_flags[attr_count] = flags;
+			key_attrs[attr_count] = attr;
+			key_refcounts[attr_count] = 1;
+			attr_count++;
+		}
+
+		prev_prev_ix = prev_ix;
+	}
+
+	ufbxw_buffer_id buf_flags = ufbxwi_create_external_buffer(&sc->buffers, UFBXWI_BUFFER_TYPE_INT, key_flags, attr_count, 0);
+	ufbxw_buffer_id buf_attrs = ufbxwi_create_external_buffer(&sc->buffers, UFBXWI_BUFFER_TYPE_KEY_ATTR, key_attrs, attr_count, 0);
+	ufbxw_buffer_id buf_refcounts = ufbxwi_create_external_buffer(&sc->buffers, UFBXWI_BUFFER_TYPE_INT, key_refcounts, attr_count, 0);
+	ufbxwi_buffer_set_deleter(&sc->buffers, buf_flags, ufbxwi_deleter_free, &sc->ator);
+	ufbxwi_buffer_set_deleter(&sc->buffers, buf_attrs, ufbxwi_deleter_free, &sc->ator);
+	ufbxwi_buffer_set_deleter(&sc->buffers, buf_refcounts, ufbxwi_deleter_free, &sc->ator);
+
+	ufbxwi_dom_array(sc, "KeyTime", buf_times);
+	ufbxwi_dom_array(sc, "KeyValueFloat", buf_values);
+	ufbxwi_dom_array(sc, "KeyAttrFlags", buf_flags);
+	ufbxwi_dom_array(sc, "KeyAttrDataFloat", buf_attrs);
+	ufbxwi_dom_array(sc, "KeyAttrRefCount", buf_refcounts);
 }
 
 static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element, uint32_t flags)
@@ -5201,8 +5471,8 @@ static void ufbxwi_save_takes(ufbxw_save_context *sc)
 
 	ufbxwi_dom_open(sc, "Take", "C", "Take 001");
 	ufbxwi_dom_value(sc, "FileName", "C", "Take_001.tak");
-	ufbxwi_dom_value(sc, "LocalTime", "LL", (int64_t)1924423250, (int64_t)230930790000);
-	ufbxwi_dom_value(sc, "ReferenceTime", "LL", (int64_t)1924423250, (int64_t)230930790000);
+	ufbxwi_dom_value(sc, "LocalTime", "LL", (int64_t)0, (int64_t)92372316000);
+	ufbxwi_dom_value(sc, "ReferenceTime", "LL", (int64_t)0, (int64_t)92372316000);
 	ufbxwi_dom_close(sc);
 
 	ufbxwi_dom_close(sc);
@@ -6244,7 +6514,40 @@ ufbxw_abi void ufbxw_anim_curve_add_keyframe_key(ufbxw_scene *scene, ufbxw_anim_
 	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
 	if (!c) return;
 
-	ufbxwi_list_push_copy(&scene->ator, &c->keys, ufbxw_keyframe_real, &key);
+	float value = (float)key.value;
+	ufbxwi_anim_key_attr key_attr;
+	key_attr.flags = key.flags;
+
+	if (key.flags & UFBXW_KEYFRAME_WEIGHTED_LEFT) {
+		key_attr.weight_left = (float)key.weight_left;
+	} else {
+		key_attr.weight_left = (float)(1.0 / 3.0);
+	}
+
+	if (key.flags & UFBXW_KEYFRAME_WEIGHTED_RIGHT) {
+		key_attr.weight_right = (float)key.weight_right;
+	} else {
+		key_attr.weight_right = (float)(1.0 / 3.0);
+	}
+
+	if (key.flags & UFBXW_KEYFRAME_TANGENT_USER) {
+		key_attr.slope_left = (float)key.slope_left;
+		key_attr.slope_right = (float)key.slope_right;
+	} else {
+		key_attr.slope_left = 0.0f;
+		key_attr.slope_right = 0.0f;
+	}
+
+	uint32_t key_attr_index = (uint32_t)c->key_attr_data.count;
+	if (c->key_attr_data.count > 0 && !memcmp(&c->key_attr_data.data[c->key_attr_data.count - 1], &key_attr, sizeof(ufbxwi_anim_key_attr))) {
+		key_attr_index -= 1;
+	} else {
+		ufbxwi_list_push_copy(&scene->ator, &c->key_attr_data, ufbxwi_anim_key_attr, &key_attr);
+	}
+
+	ufbxwi_list_push_copy(&scene->ator, &c->key_times, ufbxw_ktime, &key.time);
+	ufbxwi_list_push_copy(&scene->ator, &c->key_values, float, &value);
+	ufbxwi_list_push_copy(&scene->ator, &c->key_attr_indices, uint32_t, &key_attr_index);
 }
 
 ufbxw_abi ufbxw_id ufbxw_get_scene_info_id(ufbxw_scene *scene)

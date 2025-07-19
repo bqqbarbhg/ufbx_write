@@ -100,6 +100,13 @@ int main(int argc, char **argv)
 	ufbxw_vec2_buffer uvs_buffer = ufbxw_external_vec2_array(scene, uvs, array_count(uvs));
 	ufbxw_mesh_set_uvs(scene, mesh, 0, uvs_buffer, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
 
+	ufbxw_anim_layer anim_layer = ufbxw_get_default_anim_layer(scene);
+	ufbxw_anim_prop anim_t = ufbxw_node_animate_translation(scene, node, anim_layer);
+
+	ufbxw_anim_add_keyframe_vec3(scene, anim_t, (ufbxw_ktime)(0.0 * UFBXW_KTIME_SECOND), make_vec3(0.0f, 0.0f, 0.0f), UFBXW_KEYFRAME_LINEAR);
+	ufbxw_anim_add_keyframe_vec3(scene, anim_t, (ufbxw_ktime)(1.0 * UFBXW_KTIME_SECOND), make_vec3(1.0f, 0.3f, 0.0f), UFBXW_KEYFRAME_LINEAR);
+	ufbxw_anim_add_keyframe_vec3(scene, anim_t, (ufbxw_ktime)(2.0 * UFBXW_KTIME_SECOND), make_vec3(0.0f, 0.6f, 0.0f), UFBXW_KEYFRAME_LINEAR);
+
 #if 0
 
 	ufbxw_mesh_attribute_desc desc = { 0 };
