@@ -561,6 +561,9 @@ ufbxw_abi void ufbxw_mesh_set_binormals(ufbxw_scene *scene, ufbxw_mesh mesh, int
 ufbxw_abi void ufbxw_mesh_set_colors(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec4_buffer colors, ufbxw_attribute_mapping mapping);
 ufbxw_abi void ufbxw_mesh_set_colors_indexed(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec4_buffer colors, ufbxw_int_buffer indices, ufbxw_attribute_mapping mapping);
 
+ufbxw_abi void ufbxw_mesh_set_single_material(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t material_index);
+ufbxw_abi void ufbxw_mesh_set_face_material(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer material_indices);
+
 ufbxw_abi void ufbxw_mesh_set_attribute(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const ufbxw_mesh_attribute_desc *desc);
 
 ufbxw_abi void ufbxw_mesh_set_attribute_name(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const char *name);

@@ -3998,7 +3998,7 @@ static const ufbxwi_mesh_attribute_info ufbxwi_mesh_attribute_infos[] = {
 	{ "LayerElementBinormal", "Binormal", NULL, 102, 2, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
 	{ "LayerElementColor", "Color", "ColorIndex", 101, 4, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC4 | UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES },
 	{ "LayerElementSmoothing", "Smoothing", "", 102, 6, UFBXWI_MESH_ATTRIBUTE_TYPE_INT | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES },
-	{ "LayerElementMaterial", NULL, "Materials", 102, 7, UFBXWI_MESH_ATTRIBUTE_TYPE_NONE | UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES },
+	{ "LayerElementMaterial", NULL, "Materials", 101, 7, UFBXWI_MESH_ATTRIBUTE_TYPE_NONE | UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES },
 };
 
 static const ufbxwi_attribute_mapping_info ufbxwi_attribute_mapping_infos[] = {
@@ -4893,7 +4893,7 @@ static bool ufbxwi_less_mesh_attribute_ptr_set(void *user, const void *va, const
 	const ufbxwi_mesh_attribute *a = *(const ufbxwi_mesh_attribute**)va, *b = *(const ufbxwi_mesh_attribute**)vb;
 	(void)user;
 
-	if (a->set == b->set) return a->set < b->set;
+	if (a->set != b->set) return a->set < b->set;
 
 	int32_t a_order = ufbxwi_mesh_attribute_infos[a->attribute].order;
 	int32_t b_order = ufbxwi_mesh_attribute_infos[b->attribute].order;
@@ -6294,6 +6294,26 @@ ufbxw_abi void ufbxw_mesh_set_colors_indexed(ufbxw_scene *scene, ufbxw_mesh mesh
 	desc.indices = indices.id;
 	desc.mapping = mapping;
 	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_COLOR, set, &desc);
+}
+
+ufbxw_abi void ufbxw_mesh_set_single_material(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t material_index)
+{
+	ufbxw_mesh_attribute_desc desc = { 0 };
+	if (material_index == 0) {
+		desc.indices = ufbxw_external_int_array(scene, (const int32_t*)&ufbxwi_prop_default_data.zero.int32_t, 1).id;
+	} else {
+		desc.indices = ufbxw_copy_int_array(scene, &material_index, 1).id;
+	}
+	desc.mapping = UFBXW_ATTRIBUTE_MAPPING_ALL_SAME;
+	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_MATERIAL, 0, &desc);
+}
+
+ufbxw_abi void ufbxw_mesh_set_face_material(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer material_indices)
+{
+	ufbxw_mesh_attribute_desc desc = { 0 };
+	desc.indices = material_indices.id;
+	desc.mapping = UFBXW_ATTRIBUTE_MAPPING_POLYGON;
+	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_MATERIAL, 0, &desc);
 }
 
 ufbxw_abi void ufbxw_mesh_set_attribute(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const ufbxw_mesh_attribute_desc *desc)
