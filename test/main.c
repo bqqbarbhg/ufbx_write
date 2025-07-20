@@ -94,9 +94,14 @@ int main(int argc, char **argv)
 	ufbxw_anim_layer anim_layer = ufbxw_get_default_anim_layer(scene);
 	ufbxw_anim_prop anim_t = ufbxw_node_animate_translation(scene, node, anim_layer);
 
-	ufbxw_anim_add_keyframe_vec3(scene, anim_t, (ufbxw_ktime)(0.0 * UFBXW_KTIME_SECOND), make_vec3(0.0f, 0.0f, 0.0f), UFBXW_KEYFRAME_CUBIC_AUTO);
-	ufbxw_anim_add_keyframe_vec3(scene, anim_t, (ufbxw_ktime)(1.0 * UFBXW_KTIME_SECOND), make_vec3(1.0f, 0.3f, 0.0f), UFBXW_KEYFRAME_CUBIC_AUTO);
-	ufbxw_anim_add_keyframe_vec3(scene, anim_t, (ufbxw_ktime)(2.0 * UFBXW_KTIME_SECOND), make_vec3(0.0f, 0.6f, 0.0f), UFBXW_KEYFRAME_CUBIC_AUTO);
+	ufbxw_anim_add_keyframe_vec3(scene, anim_t, (ufbxw_ktime)(1.0 * UFBXW_KTIME_SECOND), make_vec3(0.0f, 0.0f, 0.0f), UFBXW_KEYFRAME_CUBIC_AUTO);
+	ufbxw_anim_add_keyframe_vec3(scene, anim_t, (ufbxw_ktime)(2.0 * UFBXW_KTIME_SECOND), make_vec3(1.0f, 0.3f, 0.0f), UFBXW_KEYFRAME_CUBIC_AUTO);
+	ufbxw_anim_add_keyframe_vec3(scene, anim_t, (ufbxw_ktime)(3.0 * UFBXW_KTIME_SECOND), make_vec3(0.0f, 0.6f, 0.0f), UFBXW_KEYFRAME_CUBIC_AUTO);
+
+	ufbxw_anim_stack anim_stack = ufbxw_get_default_anim_stack(scene);
+	ufbxw_set_name(scene, anim_stack.id, "Default_Stack");
+
+	ufbxw_set_name(scene, anim_layer.id, "Default_Layer");
 
 	ufbxw_id mat_a = ufbxw_create_element_ex(scene, UFBXW_ELEMENT_MATERIAL, "FbxSurfaceLambert");
 	ufbxw_id mat_b = ufbxw_create_element_ex(scene, UFBXW_ELEMENT_MATERIAL, "FbxSurfaceLambert");

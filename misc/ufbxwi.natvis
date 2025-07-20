@@ -16,6 +16,8 @@
 	<Type Name="ufbxwi_mesh_attribute_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
 	<Type Name="ufbxwi_anim_key_attr_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
 	<Type Name="ufbxwi_id_span"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
+	<Type Name="ufbxwi_ktime_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
+	<Type Name="ufbxwi_float_list"><DisplayString>{{ count={count} }}</DisplayString><Expand><ArrayItems><Size>count</Size><ValuePointer>data</ValuePointer></ArrayItems></Expand></Type>
 	<Type Name="ufbxwi_props">
 		<DisplayString>{{ count={count} }}</DisplayString>
 		<Expand>

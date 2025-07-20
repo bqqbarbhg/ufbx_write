@@ -145,6 +145,11 @@ UFBXW_LIST_TYPE(ufbxw_vec4_list, ufbxw_vec4);
 
 typedef int64_t ufbxw_ktime;
 
+typedef struct ufbxw_ktime_range {
+	ufbxw_ktime begin;
+	ufbxw_ktime end;
+} ufbxw_ktime_range;
+
 #define ufbxw_null_id ((ufbxw_id)0)
 #define ufbxw_null_node ((ufbxw_node){0})
 #define ufbxw_null_mesh ((ufbxw_mesh){0})
@@ -350,6 +355,40 @@ typedef enum ufbxw_keyframe_type {
 	UFBXW_KEYFRAME_CUBIC_USER_BROKEN = UFBXW_KEYFRAME_INTERPOLATION_CUBIC | UFBXW_KEYFRAME_TANGENT_USER | UFBXW_KEYFRAME_TANGENT_BROKEN,
 } ufbxw_keyframe_type;
 
+typedef enum ufbxw_time_mode {
+	UFBXW_TIME_MODE_DEFAULT,
+	UFBXW_TIME_MODE_120_FPS,
+	UFBXW_TIME_MODE_100_FPS,
+	UFBXW_TIME_MODE_60_FPS,
+	UFBXW_TIME_MODE_50_FPS,
+	UFBXW_TIME_MODE_48_FPS,
+	UFBXW_TIME_MODE_30_FPS,
+	UFBXW_TIME_MODE_30_FPS_DROP,
+	UFBXW_TIME_MODE_NTSC_DROP_FRAME,
+	UFBXW_TIME_MODE_NTSC_FULL_FRAME,
+	UFBXW_TIME_MODE_PAL,
+	UFBXW_TIME_MODE_24_FPS,
+	UFBXW_TIME_MODE_1000_FPS,
+	UFBXW_TIME_MODE_FILM_FULL_FRAME,
+	UFBXW_TIME_MODE_CUSTOM,
+	UFBXW_TIME_MODE_96_FPS,
+	UFBXW_TIME_MODE_72_FPS,
+	UFBXW_TIME_MODE_59_94_FPS,
+} ufbxw_time_mode;
+
+typedef enum ufbxw_time_protocol {
+	UFBXW_TIME_PROTOCOL_SMPTE,
+	UFBXW_TIME_PROTOCOL_FRAME_COUNT,
+	UFBXW_TIME_PROTOCOL_DEFAULT,
+} ufbxw_time_protocol;
+
+typedef enum ufbxw_snap_mode {
+	UFBXW_SNAP_MODE_NONE,
+	UFBXW_SNAP_MODE_SNAP,
+	UFBXW_SNAP_MODE_PLAY,
+	UFBXW_SNAP_MODE_SNAP_AND_PLAY,
+} ufbxw_snap_mode;
+
 typedef struct ufbxw_keyframe_real {
 	ufbxw_ktime time;
 	ufbxw_real value;
@@ -547,7 +586,7 @@ ufbxw_abi ufbxw_mesh ufbxw_as_mesh(ufbxw_id id);
 ufbxw_abi void ufbxw_mesh_set_vertices(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_vec3_buffer vertices);
 
 ufbxw_abi void ufbxw_mesh_set_triangles(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer indices);
-ufbxw_abi void yfbxw_mesh_set_polygons(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer indices, ufbxw_int_buffer face_offsets);
+ufbxw_abi void ufbxw_mesh_set_polygons(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer indices, ufbxw_int_buffer face_offsets);
 ufbxw_abi void ufbxw_mesh_set_fbx_polygon_vertex_index(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer polygon_vertex_index);
 
 ufbxw_abi void ufbxw_mesh_set_normals(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_vec3_buffer normals, ufbxw_attribute_mapping mapping);
@@ -602,6 +641,12 @@ ufbxw_abi ufbxw_anim_stack ufbxw_create_anim_stack(ufbxw_scene *scene);
 
 ufbxw_abi ufbxw_anim_layer ufbxw_anim_stack_get_layer(ufbxw_scene *scene, ufbxw_anim_stack stack, size_t index);
 
+ufbxw_abi void ufbxw_anim_stack_set_time_range(ufbxw_scene *scene, ufbxw_anim_stack stack, ufbxw_ktime time_begin, ufbxw_ktime time_end);
+ufbxw_abi void ufbxw_anim_stack_set_reference_time_range(ufbxw_scene *scene, ufbxw_anim_stack stack, ufbxw_ktime time_begin, ufbxw_ktime time_end);
+
+ufbxw_abi ufbxw_ktime_range ufbxw_anim_stack_get_time_range(ufbxw_scene *scene, ufbxw_anim_stack stack);
+ufbxw_abi ufbxw_ktime_range ufbxw_anim_stack_get_reference_time_range(ufbxw_scene *scene, ufbxw_anim_stack stack);
+
 ufbxw_abi void ufbxw_set_active_anim_stack(ufbxw_scene *scene, ufbxw_anim_stack stack);
 ufbxw_abi ufbxw_anim_stack ufbxw_get_active_anim_stack(const ufbxw_scene *scene);
 
@@ -650,6 +695,8 @@ ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type 
 typedef struct ufbxw_prepare_opts {
 	bool finish_keyframes;
 	bool patch_anim_stack_times;
+	bool patch_anim_stack_reference_times;
+	bool patch_global_settings_times;
 } ufbxw_prepare_opts;
 
 extern const ufbxw_prepare_opts ufbxw_default_prepare_opts;
@@ -683,6 +730,9 @@ typedef struct ufbxw_save_opts {
 
 	bool ascii;
 	uint32_t version;
+
+	// TODO: Do not save animation
+	bool ignore_animation;
 
 	bool debug_comments;
 

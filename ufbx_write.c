@@ -284,6 +284,8 @@ static ufbxwi_forceinline uint32_t ufbxwi_min_u32(uint32_t a, uint32_t b) { retu
 static ufbxwi_forceinline uint32_t ufbxwi_max_u32(uint32_t a, uint32_t b) { return a < b ? b : a; }
 static ufbxwi_forceinline size_t ufbxwi_min_sz(size_t a, size_t b) { return a < b ? a : b; }
 static ufbxwi_forceinline size_t ufbxwi_max_sz(size_t a, size_t b) { return a < b ? b : a; }
+static ufbxwi_forceinline int64_t ufbxwi_min_i64(int64_t a, int64_t b) { return a < b ? a : b; }
+static ufbxwi_forceinline int64_t ufbxwi_max_i64(int64_t a, int64_t b) { return a < b ? b : a; }
 
 #define ufbxwi_arraycount(arr) (sizeof(arr) / sizeof(*(arr)))
 #define ufbxwi_for(m_type, m_name, m_begin, m_num) for (m_type *m_name = m_begin, *m_name##_end = ufbxwi_add_ptr(m_name, m_num); m_name != m_name##_end; m_name++)
@@ -1052,11 +1054,16 @@ typedef enum ufbxwi_token {
 	UFBXWI_CastShadows,
 	UFBXWI_Casts_Shadows,
 	UFBXWI_Color,
+	UFBXWI_CoordAxis,
+	UFBXWI_CoordAxisSign,
 	UFBXWI_CurrentMappingType,
 	UFBXWI_CurrentTextureBlendMode,
+	UFBXWI_CurrentTimeMarker,
+	UFBXWI_CustomFrameRate,
 	UFBXWI_DecayStart,
 	UFBXWI_DecayType,
 	UFBXWI_DefaultAttributeIndex,
+	UFBXWI_DefaultCamera,
 	UFBXWI_Description,
 	UFBXWI_DiffuseColor,
 	UFBXWI_DiffuseFactor,
@@ -1084,6 +1091,8 @@ typedef enum ufbxwi_token {
 	UFBXWI_FileName,
 	UFBXWI_Fog,
 	UFBXWI_Freeze,
+	UFBXWI_FrontAxis,
+	UFBXWI_FrontAxisSign,
 	UFBXWI_GeometricRotation,
 	UFBXWI_GeometricScaling,
 	UFBXWI_GeometricTranslation,
@@ -1125,6 +1134,9 @@ typedef enum ufbxwi_token {
 	UFBXWI_NegativePercentShapeSupport,
 	UFBXWI_NodeAttribute,
 	UFBXWI_NormalMap,
+	UFBXWI_OriginalUnitScaleFactor,
+	UFBXWI_OriginalUpAxis,
+	UFBXWI_OriginalUpAxisSign,
 	UFBXWI_OuterAngle,
 	UFBXWI_Path,
 	UFBXWI_PostRotation,
@@ -1175,6 +1187,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_ShadingModel,
 	UFBXWI_ShadowColor,
 	UFBXWI_Show,
+	UFBXWI_SnapOnFrameMode,
 	UFBXWI_Solo,
 	UFBXWI_SourceObject,
 	UFBXWI_Texture,
@@ -1182,6 +1195,11 @@ typedef enum ufbxwi_token {
 	UFBXWI_TextureRotationPivot,
 	UFBXWI_TextureScalingPivot,
 	UFBXWI_TextureTypeUse,
+	UFBXWI_TimeMarker,
+	UFBXWI_TimeMode,
+	UFBXWI_TimeProtocol,
+	UFBXWI_TimeSpanStart,
+	UFBXWI_TimeSpanStop,
 	UFBXWI_TopBarnDoor,
 	UFBXWI_Translation,
 	UFBXWI_TranslationActive,
@@ -1197,6 +1215,9 @@ typedef enum ufbxwi_token {
 	UFBXWI_TransparentColor,
 	UFBXWI_UVSet,
 	UFBXWI_UVSwap,
+	UFBXWI_UnitScaleFactor,
+	UFBXWI_UpAxis,
+	UFBXWI_UpAxisSign,
 	UFBXWI_UpVectorProperty,
 	UFBXWI_UseMaterial,
 	UFBXWI_UseMipMap,
@@ -1242,11 +1263,16 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "CastShadows", 11 },
 	{ "Casts Shadows", 13 },
 	{ "Color", 5 },
+	{ "CoordAxis", 9 },
+	{ "CoordAxisSign", 13 },
 	{ "CurrentMappingType", 18 },
 	{ "CurrentTextureBlendMode", 23 },
+	{ "CurrentTimeMarker", 17 },
+	{ "CustomFrameRate", 15 },
 	{ "DecayStart", 10 },
 	{ "DecayType", 9 },
 	{ "DefaultAttributeIndex", 21 },
+	{ "DefaultCamera", 13 },
 	{ "Description", 11 },
 	{ "DiffuseColor", 12 },
 	{ "DiffuseFactor", 13 },
@@ -1274,6 +1300,8 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "FileName", 8 },
 	{ "Fog", 3 },
 	{ "Freeze", 6 },
+	{ "FrontAxis", 9 },
+	{ "FrontAxisSign", 13 },
 	{ "GeometricRotation", 17 },
 	{ "GeometricScaling", 16 },
 	{ "GeometricTranslation", 20 },
@@ -1315,6 +1343,9 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "NegativePercentShapeSupport", 27 },
 	{ "NodeAttribute", 13 },
 	{ "NormalMap", 9 },
+	{ "OriginalUnitScaleFactor", 23 },
+	{ "OriginalUpAxis", 14 },
+	{ "OriginalUpAxisSign", 18 },
 	{ "OuterAngle", 10 },
 	{ "Path", 4 },
 	{ "PostRotation", 12 },
@@ -1365,6 +1396,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "ShadingModel", 12 },
 	{ "ShadowColor", 11 },
 	{ "Show", 4 },
+	{ "SnapOnFrameMode", 15 },
 	{ "Solo", 4 },
 	{ "SourceObject", 12 },
 	{ "Texture", 7 },
@@ -1372,6 +1404,11 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "TextureRotationPivot", 20 },
 	{ "TextureScalingPivot", 19 },
 	{ "TextureTypeUse", 14 },
+	{ "TimeMarker", 10 },
+	{ "TimeMode", 8 },
+	{ "TimeProtocol", 12 },
+	{ "TimeSpanStart", 13 },
+	{ "TimeSpanStop", 12 },
 	{ "TopBarnDoor", 11 },
 	{ "Translation", 11 },
 	{ "TranslationActive", 17 },
@@ -1387,6 +1424,9 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "TransparentColor", 16 },
 	{ "UVSet", 5 },
 	{ "UVSwap", 6 },
+	{ "UnitScaleFactor", 15 },
+	{ "UpAxis", 6 },
+	{ "UpAxisSign", 10 },
 	{ "UpVectorProperty", 16 },
 	{ "UseMaterial", 11 },
 	{ "UseMipMap", 9 },
@@ -2258,7 +2298,7 @@ typedef struct {
 
 typedef struct {
 	ufbxwi_element_data element;
-	ufbxwi_conn_list anim_props;
+	ufbxwi_id_list anim_props;
 	ufbxw_anim_stack stack;
 	ufbxw_real weight;
 } ufbxwi_anim_layer;
@@ -2266,6 +2306,11 @@ typedef struct {
 typedef struct {
 	ufbxwi_element_data element;
 	ufbxwi_id_list layers;
+
+	ufbxw_ktime local_start;
+	ufbxw_ktime local_stop;
+	ufbxw_ktime reference_start;
+	ufbxw_ktime reference_stop;
 } ufbxwi_anim_stack;
 
 typedef struct {
@@ -2280,7 +2325,28 @@ typedef struct {
 
 typedef struct {
 	ufbxwi_element_data element;
-	int b;
+	int32_t up_axis;
+	int32_t up_axis_sign;
+	int32_t front_axis;
+	int32_t front_axis_sign;
+	int32_t coord_axis;
+	int32_t coord_axis_sign;
+
+	int32_t original_up_axis;
+	int32_t original_up_axis_sign;
+
+	ufbxw_real unit_scale_factor;
+	ufbxw_real original_unit_scale_factor;
+
+	int32_t time_mode;
+	int32_t time_protocol;
+	int32_t snap_on_frame_mode;
+
+	ufbxw_ktime time_span_start;
+	ufbxw_ktime time_span_stop;
+	ufbxw_real custom_frame_rate;
+
+	int32_t current_time_marker;
 } ufbxwi_global_settings;
 
 typedef struct {
@@ -2441,6 +2507,7 @@ typedef struct {
 	ufbxw_string string_empty;
 	ufbxw_string string_default;
 	ufbxw_string string_lambert;
+	ufbxw_string string_producer_perspective;
 } ufbxwi_prop_defaults;
 
 static const ufbxwi_prop_defaults ufbxwi_prop_default_data = {
@@ -2459,6 +2526,7 @@ static const ufbxwi_prop_defaults ufbxwi_prop_default_data = {
 	{ ufbxwi_empty_char, 0 },
 	{ "default", 7 },
 	{ "lambert", 7 },
+	{ "Producer Perspective", 20 },
 };
 
 enum {
@@ -2589,6 +2657,29 @@ static const ufbxwi_prop_desc ufbxwi_light_props[] = {
 	{ UFBXWI_EnableBarnDoor, UFBXW_PROP_TYPE_USER_BOOL, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
 };
 
+static const ufbxwi_prop_desc ufbxwi_global_settings_props[] = {
+	{ UFBXWI_UpAxis, UFBXW_PROP_TYPE_INT, ufbxwi_field(ufbxwi_global_settings, up_axis) },
+	{ UFBXWI_UpAxisSign, UFBXW_PROP_TYPE_INT, ufbxwi_field(ufbxwi_global_settings, up_axis_sign) },
+	{ UFBXWI_FrontAxis, UFBXW_PROP_TYPE_INT, ufbxwi_field(ufbxwi_global_settings, front_axis) },
+	{ UFBXWI_FrontAxisSign, UFBXW_PROP_TYPE_INT, ufbxwi_field(ufbxwi_global_settings, front_axis_sign) },
+	{ UFBXWI_CoordAxis, UFBXW_PROP_TYPE_INT, ufbxwi_field(ufbxwi_global_settings, coord_axis) },
+	{ UFBXWI_CoordAxisSign, UFBXW_PROP_TYPE_INT, ufbxwi_field(ufbxwi_global_settings, coord_axis_sign) },
+	{ UFBXWI_OriginalUpAxis, UFBXW_PROP_TYPE_INT, ufbxwi_field(ufbxwi_global_settings, original_up_axis)},
+	{ UFBXWI_OriginalUpAxisSign, UFBXW_PROP_TYPE_INT, ufbxwi_field(ufbxwi_global_settings, original_up_axis_sign) },
+	{ UFBXWI_UnitScaleFactor, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_field(ufbxwi_global_settings, unit_scale_factor) },
+	{ UFBXWI_OriginalUnitScaleFactor, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_field(ufbxwi_global_settings, original_unit_scale_factor) },
+	{ UFBXWI_AmbientColor, UFBXW_PROP_TYPE_COLOR_RGB },
+	{ UFBXWI_DefaultCamera, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_producer_perspective) },
+	{ UFBXWI_TimeMode, UFBXW_PROP_TYPE_ENUM, ufbxwi_field(ufbxwi_global_settings, time_mode) },
+	{ UFBXWI_TimeProtocol, UFBXW_PROP_TYPE_ENUM, ufbxwi_field(ufbxwi_global_settings, time_protocol) },
+	{ UFBXWI_SnapOnFrameMode, UFBXW_PROP_TYPE_ENUM, ufbxwi_field(ufbxwi_global_settings, snap_on_frame_mode) },
+	{ UFBXWI_TimeSpanStart, UFBXW_PROP_TYPE_TIME, ufbxwi_field(ufbxwi_global_settings, time_span_start) },
+	{ UFBXWI_TimeSpanStop, UFBXW_PROP_TYPE_TIME, ufbxwi_field(ufbxwi_global_settings, time_span_stop) },
+	{ UFBXWI_CustomFrameRate, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_field(ufbxwi_global_settings, custom_frame_rate) },
+	{ UFBXWI_TimeMarker, UFBXW_PROP_TYPE_COMPOUND, },
+	{ UFBXWI_CurrentTimeMarker, UFBXW_PROP_TYPE_INT, ufbxwi_field(ufbxwi_global_settings, current_time_marker) },
+};
+
 static const ufbxwi_prop_desc ufbxwi_material_lambert_props[] = {
 	{ UFBXWI_ShadingModel, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_lambert) },
 	{ UFBXWI_MultiLayer, UFBXW_PROP_TYPE_BOOL, },
@@ -2646,10 +2737,10 @@ static const ufbxwi_prop_desc ufbxwi_anim_layer_props[] = {
 
 static const ufbxwi_prop_desc ufbxwi_anim_stack_props[] = {
 	{ UFBXWI_Description, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_empty) },
-	{ UFBXWI_LocalStart, UFBXW_PROP_TYPE_TIME, },
-	{ UFBXWI_LocalStop, UFBXW_PROP_TYPE_TIME, },
-	{ UFBXWI_ReferenceStart, UFBXW_PROP_TYPE_TIME, },
-	{ UFBXWI_ReferenceStop, UFBXW_PROP_TYPE_TIME, },
+	{ UFBXWI_LocalStart, UFBXW_PROP_TYPE_TIME, ufbxwi_field(ufbxwi_anim_stack, local_start) },
+	{ UFBXWI_LocalStop, UFBXW_PROP_TYPE_TIME, ufbxwi_field(ufbxwi_anim_stack, local_stop) },
+	{ UFBXWI_ReferenceStart, UFBXW_PROP_TYPE_TIME, ufbxwi_field(ufbxwi_anim_stack, reference_start) },
+	{ UFBXWI_ReferenceStop, UFBXW_PROP_TYPE_TIME, ufbxwi_field(ufbxwi_anim_stack, reference_stop) },
 };
 
 static const ufbxwi_prop_desc ufbxwi_document_props[] = {
@@ -3014,6 +3105,29 @@ static bool ufbxwi_init_node(ufbxw_scene *scene, void *data)
 	return true;
 }
 
+static bool ufbxwi_init_global_settings(ufbxw_scene *scene, void *data)
+{
+	ufbxwi_global_settings *settings = (ufbxwi_global_settings*)data;
+	settings->up_axis = 1;
+	settings->up_axis_sign = 1;
+	settings->front_axis = 2;
+	settings->front_axis_sign = 1;
+	settings->coord_axis = 0;
+	settings->coord_axis_sign = 1;
+	settings->original_up_axis = 1;
+	settings->original_up_axis_sign = 1;
+	settings->unit_scale_factor = 1.0f;
+	settings->original_unit_scale_factor = 1.0f;
+	settings->time_mode = UFBXW_TIME_MODE_24_FPS;
+	settings->time_protocol = UFBXW_TIME_PROTOCOL_DEFAULT;
+	settings->snap_on_frame_mode = UFBXW_SNAP_MODE_NONE;
+	settings->time_span_start = 0;
+	settings->time_span_stop = 0;
+	settings->custom_frame_rate = -1.0f;
+	settings->current_time_marker = -1;
+	return true;
+}
+
 static bool ufbxwi_init_material_lambert(ufbxw_scene *scene, void *data)
 {
 	ufbxwi_material *material = (ufbxwi_material*)data;
@@ -3082,7 +3196,7 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 	},
 	{
 		UFBXW_ELEMENT_GLOBAL_SETTINGS, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, UFBXWI_GlobalSettings, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE,
-		NULL, 0, NULL,
+		ufbxwi_global_settings_props, ufbxwi_arraycount(ufbxwi_global_settings_props), &ufbxwi_init_global_settings,
 		0,
 	},
 	{
@@ -3865,6 +3979,13 @@ static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop(ufbxw_scene *sc
 static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer(ufbxw_scene *scene, ufbxw_anim_layer id) { return (ufbxwi_anim_layer*)ufbxwi_get_element_data(scene, id.id); }
 static ufbxwi_forceinline ufbxwi_anim_stack *ufbxwi_get_anim_stack(ufbxw_scene *scene, ufbxw_anim_stack id) { return (ufbxwi_anim_stack*)ufbxwi_get_element_data(scene, id.id); }
 
+static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node_data_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_node*)ufbxwi_get_element_data(scene, id); }
+static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh_data_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_mesh*)ufbxwi_get_element_data(scene, id); }
+static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_curve*)ufbxwi_get_element_data(scene, id); }
+static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_prop*)ufbxwi_get_element_data(scene, id); }
+static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_layer*)ufbxwi_get_element_data(scene, id); }
+static ufbxwi_forceinline ufbxwi_anim_stack *ufbxwi_get_anim_stack_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_stack*)ufbxwi_get_element_data(scene, id); }
+
 static ufbxwi_forceinline ufbxw_node ufbxwi_assert_node(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_NODE); ufbxw_node v = { id }; return v; }
 static ufbxwi_forceinline ufbxw_anim_curve ufbxwi_assert_anim_curve(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_ANIM_CURVE); ufbxw_anim_curve v = { id }; return v; }
 static ufbxwi_forceinline ufbxw_anim_layer ufbxwi_assert_anim_layer(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_ANIM_LAYER); ufbxw_anim_layer v = { id }; return v; }
@@ -4230,7 +4351,7 @@ static bool ufbxwi_less_id(void *user, const void *va, const void *vb)
 static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *opts)
 {
 	size_t element_count = scene->num_elements;
-	
+
 	ufbxwi_id_span elements;
 	elements.count = scene->num_elements;
 	elements.data = ufbxwi_alloc(&scene->ator, ufbxw_id, elements.count);
@@ -4255,6 +4376,76 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 	if (opts->finish_keyframes) {
 		ufbxwi_for_id_list(ufbxw_id, curve_id, elements_by_type[UFBXW_ELEMENT_ANIM_CURVE]) {
 			ufbxw_anim_curve_finish_keyframes(scene, ufbxwi_assert_anim_curve(curve_id));
+		}
+	}
+
+	if (opts->patch_anim_stack_times) {
+		ufbxwi_for_id_list(ufbxw_id, stack_id, elements_by_type[UFBXW_ELEMENT_ANIM_STACK]) {
+			ufbxwi_anim_stack *stack = ufbxwi_get_anim_stack_by_id(scene, stack_id);
+			ufbxw_assert(stack);
+
+			if (stack->local_start != 0 || stack->local_stop != 0) continue;
+
+			ufbxw_ktime time_min = INT64_MAX;
+			ufbxw_ktime time_max = INT64_MIN;
+
+			ufbxwi_for_id_list(ufbxw_id, layer_id, stack->layers) {
+				ufbxwi_anim_layer *layer = ufbxwi_get_anim_layer_by_id(scene, layer_id);
+				ufbxw_assert(layer);
+
+				ufbxwi_for_id_list(ufbxw_id, prop_id, layer->anim_props) {
+					ufbxwi_anim_prop *prop = ufbxwi_get_anim_prop_by_id(scene, prop_id);
+					ufbxw_assert(prop);
+
+					for (size_t i = 0; i < prop->curves.count; i++) {
+						ufbxw_id curve_id = prop->curves.data[i].id;
+						if (!curve_id) continue;
+						ufbxwi_anim_curve *curve = ufbxwi_get_anim_curve_by_id(scene, curve_id);
+						ufbxw_assert(curve);
+
+						if (curve->key_times.count > 0) {
+							time_min = ufbxwi_min_i64(time_min, curve->key_times.data[0]);
+							time_max = ufbxwi_max_i64(time_max, curve->key_times.data[curve->key_times.count - 1]);
+						}
+					}
+				}
+			}
+
+			if (time_min <= time_max) {
+				stack->local_start = time_min;
+				stack->local_stop = time_max;
+			}
+		}
+	}
+
+	if (opts->patch_anim_stack_reference_times) {
+		ufbxwi_for_id_list(ufbxw_id, stack_id, elements_by_type[UFBXW_ELEMENT_ANIM_STACK]) {
+			ufbxwi_anim_stack *stack = ufbxwi_get_anim_stack_by_id(scene, stack_id);
+			ufbxw_assert(stack);
+
+			if (stack->reference_start != 0 || stack->reference_stop != 0) continue;
+			stack->reference_start = stack->local_start;
+			stack->reference_stop = stack->local_stop;
+		}
+	}
+
+	if (opts->patch_global_settings_times) {
+		ufbxw_id global_settings_id = ufbxw_get_global_settings_id(scene);
+		ufbxwi_global_settings *global_settings = (ufbxwi_global_settings*)ufbxwi_get_element_data(scene, global_settings_id);
+		if (global_settings && global_settings->time_span_start == 0 && global_settings->time_span_stop == 0) {
+			ufbxw_ktime time_min = INT64_MAX;
+			ufbxw_ktime time_max = INT64_MIN;
+			ufbxwi_for_id_list(ufbxw_id, stack_id, elements_by_type[UFBXW_ELEMENT_ANIM_STACK]) {
+				ufbxwi_anim_stack *stack = ufbxwi_get_anim_stack_by_id(scene, stack_id);
+				ufbxw_assert(stack);
+
+				time_min = ufbxwi_min_i64(time_min, stack->local_start);
+				time_max = ufbxwi_max_i64(time_max, stack->local_stop);
+			}
+			if (time_min <= time_max) {
+				global_settings->time_span_start = time_min;
+				global_settings->time_span_stop = time_max;
+			}
 		}
 	}
 }
@@ -5607,11 +5798,22 @@ static void ufbxwi_save_takes(ufbxw_save_context *sc)
 
 	ufbxwi_dom_value(sc, "Current", "C", "Take 001");
 
-	ufbxwi_dom_open(sc, "Take", "C", "Take 001");
-	ufbxwi_dom_value(sc, "FileName", "C", "Take_001.tak");
-	ufbxwi_dom_value(sc, "LocalTime", "LL", (int64_t)0, (int64_t)92372316000);
-	ufbxwi_dom_value(sc, "ReferenceTime", "LL", (int64_t)0, (int64_t)92372316000);
-	ufbxwi_dom_close(sc);
+	// TODO: Optimize with `elements_by_type[]`
+	ufbxwi_for_list(ufbxwi_element, element, sc->scene->elements) {
+		ufbxw_element_type type = ufbxwi_id_type(element->id);
+		if (type != UFBXW_ELEMENT_ANIM_STACK) continue;
+
+		// TODO: Format utility
+		char take_name[256];
+		snprintf(take_name, sizeof(take_name), "%s.tak", element->name.data);
+
+		ufbxwi_anim_stack *stack = (ufbxwi_anim_stack*)element->data;
+		ufbxwi_dom_open(sc, "Take", "S", element->name);
+		ufbxwi_dom_value(sc, "FileName", "C", take_name);
+		ufbxwi_dom_value(sc, "LocalTime", "LL", stack->local_start, stack->local_stop);
+		ufbxwi_dom_value(sc, "ReferenceTime", "LL", stack->reference_start, stack->reference_stop);
+		ufbxwi_dom_close(sc);
+	}
 
 	ufbxwi_dom_close(sc);
 }
@@ -6533,6 +6735,46 @@ ufbxw_abi ufbxw_anim_layer ufbxw_anim_stack_get_layer(ufbxw_scene *scene, ufbxw_
 	}
 }
 
+ufbxw_abi void ufbxw_anim_stack_set_time_range(ufbxw_scene *scene, ufbxw_anim_stack stack, ufbxw_ktime time_begin, ufbxw_ktime time_end)
+{
+	ufbxwi_anim_stack *s = ufbxwi_get_anim_stack(scene, stack);
+	if (s) {
+		s->local_start = time_begin;
+		s->local_stop = time_end;
+	}
+}
+
+ufbxw_abi void ufbxw_anim_stack_set_reference_time_range(ufbxw_scene *scene, ufbxw_anim_stack stack, ufbxw_ktime time_begin, ufbxw_ktime time_end)
+{
+	ufbxwi_anim_stack *s = ufbxwi_get_anim_stack(scene, stack);
+	if (s) {
+		s->reference_start = time_begin;
+		s->reference_stop = time_end;
+	}
+}
+
+ufbxw_abi ufbxw_ktime_range ufbxw_anim_stack_get_time_range(ufbxw_scene *scene, ufbxw_anim_stack stack)
+{
+	ufbxw_ktime_range range = { 0, 0 };
+	ufbxwi_anim_stack *s = ufbxwi_get_anim_stack(scene, stack);
+	if (s) {
+		range.begin = s->local_start;
+		range.end = s->local_stop;
+	}
+	return range;
+}
+
+ufbxw_abi ufbxw_ktime_range ufbxw_anim_stack_get_reference_time_range(ufbxw_scene *scene, ufbxw_anim_stack stack)
+{
+	ufbxw_ktime_range range = { 0, 0 };
+	ufbxwi_anim_stack *s = ufbxwi_get_anim_stack(scene, stack);
+	if (s) {
+		range.begin = s->reference_start;
+		range.end = s->reference_stop;
+	}
+	return range;
+}
+
 ufbxw_abi void ufbxw_set_active_anim_stack(ufbxw_scene *scene, ufbxw_anim_stack stack)
 {
 	scene->active_anim_stack = stack;
@@ -6773,7 +7015,7 @@ ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type 
 // -- Pre-saving
 
 extern const ufbxw_prepare_opts ufbxw_default_prepare_opts = {
-	true, true,
+	true, true, true, true,
 };
 
 ufbxw_abi void ufbxw_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *opts)
