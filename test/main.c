@@ -74,6 +74,8 @@ int main(int argc, char **argv)
 		dst_data.data[i].z = vertices[i].z;
 	}
 
+	ufbxw_mesh_add_instance(scene, mesh, node);
+
 	ufbxw_mesh_set_vertices(scene, mesh, vertex_buffer);
 
 	ufbxw_int_buffer indices_buf = ufbxw_view_int_array(scene, indices, array_count(indices));
