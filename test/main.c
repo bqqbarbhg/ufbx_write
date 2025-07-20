@@ -111,6 +111,9 @@ int main(int argc, char **argv)
 	ufbxw_connect(scene, mat_a, node.id);
 	ufbxw_connect(scene, mat_b, node.id);
 
+	ufbxw_prepare_scene(scene, NULL);
+	ufbxw_validate_scene(scene);
+
 	ufbxw_save_opts opts = { 0 };
 	opts.ascii = true;
 	opts.debug_comments = true;

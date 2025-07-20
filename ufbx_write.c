@@ -316,6 +316,55 @@ static ufbxwi_forceinline void ufbxwi_swap(void *a, void *b, size_t size)
 #endif
 }
 
+// Stable sort array `m_type m_data[m_size]` using the predicate `m_cmp_lambda(a, b)`
+// `m_linear_size` is a hint for how large blocks handle initially do with insertion sort
+// `m_tmp` must be a memory buffer with at least the same size and alignment as `m_data`
+#define ufbxwwi_macro_stable_sort(m_type, m_linear_size, m_data, m_tmp, m_size, m_cmp_lambda) do { \
+	typedef m_type mi_type; \
+	mi_type *mi_src = (mi_type*)(m_tmp); \
+	mi_type *mi_data = m_data, *mi_dst = mi_data; \
+	size_t mi_block_size = m_linear_size, mi_size = m_size; \
+	/* Insertion sort in `m_linear_size` blocks */ \
+	for (size_t mi_base = 0; mi_base < mi_size; mi_base += mi_block_size) { \
+		size_t mi_i_end = mi_base + mi_block_size; \
+		if (mi_i_end > mi_size) mi_i_end = mi_size; \
+		for (size_t mi_i = mi_base + 1; mi_i < mi_i_end; mi_i++) { \
+			size_t mi_j = mi_i; \
+			mi_src[0] = mi_dst[mi_i]; \
+			for (; mi_j != mi_base; --mi_j) { \
+				mi_type *a = &mi_src[0], *b = &mi_dst[mi_j - 1]; \
+				if (!( m_cmp_lambda )) break; \
+				mi_dst[mi_j] = mi_dst[mi_j - 1]; \
+			} \
+			mi_dst[mi_j] = mi_src[0]; \
+		} \
+	} \
+	/* Merge sort ping-ponging between `m_data` and `m_tmp` */ \
+	for (; mi_block_size < mi_size; mi_block_size *= 2) { \
+		mi_type *mi_swap = mi_dst; mi_dst = mi_src; mi_src = mi_swap; \
+		for (size_t mi_base = 0; mi_base < mi_size; mi_base += mi_block_size * 2) { \
+			size_t mi_i = mi_base, mi_i_end = mi_base + mi_block_size; \
+			size_t mi_j = mi_i_end, mi_j_end = mi_j + mi_block_size; \
+			size_t mi_k = mi_base; \
+			if (mi_i_end > mi_size) mi_i_end = mi_size; \
+			if (mi_j_end > mi_size) mi_j_end = mi_size; \
+			while ((mi_i < mi_i_end) & (mi_j < mi_j_end)) { \
+				mi_type *a = &mi_src[mi_j], *b = &mi_src[mi_i]; \
+				if ( m_cmp_lambda ) { \
+					mi_dst[mi_k] = *a; mi_j++; \
+				} else { \
+					mi_dst[mi_k] = *b; mi_i++; \
+				} \
+				mi_k++; \
+			} \
+			while (mi_i < mi_i_end) mi_dst[mi_k++] = mi_src[mi_i++]; \
+			while (mi_j < mi_j_end) mi_dst[mi_k++] = mi_src[mi_j++]; \
+		} \
+	} \
+	/* Copy the result to `m_data` if we ended up in `m_tmp` */ \
+	if (mi_dst != mi_data) memcpy((void*)mi_data, mi_dst, sizeof(mi_type) * mi_size); \
+	} while (0)
+
 static ufbxwi_noinline void ufbxwi_unstable_sort(void *in_data, size_t size, size_t stride, ufbxwi_less_fn *less_fn, void *less_user)
 {
 	if (size <= 1) return;
@@ -350,6 +399,7 @@ static ufbxwi_noinline void ufbxwi_unstable_sort(void *in_data, size_t size, siz
 // WARNING: Evaluates `m_list` twice!
 #define ufbxwi_for_list(m_type, m_name, m_list) for (m_type *m_name = (m_list).data, *m_name##_end = ufbxwi_add_ptr(m_name, (m_list).count); m_name != m_name##_end; m_name++)
 #define ufbxwi_for_ptr_list(m_type, m_name, m_list) for (m_type **m_name = (m_list).data, **m_name##_end = ufbxwi_add_ptr(m_name, (m_list).count); m_name != m_name##_end; m_name++)
+#define ufbxwi_for_id_list(m_type, m_name, m_list) for (m_type *m_name##_it = (m_list).data, *m_name##_end = ufbxwi_add_ptr(m_name##_it, (m_list).count), m_name; (m_name##_it != m_name##_end) && (m_name = *m_name##_it, true); m_name##_it++)
 
 #define ufbxwi_array_list(arr) { arr, ufbxwi_arraycount(arr) }
 
@@ -696,6 +746,7 @@ static ufbxwi_forceinline void ufbxwi_list_free_size(ufbxwi_allocator *ator, voi
 // -- Special list
 
 UFBXWI_LIST_TYPE(ufbxwi_id_list, ufbxw_id);
+UFBXW_LIST_TYPE(ufbxwi_id_span, ufbxw_id);
 
 static bool ufbxwi_id_list_add(ufbxwi_allocator *ator, void *p_list, ufbxw_id id)
 {
@@ -1371,6 +1422,7 @@ UFBXWI_LIST_TYPE(ufbxwi_uint32_list, uint32_t);
 UFBXWI_LIST_TYPE(ufbxwi_ktime_list, ufbxw_ktime);
 UFBXWI_LIST_TYPE(ufbxwi_real_list, ufbxw_real);
 UFBXWI_LIST_TYPE(ufbxwi_float_list, float);
+UFBXWI_LIST_TYPE(ufbxwi_byte_list, char);
 
 #define ufbxwi_empty_int_buffer ((ufbxw_int_buffer){NULL,0})
 #define ufbxwi_empty_vec3_buffer ((ufbxw_vec3_buffer){0})
@@ -2187,11 +2239,12 @@ typedef struct {
 	ufbxwi_element_data element;
 	ufbxwi_conn prop;
 
-	// TODO: Less wasteful implementation
 	ufbxwi_ktime_list key_times;
 	ufbxwi_float_list key_values;
 	ufbxwi_uint32_list key_attr_indices;
 	ufbxwi_anim_key_attr_list key_attr_data;
+
+	bool keys_out_of_order;
 
 } ufbxwi_anim_curve;
 
@@ -2252,6 +2305,10 @@ struct ufbxw_scene {
 
 	ufbxw_anim_stack default_anim_stack;
 	ufbxw_anim_layer default_anim_layer;
+
+	ufbxw_anim_stack active_anim_stack;
+
+	ufbxwi_byte_list tmp_list;
 
 	// TODO: Something better, hash set
 	ufbxwi_id_list tmp_ids;
@@ -2597,7 +2654,7 @@ static const ufbxwi_prop_desc ufbxwi_anim_stack_props[] = {
 
 static const ufbxwi_prop_desc ufbxwi_document_props[] = {
 	{ UFBXWI_SourceObject, UFBXW_PROP_TYPE_OBJECT },
-	{ UFBXWI_ActiveAnimStackName, UFBXW_PROP_TYPE_STRING },
+	{ UFBXWI_ActiveAnimStackName, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_empty) },
 };
 
 #define UFBXWI_CONN_BIT_ANYTHING UINT64_C(0x0)
@@ -3653,8 +3710,7 @@ static void ufbxwi_disconnect_all_dst(ufbxw_scene *scene, ufbxw_connection_type 
 	ufbxwi_conn_collect_ids(scene, &scene->tmp_ids, src_type, src_data);
 	ufbxwi_conn_clear(scene, src_type, src_data);
 
-	ufbxwi_for_list(ufbxw_id, p_id, scene->tmp_ids) {
-		ufbxw_id dst_id = *p_id;
+	ufbxwi_for_id_list(ufbxw_id, dst_id, scene->tmp_ids) {
 		ufbxwi_element *dst_elem = ufbxwi_get_element(scene, dst_id);
 		if (!dst_elem) continue;
 
@@ -3684,8 +3740,7 @@ static void ufbxwi_disconnect_all_src(ufbxw_scene *scene, ufbxw_connection_type 
 	ufbxwi_conn_collect_ids(scene, &scene->tmp_ids, dst_type, dst_data);
 	ufbxwi_conn_clear(scene, dst_type, dst_data);
 
-	ufbxwi_for_list(ufbxw_id, p_id, scene->tmp_ids) {
-		ufbxw_id src_id = *p_id;
+	ufbxwi_for_id_list(ufbxw_id, src_id, scene->tmp_ids) {
 		ufbxwi_element *src_elem = ufbxwi_get_element(scene, src_id);
 		if (!src_elem) continue;
 
@@ -3812,6 +3867,8 @@ static ufbxwi_forceinline ufbxwi_anim_stack *ufbxwi_get_anim_stack(ufbxw_scene *
 
 static ufbxwi_forceinline ufbxw_node ufbxwi_assert_node(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_NODE); ufbxw_node v = { id }; return v; }
 static ufbxwi_forceinline ufbxw_anim_curve ufbxwi_assert_anim_curve(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_ANIM_CURVE); ufbxw_anim_curve v = { id }; return v; }
+static ufbxwi_forceinline ufbxw_anim_layer ufbxwi_assert_anim_layer(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_ANIM_LAYER); ufbxw_anim_layer v = { id }; return v; }
+static ufbxwi_forceinline ufbxw_anim_stack ufbxwi_assert_anim_stack(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_ANIM_STACK); ufbxw_anim_stack v = { id }; return v; }
 
 static bool ufbwi_init_tokens(ufbxw_scene *scene)
 {
@@ -3922,8 +3979,6 @@ static void ufbxwi_create_defaults(ufbxw_scene *scene)
 
 	if (!scene->opts.no_default_document) {
 		ufbxw_id id = ufbxw_create_element(scene, UFBXW_ELEMENT_DOCUMENT);
-
-		ufbxw_set_string(scene, id, "ActiveAnimStackName", "Take 001");
 	}
 
 	if (!scene->opts.no_default_anim_stack) {
@@ -4119,6 +4174,89 @@ static void ufbxwi_generate_indices(ufbxw_scene *scene, ufbxw_mesh_attribute_des
 
 	desc->values = ufbxwi_to_user_buffer(&scene->buffers, value_buffer);
 	desc->indices = index_buffer.id;
+}
+
+// -- Animation
+
+typedef struct {
+	ufbxw_ktime time;
+	float value;
+	uint32_t attr_index;
+} ufbxwi_sort_keyframe;
+
+
+static void ufbxwi_sort_anim_kefyrames(ufbxw_scene *scene, ufbxwi_anim_curve *c)
+{
+	size_t key_count = c->key_values.count;
+	size_t capacity = key_count * 2 * sizeof(ufbxwi_sort_keyframe);
+	ufbxwi_check(ufbxwi_list_resize_uninit(&scene->ator, &scene->tmp_list, char, capacity));
+
+	ufbxwi_sort_keyframe *keys = (ufbxwi_sort_keyframe*)scene->tmp_list.data;
+	ufbxwi_sort_keyframe *tmp_keys = keys + key_count;
+	for (size_t i = 0; i < key_count; i++) {
+		keys[i].time = c->key_times.data[i];
+		keys[i].value = c->key_values.data[i];
+		keys[i].attr_index = c->key_attr_indices.data[i];
+	}
+
+	ufbxwwi_macro_stable_sort(ufbxwi_sort_keyframe, 16, keys, tmp_keys, key_count, ( a->time < b->time ));
+
+	// Store back and remove duplicate keys
+	size_t dst_count = 0;
+	for (size_t src = 0; src < key_count; src++) {
+		ufbxwi_sort_keyframe key = keys[src];
+		if (dst_count > 0 && c->key_times.data[dst_count - 1] == key.time) {
+			// Overwrite the previous key if it has identical time
+			dst_count--;
+		}
+		c->key_times.data[dst_count] = key.time;
+		c->key_values.data[dst_count] = key.value;
+		c->key_attr_indices.data[dst_count] = key.attr_index;
+		dst_count++;
+	}
+	c->key_times.count = dst_count;
+	c->key_values.count = dst_count;
+	c->key_attr_indices.count = dst_count;
+}
+
+// -- Pre-saving
+
+static bool ufbxwi_less_id(void *user, const void *va, const void *vb)
+{
+	ufbxw_id a = *(const ufbxw_id*)va, b = *(const ufbxw_id*)vb;
+	return a < b;
+}
+
+static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *opts)
+{
+	size_t element_count = scene->num_elements;
+	
+	ufbxwi_id_span elements;
+	elements.count = scene->num_elements;
+	elements.data = ufbxwi_alloc(&scene->ator, ufbxw_id, elements.count);
+	ufbxwi_check(elements.data);
+
+	size_t real_count = ufbxw_get_elements(scene, elements.data, elements.count);
+	ufbxw_assert(real_count == element_count);
+
+	ufbxwi_id_span elements_by_type[UFBXW_ELEMENT_TYPE_COUNT] = { 0 };
+	for (size_t begin = 0; begin < elements.count; ) {
+		ufbxw_element_type type = ufbxwi_id_type(elements.data[begin]);
+		size_t end = begin + 1;
+		while (end < elements.count && ufbxwi_id_type(elements.data[end]) == type) {
+			end++;
+		}
+
+		elements_by_type[type].data = elements.data + begin;
+		elements_by_type[type].count = end - begin;
+		begin = end;
+	}
+
+	if (opts->finish_keyframes) {
+		ufbxwi_for_id_list(ufbxw_id, curve_id, elements_by_type[UFBXW_ELEMENT_ANIM_CURVE]) {
+			ufbxw_anim_curve_finish_keyframes(scene, ufbxwi_assert_anim_curve(curve_id));
+		}
+	}
 }
 
 // -- Saving
@@ -5868,12 +6006,12 @@ ufbxw_abi size_t ufbxw_get_num_elements(ufbxw_scene *scene)
 	return scene->num_elements;
 }
 
-ufbxw_abi size_t ufbxw_get_elements(ufbxw_scene *scene, ufbxw_id *elements, size_t num_elements)
+ufbxw_abi size_t ufbxw_get_elements(const ufbxw_scene *scene, ufbxw_id *elements, size_t num_elements)
 {
 	size_t count = 0;
 	size_t element_count = scene->elements.count;
 	for (size_t index = 0; index < element_count; index++) {
-		ufbxwi_element *element = &scene->elements.data[index];
+		const ufbxwi_element *element = &scene->elements.data[index];
 		if (ufbxwi_id_type(element->id) != UFBXWI_ELEMENT_TYPE_NONE) {
 			if (count >= num_elements) break;
 			elements[count++] = element->id;
@@ -6395,6 +6533,16 @@ ufbxw_abi ufbxw_anim_layer ufbxw_anim_stack_get_layer(ufbxw_scene *scene, ufbxw_
 	}
 }
 
+ufbxw_abi void ufbxw_set_active_anim_stack(ufbxw_scene *scene, ufbxw_anim_stack stack)
+{
+	scene->active_anim_stack = stack;
+}
+
+ufbxw_abi ufbxw_anim_stack ufbxw_get_active_anim_stack(const ufbxw_scene *scene)
+{
+	return scene->active_anim_stack;
+}
+
 ufbxw_abi ufbxw_anim_layer ufbxw_get_default_anim_layer(ufbxw_scene *scene)
 {
 	return scene->default_anim_layer;
@@ -6513,6 +6661,15 @@ ufbxw_abi void ufbxw_anim_add_keyframe_vec3_key(ufbxw_scene *scene, ufbxw_anim_p
 	}
 }
 
+ufbxw_abi void ufbxw_anim_finish_keyframes(ufbxw_scene *scene, ufbxw_anim_prop anim)
+{
+	ufbxwi_anim_prop *ap = ufbxwi_get_anim_prop(scene, anim);
+	if (!ap) return;
+	for (size_t i = 0; i < ap->curves.count; i++) {
+		ufbxw_anim_curve_finish_keyframes(scene, ufbxwi_assert_anim_curve(ap->curves.data[i].id));
+	}
+}
+
 ufbxw_abi void ufbxw_anim_set_layer(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_anim_layer layer)
 {
 	ufbxwi_connect(scene, UFBXW_CONNECTION_ANIM_PROP_LAYER, anim.id, layer.id, UFBXWI_CONNECT_FLAG_DISCONNECT_SRC);
@@ -6533,6 +6690,10 @@ ufbxw_abi void ufbxw_anim_curve_add_keyframe_key(ufbxw_scene *scene, ufbxw_anim_
 {
 	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
 	if (!c) return;
+
+	if (c->key_times.count > 0 && key.time < c->key_times.data[c->key_times.count - 1]) {
+		c->keys_out_of_order = true;
+	}
 
 	float value = (float)key.value;
 	ufbxwi_anim_key_attr key_attr;
@@ -6570,6 +6731,16 @@ ufbxw_abi void ufbxw_anim_curve_add_keyframe_key(ufbxw_scene *scene, ufbxw_anim_
 	ufbxwi_list_push_copy(&scene->ator, &c->key_attr_indices, uint32_t, &key_attr_index);
 }
 
+ufbxw_abi void ufbxw_anim_curve_finish_keyframes(ufbxw_scene *scene, ufbxw_anim_curve curve)
+{
+	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
+	if (!c) return;
+	if (!c->keys_out_of_order) return;
+
+	c->keys_out_of_order = false;
+	ufbxwi_sort_anim_kefyrames(scene, c);
+}
+
 ufbxw_abi ufbxw_id ufbxw_get_scene_info_id(ufbxw_scene *scene)
 {
 	ufbxwi_for_list(ufbxwi_element, element, scene->elements) {
@@ -6597,6 +6768,29 @@ ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type 
 	ufbxwi_element_type *et = &scene->element_types.data[type_id];
 	ufbxwi_check_return(ufbxwi_init_element_type(scene, et), 0);
 	return et->template_id;
+}
+
+// -- Pre-saving
+
+extern const ufbxw_prepare_opts ufbxw_default_prepare_opts = {
+	true, true,
+};
+
+ufbxw_abi void ufbxw_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *opts)
+{
+	ufbxw_assert(scene);
+	if (!opts) {
+		opts = &ufbxw_default_prepare_opts;
+	}
+
+	ufbxwi_prepare_scene(scene, opts);
+}
+
+ufbxw_abi void ufbxw_validate_scene(const ufbxw_scene *scene)
+{
+	// TODO: Check and report errors somehow
+	// - Missing materials
+	// - Cyclical node hierarchies
 }
 
 // -- Streams

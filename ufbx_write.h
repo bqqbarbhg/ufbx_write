@@ -476,7 +476,7 @@ ufbxw_abi ufbxw_id ufbxw_create_element_ex_len(ufbxw_scene *scene, ufbxw_element
 ufbxw_abi void ufbxw_delete_element(ufbxw_scene *scene, ufbxw_id id);
 
 ufbxw_abi size_t ufbxw_get_num_elements(ufbxw_scene *scene);
-ufbxw_abi size_t ufbxw_get_elements(ufbxw_scene *scene, ufbxw_id *elements, size_t num_elements);
+ufbxw_abi size_t ufbxw_get_elements(const ufbxw_scene *scene, ufbxw_id *elements, size_t num_elements);
 
 ufbxw_abi void ufbxw_set_name(ufbxw_scene *scene, ufbxw_id id, const char *name);
 ufbxw_abi void ufbxw_set_name_len(ufbxw_scene *scene, ufbxw_id id, const char *name, size_t name_len);
@@ -602,6 +602,9 @@ ufbxw_abi ufbxw_anim_stack ufbxw_create_anim_stack(ufbxw_scene *scene);
 
 ufbxw_abi ufbxw_anim_layer ufbxw_anim_stack_get_layer(ufbxw_scene *scene, ufbxw_anim_stack stack, size_t index);
 
+ufbxw_abi void ufbxw_set_active_anim_stack(ufbxw_scene *scene, ufbxw_anim_stack stack);
+ufbxw_abi ufbxw_anim_stack ufbxw_get_active_anim_stack(const ufbxw_scene *scene);
+
 // -- Animation layer
 
 ufbxw_abi ufbxw_anim_layer ufbxw_get_default_anim_layer(ufbxw_scene *scene);
@@ -623,12 +626,15 @@ ufbxw_abi void ufbxw_anim_add_keyframe_real_key(ufbxw_scene *scene, ufbxw_anim_p
 ufbxw_abi void ufbxw_anim_add_keyframe_vec2_key(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_keyframe_vec2 key);
 ufbxw_abi void ufbxw_anim_add_keyframe_vec3_key(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_keyframe_vec3 key);
 
+ufbxw_abi void ufbxw_anim_finish_keyframes(ufbxw_scene *scene, ufbxw_anim_prop anim);
+
 ufbxw_abi void ufbxw_anim_set_layer(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_anim_layer layer);
 
 // -- Animation curve
 
 ufbxw_abi void ufbxw_anim_curve_add_keyframe(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_ktime time, ufbxw_real value, uint32_t type);
 ufbxw_abi void ufbxw_anim_curve_add_keyframe_key(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_keyframe_real key);
+ufbxw_abi void ufbxw_anim_curve_finish_keyframes(ufbxw_scene *scene, ufbxw_anim_curve curve);
 
 // -- Scene info
 
@@ -638,6 +644,19 @@ ufbxw_abi ufbxw_id ufbxw_get_global_settings_id(ufbxw_scene *scene);
 // -- Templates
 
 ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type type);
+
+// -- Pre-saving
+
+typedef struct ufbxw_prepare_opts {
+	bool finish_keyframes;
+	bool patch_anim_stack_times;
+} ufbxw_prepare_opts;
+
+extern const ufbxw_prepare_opts ufbxw_default_prepare_opts;
+
+ufbxw_abi void ufbxw_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *opts);
+
+ufbxw_abi void ufbxw_validate_scene(const ufbxw_scene *scene);
 
 // -- IO callbacks
 
