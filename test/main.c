@@ -116,6 +116,15 @@ int main(int argc, char **argv)
 	ufbxw_connect(scene, mat_a, node.id);
 	ufbxw_connect(scene, mat_b, node.id);
 
+	ufbxw_save_info save_info = { 0 };
+
+	save_info.document_url = ufbxw_str("test.fbx");
+	save_info.application_name = ufbxw_str("Ufbxw Test");
+	save_info.application_vendor = ufbxw_str("Bqq");
+	save_info.application_version = ufbxw_str("0.0.1");
+
+	ufbxw_set_save_info(scene, &save_info);
+
 	ufbxw_prepare_scene(scene, NULL);
 	ufbxw_validate_scene(scene);
 

@@ -205,6 +205,7 @@ typedef struct ufbxw_scene_opts {
 	bool no_default_document;
 	bool no_default_anim_stack;
 	bool no_default_anim_layer;
+	bool no_creation_time;
 
 	uint32_t _end_zero;
 } ufbxw_scene_opts;
@@ -388,6 +389,16 @@ typedef enum ufbxw_snap_mode {
 	UFBXW_SNAP_MODE_PLAY,
 	UFBXW_SNAP_MODE_SNAP_AND_PLAY,
 } ufbxw_snap_mode;
+
+typedef struct ufbxw_datetime {
+	int32_t year;        // < Year
+	int32_t month;       // < Month of year 1-12
+	int32_t day;         // < Day of month 1-31
+	int32_t hour;        // < Hour 0-23
+	int32_t minute;      // < Minute 0-59
+	int32_t second;      // < Second 0-60
+	int32_t millisecond; // < Millisecond 0-999
+} ufbxw_datetime;
 
 typedef struct ufbxw_keyframe_real {
 	ufbxw_ktime time;
@@ -692,6 +703,45 @@ ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type 
 
 // -- Pre-saving
 
+typedef struct ufbxw_save_info {
+	uint32_t _begin_zero;
+
+	// Usually aboslute path of the exported FBX
+	ufbxw_string document_url;
+
+	// Application info
+	ufbxw_string application_vendor;
+	ufbxw_string application_name;
+	ufbxw_string application_version;
+
+	// Defaults to `document_url`
+	ufbxw_string src_document_url;
+	ufbxw_string original_filename;
+
+	// Defaults to application info
+	ufbxw_string original_application_vendor;
+	ufbxw_string original_application_name;
+	ufbxw_string original_application_version;
+
+	// Timestamps, defaults to current time UTC
+	bool no_default_date_time;
+	ufbxw_datetime date_time_utc;
+
+	// Defaults to `date_time_utc`.
+	ufbxw_datetime original_date_time_utc;
+
+	uint32_t _end_zero;
+} ufbxw_save_info;
+
+// Sets a bunch of SceneInfo properties conveniently
+ufbxw_abi void ufbxw_set_save_info(ufbxw_scene *scene, const ufbxw_save_info *info);
+
+// Creator is meant to identify the exporter, ufbxw_write in this case.
+// You should prefer writing the application information to `ufbxw_save_info.application_name` etc.
+// but if you really want to override the Creator field you can.
+ufbxw_abi void ufbxw_override_creator(ufbxw_scene *scene, const char *creator);
+ufbxw_abi void ufbxw_override_creator_len(ufbxw_scene *scene, const char *creator, size_t creator_len);
+
 typedef struct ufbxw_prepare_opts {
 	bool finish_keyframes;
 	bool patch_anim_stack_times;
@@ -735,6 +785,11 @@ typedef struct ufbxw_save_opts {
 	bool ignore_animation;
 
 	bool debug_comments;
+
+	bool no_default_timestamp;
+
+	// Local date time when the file was saved.
+	ufbxw_datetime local_timestamp;
 
 	uint32_t _end_zero;
 } ufbxw_save_opts;
