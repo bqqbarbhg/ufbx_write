@@ -6925,13 +6925,9 @@ ufbxw_vec3_buffer ufbxw_mesh_get_vertices(ufbxw_scene *scene, ufbxw_mesh mesh)
 	return md->vertices;
 }
 
-ufbxw_int_buffer ufbxw_mesh_get_vertex_indices(ufbxw_scene *scene, ufbxw_mesh mesh);
-ufbxw_int_buffer ufbxw_mesh_get_face_offsets(ufbxw_scene *scene, ufbxw_mesh mesh);
-
 ufbxw_abi void ufbxw_mesh_add_instance(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_node node)
 {
 	ufbxwi_connect(scene, UFBXW_CONNECTION_NODE_ATTRIBUTE, mesh.id, node.id, 0);
-	// ufbxw_connect(scene, mesh.id, node.id);
 }
 
 ufbxw_abi ufbxw_anim_stack ufbxw_get_default_anim_stack(ufbxw_scene *scene)

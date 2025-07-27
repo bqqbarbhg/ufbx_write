@@ -620,28 +620,6 @@ ufbxw_abi void ufbxw_mesh_set_attribute_name(ufbxw_scene *scene, ufbxw_mesh mesh
 ufbxw_abi void ufbxw_mesh_set_attribute_name_len(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const char *name, size_t name_len);
 
 ufbxw_vec3_buffer ufbxw_mesh_get_vertices(ufbxw_scene *scene, ufbxw_mesh mesh);
-ufbxw_int_buffer ufbxw_mesh_get_vertex_indices(ufbxw_scene *scene, ufbxw_mesh mesh);
-ufbxw_int_buffer ufbxw_mesh_get_face_offsets(ufbxw_scene *scene, ufbxw_mesh mesh);
-
-#if 0
-ufbxw_abi void ufbxw_mesh_set_normals(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_vec3_buffer normals, ufbxw_attribute_mapping mapping);
-
-ufbxw_abi void ufbxw_mesh_set_uvs(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t layer, ufbxw_buffer_vec2 uvs, ufbxw_attribute_mapping mapping);
-ufbxw_abi void ufbxw_mesh_set_tangents(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t layer, ufbxw_buffer_vec3 uvs, ufbxw_attribute_mapping mapping);
-ufbxw_abi void ufbxw_mesh_set_bitangents(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t layer, ufbxw_buffer_vec3 uvs, ufbxw_attribute_mapping mapping);
-
-ufbxw_abi void ufbxw_mesh_set_colors(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t layer, ufbxw_buffer_vec4 colors, ufbxw_attribute_mapping mapping);
-
-ufbxw_abi void ufbxw_mesh_set_constant_material(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t material_index);
-ufbxw_abi void ufbxw_mesh_set_face_materials(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_buffer_int32 material_indices);
-
-// Indices
-ufbxw_abi void ufbxw_mesh_set_triangles(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_buffer_int32 indices);
-ufbxw_abi void ufbxw_mesh_set_fbx_polygon_vertex_order(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_buffer_int32 polygon_vertex_order);
-
-ufbxw_abi void ufbxw_mesh_weld_vertices(ufbxw_scene *scene, ufbxw_mesh mesh);
-
-#endif
 
 ufbxw_abi void ufbxw_mesh_add_instance(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_node node);
 
