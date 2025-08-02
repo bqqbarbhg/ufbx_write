@@ -1574,7 +1574,7 @@ typedef enum {
 
 typedef enum {
 	UFBXWI_BUFFER_FLAG_TEMPORARY = 0x1,
-} ufbxwi_buffer_state;
+} ufbxwi_buffer_flag;
 
 typedef struct {
 	float slope_right;
@@ -3887,9 +3887,9 @@ static bool ufbxwi_connect_imp(ufbxw_scene *scene, ufbxw_connection_type type, u
 	return true;
 }
 
-static ufbxwi_forceinline ufbxwi_connect(ufbxw_scene *scene, ufbxw_connection_type type, ufbxw_id src_id, ufbxw_id dst_id, uint32_t flags)
+static ufbxwi_forceinline bool ufbxwi_connect(ufbxw_scene *scene, ufbxw_connection_type type, ufbxw_id src_id, ufbxw_id dst_id, uint32_t flags)
 {
-	ufbxwi_connect_imp(scene, type, src_id, dst_id, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, flags);
+	return ufbxwi_connect_imp(scene, type, src_id, dst_id, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_NONE, flags);
 }
 
 static void ufbxwi_disconnect_all_dst(ufbxw_scene *scene, ufbxw_connection_type type, ufbxw_id src_id)
@@ -7258,7 +7258,7 @@ static bool ufbxwi_stdio_write(void *user, uint64_t offset, const void *data, si
 {
 	// TODO: Do not seek all the time, support >4GB files
 	FILE *f = (FILE*)user;
-	if (fseek(f, SEEK_SET, (int)offset)) return false;
+	if (fseek(f, (int)offset, SEEK_SET)) return false;
 	if (fwrite(data, 1, size, f) != size) return false;
 	return true;
 }
@@ -7315,6 +7315,9 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 	}
 
 	bool ok = ufbxwi_save_imp(&sc);
+	if (sc.stream.close_fn) {
+		sc.stream.close_fn(sc.stream.user);
+	}
 
 	ufbxwi_free_allocator(&sc.ator);
 
