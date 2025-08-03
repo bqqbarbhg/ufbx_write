@@ -12,7 +12,7 @@ typedef struct {
 static void ufbxwt_assert_close_real(ufbxwt_diff_error *p_err, ufbx_real a, ufbx_real b)
 {
 	ufbx_real err = (ufbx_real)fabs(a - b);
-	ufbx_real scale = (ufbx_real)fmax(fabs(a), fabs(b));
+	ufbx_real scale = (ufbx_real)fmax(fmax(fabs(a), fabs(b)), 1.0f);
 	ufbxwt_assert(err < scale * 0.00001);
 	p_err->num++;
 	p_err->sum += err;

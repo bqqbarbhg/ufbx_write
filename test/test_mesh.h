@@ -45,5 +45,17 @@ UFBXWT_SCENE_CHECK(mesh_plane)
 	ufbx_face face = mesh->faces.data[0];
 	ufbxwt_assert(face.index_begin == 0);
 	ufbxwt_assert(face.num_indices == 4);
+
+	ufbx_vec3 vertices[] = {
+		{ -1.0f, 0.0f, -1.0f },
+		{ -1.0f, 0.0f, +1.0f },
+		{ +1.0f, 0.0f, +1.0f },
+		{ +1.0f, 0.0f, -1.0f },
+	};
+
+	for (size_t i = 0; i < 4; i++) {
+		ufbx_vec3 v = ufbx_get_vertex_vec3(&mesh->vertex_position, i);
+		ufbxwt_assert_close_uvec3(&err, v, vertices[i]);
+	}
 }
 #endif
