@@ -90,10 +90,15 @@ typedef struct ufbxw_quat {
 	ufbxw_real x, y, z, w;
 } ufbxw_quat;
 
+typedef struct ufbxw_matrix {
+	ufbxw_real m[16];
+} ufbxw_matrix;
+
 ufbxw_abi_data const ufbxw_string ufbxw_empty_string;
 ufbxw_abi_data const ufbxw_vec2 ufbxw_zero_vec2;
 ufbxw_abi_data const ufbxw_vec3 ufbxw_zero_vec3;
 ufbxw_abi_data const ufbxw_vec4 ufbxw_zero_vec4;
+ufbxw_abi_data const ufbxw_matrix ufbxw_identity_matrix;
 
 typedef enum ufbxw_rotation_order {
 	UFBXW_ROTATION_ORDER_XYZ,
@@ -113,7 +118,10 @@ typedef enum ufbxw_element_type {
 
 	UFBXW_ELEMENT_NODE_ATTRIBUTE,
 	UFBXW_ELEMENT_MESH,
+	UFBXW_ELEMENT_SKIN_DEFORMER,
+	UFBXW_ELEMENT_SKIN_CLUSTER,
 	UFBXW_ELEMENT_LIGHT,
+	UFBXW_ELEMENT_SKELETON,
 
 	UFBXW_ELEMENT_MATERIAL,
 
@@ -135,6 +143,8 @@ typedef enum ufbxw_element_type {
 typedef uint64_t ufbxw_id;
 typedef struct ufbxw_node { ufbxw_id id; } ufbxw_node;
 typedef struct ufbxw_mesh { ufbxw_id id; } ufbxw_mesh;
+typedef struct ufbxw_skin_deformer { ufbxw_id id; } ufbxw_skin_deformer;
+typedef struct ufbxw_skin_cluster { ufbxw_id id; } ufbxw_skin_cluster;
 typedef struct ufbxw_material { ufbxw_id id; } ufbxw_material;
 typedef struct ufbxw_anim_prop { ufbxw_id id; } ufbxw_anim_prop;
 typedef struct ufbxw_anim_curve { ufbxw_id id; } ufbxw_anim_curve;
@@ -166,6 +176,8 @@ typedef struct ufbxw_ktime_range {
 #define ufbxw_null_id ((ufbxw_id)0)
 #define ufbxw_null_node ((ufbxw_node){0})
 #define ufbxw_null_mesh ((ufbxw_mesh){0})
+#define ufbxw_null_skin_deformer ((ufbxw_skin_deformer){0})
+#define ufbxw_null_skin_cluster ((ufbxw_skin_cluster){0})
 #define ufbxw_null_material ((ufbxw_material){0})
 #define ufbxw_null_anim_prop ((ufbxw_anim_prop){0})
 #define ufbxw_null_anim_curve ((ufbxw_anim_curve){0})
@@ -173,15 +185,18 @@ typedef struct ufbxw_ktime_range {
 #define ufbxw_null_anim_stack ((ufbxw_anim_stack){0})
 
 typedef enum ufbxw_connection_type {
-	UFBXW_CONNECTION_NODE_PARENT = 1,  // NODE* -> NODE
-	UFBXW_CONNECTION_NODE_ATTRIBUTE,   // NODE_ATTRIBUTE -> NODE*
-	UFBXW_CONNECTION_MATERIAL,         // MATERIAL* -> NODE*
-	UFBXW_CONNECTION_TEXTURE,          // TEXTURE* -> MATERIAL(property)*
-	UFBXW_CONNECTION_ANIM_PROPERTY,    // ANIM_PROP* -> ANY(property)*
-	UFBXW_CONNECTION_ANIM_CURVE_PROP,  // ANIM_CURVE* -> ANIM_PROP
-	UFBXW_CONNECTION_ANIM_PROP_LAYER,  // ANIM_PROP* -> ANIM_LAYER
-	UFBXW_CONNECTION_ANIM_LAYER_STACK, // ANIM_LAYER* -> ANIM_STACK
-	UFBXW_CONNECTION_CUSTOM,           // ANY* -> ANY*
+	UFBXW_CONNECTION_NODE_PARENT = 1,   // NODE* -> NODE
+	UFBXW_CONNECTION_NODE_ATTRIBUTE,    // NODE_ATTRIBUTE -> NODE*
+	UFBXW_CONNECTION_MATERIAL,          // MATERIAL* -> NODE*
+	UFBXW_CONNECTION_TEXTURE,           // TEXTURE* -> MATERIAL(property)*
+	UFBXW_CONNECTION_MESH_DEFORMER,     // DEFORMER -> MESH
+	UFBXW_CONNECTION_SKIN_CLUSTER,      // SKIN_CLUSTER -> SKIN_DEFORMER
+	UFBXW_CONNECTION_SKIN_CLUSTER_NODE, // NODE -> SKIN_CLUSTER
+	UFBXW_CONNECTION_ANIM_PROPERTY,     // ANIM_PROP* -> ANY(property)*
+	UFBXW_CONNECTION_ANIM_CURVE_PROP,   // ANIM_CURVE* -> ANIM_PROP
+	UFBXW_CONNECTION_ANIM_PROP_LAYER,   // ANIM_PROP* -> ANIM_LAYER
+	UFBXW_CONNECTION_ANIM_LAYER_STACK,  // ANIM_LAYER* -> ANIM_STACK
+	UFBXW_CONNECTION_CUSTOM,            // ANY* -> ANY*
 
 	UFBXW_CONNECTION_TYPE_COUNT,
 } ufbxw_connection_type;
@@ -523,6 +538,13 @@ typedef struct ufbxw_mesh_attribute_desc {
 	uint32_t _end_zero;
 } ufbxw_mesh_attribute_desc;
 
+typedef enum ufbxw_skinning_type {
+	UFBXW_SKINNING_TYPE_RIGID,
+	UFBXW_SKINNING_TYPE_LINEAR,
+	UFBXW_SKINNING_TYPE_DUAL_QUATERNION,
+	UFBXW_SKINNING_TYPE_BLEND,
+} ufbxw_skinning_type;
+
 typedef void ufbxw_error_fn(void *user, const ufbxw_error *error);
 
 // --
@@ -688,6 +710,28 @@ ufbxw_vec3_buffer ufbxw_mesh_get_vertices(ufbxw_scene *scene, ufbxw_mesh mesh);
 
 ufbxw_abi void ufbxw_mesh_add_instance(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_node node);
 
+// -- Skin deformer
+
+ufbxw_abi ufbxw_skin_deformer ufbxw_create_skin_deformer(ufbxw_scene *scene, ufbxw_mesh mesh);
+
+ufbxw_abi void ufbxw_skin_deformer_add_mesh(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_mesh mesh);
+
+ufbxw_abi void ufbxw_skin_deformer_set_skinning_type(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_skinning_type type);
+ufbxw_abi ufbxw_skinning_type ufbxw_skin_deformer_get_skinning_type(ufbxw_scene *scene, ufbxw_skin_deformer skin);
+
+// -- Skin cluster
+
+ufbxw_abi ufbxw_skin_cluster ufbxw_create_skin_cluster(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_node node);
+
+ufbxw_abi void ufbxw_skin_cluster_set_deformer(ufbxw_scene *scene, ufbxw_skin_cluster cluster, ufbxw_skin_deformer skin);
+ufbxw_abi void ufbxw_skin_cluster_set_node(ufbxw_scene *scene, ufbxw_skin_cluster cluster, ufbxw_node node);
+
+ufbxw_abi void ufbxw_skin_cluster_set_weights(ufbxw_scene *scene, ufbxw_skin_cluster cluster, ufbxw_int_buffer indices, ufbxw_real_buffer weights);
+
+// TODO: Better naming?
+ufbxw_abi void ufbxw_skin_cluster_set_transform(ufbxw_scene *scene, ufbxw_skin_cluster cluster, ufbxw_matrix matrix);
+ufbxw_abi void ufbxw_skin_cluster_set_link_transform(ufbxw_scene *scene, ufbxw_skin_cluster cluster, ufbxw_matrix matrix);
+
 // -- Animation stack
 
 ufbxw_abi ufbxw_anim_stack ufbxw_get_default_anim_stack(ufbxw_scene *scene);
@@ -790,6 +834,7 @@ typedef struct ufbxw_prepare_opts {
 	bool patch_anim_stack_times;
 	bool patch_anim_stack_reference_times;
 	bool patch_global_settings_times;
+	bool add_missing_skeletons;
 } ufbxw_prepare_opts;
 
 ufbxw_abi_data const ufbxw_prepare_opts ufbxw_default_prepare_opts;

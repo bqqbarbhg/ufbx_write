@@ -156,7 +156,7 @@ void ufbxwt_log_uerror(ufbx_error *err)
 
 void ufbxwt_log_error(ufbxw_error *err)
 {
-	ufbxwt_logf("Error: %s", err->description);
+	ufbxwt_logf("Error: %s(): %s", err->function, err->description);
 }
 
 #include "testing_utils.h"
@@ -272,6 +272,12 @@ bool ufbxwt_check_scene_error_imp(ufbxw_scene *scene, const char *file, int line
 	return false;
 }
 
+static void ufbxwt_error_callback(void *user, const ufbxw_error *error)
+{
+	ufbxwt_log_error(error);
+	ufbxwt_assert(0 && "error");
+}
+
 void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, ufbxwt_diff_error *err), void (*check_fn)(ufbx_scene *scene, ufbxwt_diff_error *err), const ufbxw_scene_opts *user_opts, uint32_t flags)
 {
 	ufbxw_scene_opts scene_opts = { 0 };
@@ -280,6 +286,7 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 	}
 
 	ufbxw_scene *scene = ufbxw_create_scene(&scene_opts);
+	ufbxw_set_error_callback(scene, &ufbxwt_error_callback, NULL);
 
 	ufbxwt_diff_error err = { 0 };
 
