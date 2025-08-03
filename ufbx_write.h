@@ -226,6 +226,8 @@ typedef enum ufbxw_error_type {
 typedef struct ufbxw_error {
 	ufbxw_error_type type;
 
+	ufbxw_string function;
+
 	size_t description_length;
 	char description[UFBXW_ERROR_DESCRIPTION_LENGTH];
 
@@ -521,6 +523,8 @@ typedef struct ufbxw_mesh_attribute_desc {
 	uint32_t _end_zero;
 } ufbxw_mesh_attribute_desc;
 
+typedef void ufbxw_error_fn(void *user, const ufbxw_error *error);
+
 // --
 
 typedef size_t ufbxw_int_stream_fn(void *user, int32_t *dst, size_t dst_size, size_t offset);
@@ -575,6 +579,8 @@ ufbxw_abi ufbxw_vec4_list ufbxw_edit_vec4_buffer(ufbxw_scene* scene, ufbxw_vec4_
 
 ufbxw_abi ufbxw_scene *ufbxw_create_scene(const ufbxw_scene_opts *opts);
 ufbxw_abi void ufbxw_free_scene(ufbxw_scene *scene);
+
+ufbxw_abi void ufbxw_set_error_callback(ufbxw_scene *scene, ufbxw_error_fn *fn, void *user);
 
 ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error);
 ufbxw_abi ufbxw_memory_stats ufbxw_get_memory_stats(ufbxw_scene *scene);

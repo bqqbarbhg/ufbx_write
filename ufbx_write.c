@@ -264,16 +264,24 @@
 
 // -- Error
 
-typedef struct ufbxwi_error ufbxwi_error;
+static const char ufbxwi_empty_char[] = "";
+static const ufbxw_string ufbxwi_empty_string = { ufbxwi_empty_char, 0 };
 
-typedef void ufbxwi_error_fn(void *user, ufbxw_error_type error, const char *message);
+static ufbxw_string ufbxwi_c_str(const char *str)
+{
+	if (str == NULL) str = ufbxwi_empty_char;
+	ufbxw_string s = { str, strlen(str) };
+	return s;
+}
+
+typedef struct ufbxwi_error ufbxwi_error;
 
 typedef void ufbxwi_fatal_fn(void *user, ufbxwi_error *error);
 
 struct ufbxwi_error {
 	ufbxw_error error;
 
-	ufbxwi_error_fn *error_fn;
+	ufbxw_error_fn *error_fn;
 	void *error_user;
 
 	ufbxwi_fatal_fn *fatal_fn;
@@ -289,17 +297,22 @@ static ufbxwi_noinline void ufbxwi_failf_imp(ufbxwi_error *error, ufbxw_error_ty
 			va_list args;
 			va_start(args, fmt);
 
-			char message[256];
-			vsnprintf(message, sizeof(message), fmt, args);
+			ufbxw_error err;
+			err.type = type;
+			err.function = ufbxwi_c_str(func);
+
+			int len = vsnprintf(err.description, sizeof(err.description), fmt, args);
+			err.description_length = (size_t)len;
 
 			va_end(args);
 
-			error->error_fn(error->error_user, type, message);
+			error->error_fn(error->error_user, &err);
 		}
 		return;
 	}
 
 	error->error.type = type;
+	error->error.function = ufbxwi_c_str(func);
 
 	va_list args;
 	va_start(args, fmt);
@@ -308,7 +321,7 @@ static ufbxwi_noinline void ufbxwi_failf_imp(ufbxwi_error *error, ufbxw_error_ty
 	error->error.description_length = (size_t)desc_len;
 
 	if (error->error_fn) {
-		error->error_fn(error->error_user, type, error->error.description);
+		error->error_fn(error->error_user, &error->error);
 	}
 
 	if (error->fatal_fn) {
@@ -904,16 +917,6 @@ static ufbxwi_noinline uint32_t ufbxwi_hash_string(const char *str, size_t lengt
 }
 
 // -- String
-
-static const char ufbxwi_empty_char[] = "";
-static const ufbxw_string ufbxwi_empty_string = { ufbxwi_empty_char, 0 };
-
-static ufbxw_string ufbxwi_c_str(const char *str)
-{
-	if (str == NULL) str = ufbxwi_empty_char;
-	ufbxw_string s = { str, strlen(str) };
-	return s;
-}
 
 typedef struct ufbxwi_string_entry {
 	uint32_t hash;
@@ -3048,21 +3051,21 @@ static const ufbxwi_element_type_info ufbxwi_element_type_infos[] = {
 
 static const char *ufbxwi_element_type_names[] = {
 	"",
-	"CUSTOM",
-	"NODE",
-	"NODE_ATTRIBUTE",
-	"MESH",
-	"LIGHT",
-	"MATERIAL",
-	"TEXTURE",
-	"ANIM_CURVE",
-	"ANIM_PROP",
-	"ANIM_LAYER",
-	"ANIM_STACK",
-	"TEMPLATE",
-	"SCENE_INFO",
-	"GLOBAL_SETTINGS",
-	"DOCUMENT",
+	"custom",
+	"node",
+	"node_attribute",
+	"mesh",
+	"light",
+	"material",
+	"texture",
+	"anim_curve",
+	"anim_prop",
+	"anim_layer",
+	"anim_stack",
+	"template",
+	"scene_info",
+	"global_settings",
+	"document",
 };
 
 ufbxw_static_assert(ufbxwi_element_type_infos_count, ufbxwi_arraycount(ufbxwi_element_type_infos) == UFBXW_ELEMENT_TYPE_COUNT);
@@ -3928,6 +3931,16 @@ static ufbxwi_forceinline ufbxwi_element *ufbxwi_get_element(ufbxw_scene *scene,
 	return slot->element;
 }
 
+static ufbxwi_forceinline ufbxwi_element *ufbxwi_get_typed_element(ufbxw_scene *scene, ufbxw_id id, ufbxw_element_type type)
+{
+	size_t index = ufbxwi_id_index(id);
+	if (ufbxwi_id_type(id) != type) return NULL;
+	if (index >= scene->elements.count) return NULL;
+	ufbxwi_element_slot *slot = &scene->elements.data[index];
+	if (slot->id != id) return NULL;
+	return slot->element;
+}
+
 static ufbxwi_forceinline bool ufbxwi_init_element_type_imp(ufbxw_scene *scene, ufbxwi_element_type *et)
 {
 	const ufbxwi_element_type_desc *desc = et->desc;
@@ -3976,7 +3989,12 @@ static ufbxwi_forceinline bool ufbxwi_init_element_type_imp(ufbxw_scene *scene, 
 
 static void ufbxwi_fail_element(ufbxw_scene *scene, ufbxw_id id, const char *func)
 {
-	ufbxwi_get_element(scene, id);
+	ufbxwi_element *elem = ufbxwi_get_element(scene, id);
+	if (!elem) {
+		ufbxwi_fail_imp(&scene->error, UFBXW_ERROR_ELEMENT_NOT_FOUND, func, "element not found");
+	} else {
+		ufbxwi_failf_imp(&scene->error, UFBXW_ERROR_ELEMENT_WRONG_TYPE, func, "wrong type: %s", ufbxwi_element_type_names[ufbxwi_id_type(id)]);
+	}
 }
 
 
@@ -4348,19 +4366,19 @@ static ufbxw_anim_prop ufbxwi_animate_prop(ufbxw_scene *scene, ufbxw_id id, ufbx
 	return anim;
 }
 
-static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node(ufbxw_scene *scene, ufbxw_node id) { return (ufbxwi_node*)ufbxwi_get_element(scene, id.id); }
-static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh(ufbxw_scene *scene, ufbxw_mesh id) { return (ufbxwi_mesh*)ufbxwi_get_element(scene, id.id); }
-static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve(ufbxw_scene *scene, ufbxw_anim_curve id) { return (ufbxwi_anim_curve*)ufbxwi_get_element(scene, id.id); }
-static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop(ufbxw_scene *scene, ufbxw_anim_prop id) { return (ufbxwi_anim_prop*)ufbxwi_get_element(scene, id.id); }
-static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer(ufbxw_scene *scene, ufbxw_anim_layer id) { return (ufbxwi_anim_layer*)ufbxwi_get_element(scene, id.id); }
-static ufbxwi_forceinline ufbxwi_anim_stack *ufbxwi_get_anim_stack(ufbxw_scene *scene, ufbxw_anim_stack id) { return (ufbxwi_anim_stack*)ufbxwi_get_element(scene, id.id); }
+static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node(ufbxw_scene *scene, ufbxw_node id) { return (ufbxwi_node*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_NODE); }
+static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh(ufbxw_scene *scene, ufbxw_mesh id) { return (ufbxwi_mesh*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_MESH); }
+static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve(ufbxw_scene *scene, ufbxw_anim_curve id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_CURVE); }
+static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop(ufbxw_scene *scene, ufbxw_anim_prop id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_PROP); }
+static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer(ufbxw_scene *scene, ufbxw_anim_layer id) { return (ufbxwi_anim_layer*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_LAYER); }
+static ufbxwi_forceinline ufbxwi_anim_stack *ufbxwi_get_anim_stack(ufbxw_scene *scene, ufbxw_anim_stack id) { return (ufbxwi_anim_stack*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_STACK); }
 
-static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_node*)ufbxwi_get_element(scene, id); }
-static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_mesh*)ufbxwi_get_element(scene, id); }
-static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_curve*)ufbxwi_get_element(scene, id); }
-static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_prop*)ufbxwi_get_element(scene, id); }
-static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_layer*)ufbxwi_get_element(scene, id); }
-static ufbxwi_forceinline ufbxwi_anim_stack *ufbxwi_get_anim_stack_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_stack*)ufbxwi_get_element(scene, id); }
+static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_node*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_NODE); }
+static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_mesh*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_MESH); }
+static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_CURVE); }
+static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_PROP); }
+static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_layer*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_LAYER); }
+static ufbxwi_forceinline ufbxwi_anim_stack *ufbxwi_get_anim_stack_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_stack*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_STACK); }
 
 static ufbxwi_forceinline ufbxw_node ufbxwi_assert_node(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_NODE); ufbxw_node v = { id }; return v; }
 static ufbxwi_forceinline ufbxw_anim_curve ufbxwi_assert_anim_curve(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_ANIM_CURVE); ufbxw_anim_curve v = { id }; return v; }
@@ -6767,6 +6785,12 @@ ufbxw_abi void ufbxw_free_scene(ufbxw_scene *scene)
 	ufbxwi_allocator ator;
 	ufbxwi_move_allocator(&ator, &scene->ator);
 	ufbxwi_free_allocator(&ator);
+}
+
+ufbxw_abi void ufbxw_set_error_callback(ufbxw_scene *scene, ufbxw_error_fn *fn, void *user)
+{
+	scene->error.error_fn = fn;
+	scene->error.error_user = user;
 }
 
 ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error)

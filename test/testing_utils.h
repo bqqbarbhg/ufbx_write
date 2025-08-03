@@ -84,4 +84,24 @@ static bool ufbxwt_equal_vec4(ufbxw_vec4 a, ufbxw_vec4 b)
 	return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w;
 }
 
+static ufbxw_node ufbxwt_create_node(ufbxw_scene *scene, const char *name)
+{
+	ufbxw_node node = ufbxw_create_node(scene);
+	ufbxw_set_name(scene, node.id, name);
+	return node;
+}
+
+static void ufbxwt_assert_error(ufbxw_error *error, ufbxw_error_type type, const char *func, const char *desc)
+{
+	ufbxwt_assert(error->type == type);
+	ufbxwt_assert(!strcmp(error->function.data, func));
+	ufbxwt_assert(!strcmp(error->description, desc));
+}
+
+static void ufbxwt_assert_string(ufbxw_string str, const char *ref)
+{
+	ufbxwt_assert(str.length == strlen(str.data));
+	ufbxwt_assert(!strcmp(str.data, ref));
+}
+
 #endif
