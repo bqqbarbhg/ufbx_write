@@ -55,7 +55,7 @@ UFBXWT_SCENE_CHECK(mesh_plane)
 
 	for (size_t i = 0; i < 4; i++) {
 		ufbx_vec3 v = ufbx_get_vertex_vec3(&mesh->vertex_position, i);
-		ufbxwt_assert_close_uvec3(&err, v, vertices[i]);
+		ufbxwt_assert_close_uvec3(err, v, vertices[i]);
 	}
 }
 #endif

@@ -4399,7 +4399,11 @@ static ufbxw_anim_prop ufbxwi_animate_prop(ufbxw_scene *scene, ufbxw_id id, ufbx
 
 		// Manually add the properties so we can point them to the known default values
 		ufbxwi_element *anim_elem = ufbxwi_get_element(scene, anim.id);
+		ufbxwi_check(anim_elem, ufbxw_null_anim_prop);
+
 		ufbxwi_prop *p = ufbxwi_props_add_prop(scene, &anim_elem->props, prop_name);
+		ufbxwi_check(p, ufbxw_null_anim_prop);
+
 		p->type = UFBXW_PROP_TYPE_NUMBER;
 		p->flags = UFBXW_PROP_FLAG_ANIMATABLE;
 		p->value = ufbxwi_prop_value_field(offsetof(ufbxwi_anim_prop, defaults) + i * sizeof(ufbxw_real));
