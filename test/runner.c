@@ -349,6 +349,7 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 
 			ufbxw_error fuzz_error;
 			ufbxwt_assert(ufbxw_get_error(fuzz_scene, &fuzz_error));
+			ufbxwt_assert(fuzz_error.type == UFBXW_ERROR_ALLOCATION_LIMIT);
 
 			ufbxw_free_scene(fuzz_scene);
 		}
