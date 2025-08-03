@@ -946,6 +946,7 @@ static void ufbxwi_mark_string_pool_failed(ufbxwi_string_pool *pool)
 {
 	pool->tokens.data = NULL;
 	pool->tokens.count = 0;
+	pool->tokens.capacity = 0;
 	pool->entries = NULL;
 	pool->entry_count = 0;
 	pool->entry_capacity = 0;
@@ -1748,7 +1749,7 @@ typedef struct {
 	} data;
 } ufbxwi_buffer;
 
-UFBXW_LIST_TYPE(ufbxwi_buffer_list, ufbxwi_buffer);
+UFBXWI_LIST_TYPE(ufbxwi_buffer_list, ufbxwi_buffer);
 
 typedef struct {
 	ufbxwi_error *error;
@@ -1769,8 +1770,10 @@ static void ufbxwi_mark_buffers_failed(ufbxwi_buffer_pool *pool)
 {
 	pool->buffers.data = NULL;
 	pool->buffers.count = 0;
+	pool->buffers.capacity = 0;
 	pool->free_buffer_ids.data = NULL;
 	pool->free_buffer_ids.count = 0;
+	pool->free_buffer_ids.capacity = 0;
 }
 
 static ufbxwi_forceinline ufbxwi_buffer *ufbxwi_get_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
@@ -1812,6 +1815,8 @@ static void ufbxwi_reset_buffer(ufbxwi_buffer_pool *pool, ufbxwi_buffer *buffer)
 		void *deleter_data = NULL;
 		if (buffer->state == UFBXWI_BUFFER_STATE_EXTERNAL) {
 			deleter_data = (void*)buffer->data.external.data;
+		} else if (buffer->state == UFBXWI_BUFFER_STATE_STREAM) {
+			deleter_data = (void*)buffer->data.stream.user;
 		}
 		buffer->deleter_fn(buffer->deleter_user, deleter_data);
 	}
@@ -1945,7 +1950,7 @@ static ufbxw_buffer_id ufbxwi_create_buffer(ufbxwi_buffer_pool *pool, ufbxwi_buf
 		index = pool->free_buffer_ids.data[--pool->free_buffer_ids.count];
 	} else {
 		index = pool->buffers.count;
-		if (!ufbxwi_list_push_zero(pool->ator, &pool->buffers, ufbxwi_buffer)) return 0;
+		ufbxwi_check(ufbxwi_list_push_zero(pool->ator, &pool->buffers, ufbxwi_buffer), 0);
 	}
 
 	ufbxwi_buffer *buffer = &pool->buffers.data[index];
@@ -2109,6 +2114,8 @@ static bool ufbxwi_make_buffer_owned(ufbxwi_buffer_pool *pool, ufbxw_buffer_id i
 
 static void ufbxwi_set_buffer_from_user(ufbxwi_buffer_pool *pool, ufbxw_buffer_id *p_dst, ufbxw_buffer_id src)
 {
+	if (ufbxwi_is_fatal(pool->error)) return;
+
 	if (src) {
 		ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, src);
 		ufbxw_assert(buffer);
@@ -2133,6 +2140,43 @@ static ufbxwi_forceinline ufbxw_buffer_id ufbxwi_to_user_buffer(ufbxwi_buffer_po
 		buffer->user_refcount++;
 	}
 	return id;
+}
+
+static void ufbxwi_refer_buffers(ufbxwi_buffer_pool *dst, const ufbxwi_buffer_pool *src)
+{
+	size_t buffer_count = src->buffers.count;
+	ufbxwi_buffer *dst_buffers = ufbxwi_list_push_zero_n(dst->ator, &dst->buffers, ufbxwi_buffer, buffer_count);
+	ufbxwi_check(dst_buffers);
+
+	for (size_t i = 0; i < buffer_count; i++) {
+		const ufbxwi_buffer *sb = &src->buffers.data[i];
+		if (sb->state == UFBXWI_BUFFER_STATE_NONE) continue;
+
+		ufbxwi_buffer *db = &dst_buffers[i];
+		db->id = sb->id;
+		db->count = sb->count;
+		db->refcount = UINT32_MAX / 2;
+		db->user_refcount = UINT32_MAX / 2;
+
+		switch (sb->state) {
+		case UFBXWI_BUFFER_STATE_NONE:
+			break;
+		case UFBXWI_BUFFER_STATE_OWNED:
+			db->state = UFBXWI_BUFFER_STATE_EXTERNAL;
+			db->data.external.data = sb->data.owned.data;
+			db->data.external.data_size = sb->data.owned.alloc_size;
+			break;
+		case UFBXWI_BUFFER_STATE_EXTERNAL:
+			db->state = UFBXWI_BUFFER_STATE_EXTERNAL;
+			db->data.external.data = sb->data.external.data;
+			db->data.external.data_size = sb->data.external.data_size;
+			break;
+		case UFBXWI_BUFFER_STATE_STREAM:
+			db->state = UFBXWI_BUFFER_STATE_STREAM;
+			db->data.stream = sb->data.stream;
+			break;
+		}
+	}
 }
 
 static ufbxwi_forceinline ufbxw_int_buffer ufbxwi_to_user_int_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id) { ufbxw_int_buffer b = { ufbxwi_to_user_buffer(pool, id) }; return b; }
@@ -4594,6 +4638,7 @@ static void ufbxwi_mark_scene_failed(ufbxw_scene *scene)
 	ufbxwi_mark_buffers_failed(&scene->buffers);
 	scene->elements.data = NULL;
 	scene->elements.count = 0;
+	scene->elements.capacity = 0;
 }
 
 static void ufbxwi_scene_fatal(void *user, ufbxwi_error *error)
@@ -5863,6 +5908,7 @@ static void ufbxwi_save_mesh_data(ufbxwi_save_context *sc, ufbxwi_element *eleme
 		ufbxwi_dom_array(sc, "PolygonVertexIndex", mesh->polygon_vertex_index.id);
 	} else {
 		ufbxw_buffer_id index_buffer = ufbxwi_create_polygon_vertex_index_stream(&sc->buffers, mesh->vertex_indices, mesh->face_offsets);
+		ufbxwi_check(index_buffer);
 		ufbxwi_dom_array(sc, "PolygonVertexIndex", index_buffer);
 	}
 
@@ -6497,9 +6543,10 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc)
 	sc->ator.max_size = SIZE_MAX / 4;
 
 	// TODO: Proper hanling
-	memcpy(&sc->buffers, &sc->scene->buffers, sizeof(ufbxwi_buffer_pool));
 	sc->buffers.ator = &sc->ator;
 	sc->buffers.error = &sc->error;
+	ufbxwi_refer_buffers(&sc->buffers, &sc->scene->buffers);
+	if (ufbxwi_is_fatal(&sc->error)) return;
 
 	size_t buffer_size = 0x10000;
 	sc->buffer = ufbxwi_alloc(&sc->ator, char, buffer_size);

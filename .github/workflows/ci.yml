@@ -22,6 +22,6 @@ jobs:
       - name: Create temporary directories
         run: mkdir -p build output
       - name: Compile test runner
-        run: clang -Werror -g -lm ufbx_write.c test/runner.c test/ufbx.c -o build/test-runner
+        run: clang -Werror -g -lm -DUFBX_DEV -DUFBXW_DEV ufbx_write.c test/runner.c test/ufbx.c -o build/test-runner
       - name: Run tests
-        run: build/test-runner
+        run: build/test-runner --fuzz --verbose
