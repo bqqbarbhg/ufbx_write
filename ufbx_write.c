@@ -1591,6 +1591,7 @@ typedef union {
 	ufbxw_real_stream_fn *real_fn;
 	ufbxw_vec2_stream_fn *vec2_fn;
 	ufbxw_vec3_stream_fn *vec3_fn;
+	ufbxw_vec4_stream_fn *vec4_fn;
 	ufbxwi_float_stream_fn *float_fn;
 	ufbxwi_key_attr_stream_fn *key_attr_fn;
 } ufbxwi_stream_fn;
@@ -1719,6 +1720,8 @@ static size_t ufbxwi_buffer_stream_read(void *dst, size_t dst_count, size_t offs
 		return fn.vec2_fn(user, (ufbxw_vec2*)dst, dst_count, offset);
 	case UFBXWI_BUFFER_TYPE_VEC3:
 		return fn.vec3_fn(user, (ufbxw_vec3*)dst, dst_count, offset);
+	case UFBXWI_BUFFER_TYPE_VEC4:
+		return fn.vec4_fn(user, (ufbxw_vec4*)dst, dst_count, offset);
 	case UFBXWI_BUFFER_TYPE_FLOAT:
 		return fn.float_fn(user, (float*)dst, dst_count, offset);
 	case UFBXWI_BUFFER_TYPE_KEY_ATTR:
@@ -6309,6 +6312,32 @@ ufbxw_abi ufbxw_vec3_buffer ufbxw_external_vec3_stream(ufbxw_scene *scene, ufbxw
 	stream_fn.vec3_fn = fn;
 	ufbxw_buffer_id id = ufbxwi_create_stream_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC3, stream_fn, user, count);
 	return ufbxwi_to_user_vec3_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_vec4_buffer ufbxw_copy_vec4_array(ufbxw_scene *scene, const ufbxw_vec4 *data, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_copy_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC4, data, count);
+	return ufbxwi_to_user_vec4_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_vec4_buffer ufbxw_view_vec4_array(ufbxw_scene *scene, const ufbxw_vec4 *data, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_external_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC4, data, count, UFBXWI_BUFFER_FLAG_TEMPORARY);
+	return ufbxwi_to_user_vec4_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_vec4_buffer ufbxw_external_vec4_array(ufbxw_scene *scene, const ufbxw_vec4 *data, size_t count)
+{
+	ufbxw_buffer_id id = ufbxwi_create_external_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC4, data, count, 0);
+	return ufbxwi_to_user_vec4_buffer(&scene->buffers, id);
+}
+
+ufbxw_abi ufbxw_vec4_buffer ufbxw_external_vec4_stream(ufbxw_scene *scene, ufbxw_vec4_stream_fn *fn, void *user, size_t count)
+{
+	ufbxwi_stream_fn stream_fn;
+	stream_fn.vec4_fn = fn;
+	ufbxw_buffer_id id = ufbxwi_create_stream_buffer(&scene->buffers, UFBXWI_BUFFER_TYPE_VEC4, stream_fn, user, count);
+	return ufbxwi_to_user_vec4_buffer(&scene->buffers, id);
 }
 
 ufbxw_abi ufbxw_vec4_buffer ufbxw_create_vec4_buffer(ufbxw_scene* scene, size_t count)
