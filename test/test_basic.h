@@ -20,11 +20,18 @@ UFBXWT_SCENE_TEST(simple_node)
 	ufbxw_vec3 translation = { 1.0f, 2.0f, 3.0f };
 	ufbxw_node_set_translation(scene, node, translation);
 
+	ufbxw_vec3 scaling = { 1.0f, 0.5f, 0.25f };
+	ufbxw_set_vec3(scene, node.id, "Lcl Scaling", scaling);
+
 	ufbxw_vec3 field_translation = ufbxw_node_get_translation(scene, node);
 	ufbxw_vec3 prop_translation = ufbxw_get_vec3(scene, node.id, "Lcl Translation");
-
 	ufbxwt_assert(ufbxwt_equal_vec3(field_translation, translation));
 	ufbxwt_assert(ufbxwt_equal_vec3(prop_translation, translation));
+
+	ufbxw_vec3 field_scaling = ufbxw_node_get_scaling(scene, node);
+	ufbxw_vec3 prop_scaling = ufbxw_get_vec3(scene, node.id, "Lcl Scaling");
+	ufbxwt_assert(ufbxwt_equal_vec3(field_scaling, scaling));
+	ufbxwt_assert(ufbxwt_equal_vec3(prop_scaling, scaling));
 }
 #endif
 
@@ -36,5 +43,9 @@ UFBXWT_SCENE_CHECK(simple_node)
 
 	ufbx_vec3 translation = { 1.0f, 2.0f, 3.0f };
 	ufbxwt_assert_close_uvec3(err, node->local_transform.translation, translation);
+
+	ufbx_vec3 scale = { 1.0f, 0.5f, 0.25f };
+	ufbxwt_assert_close_uvec3(err, node->local_transform.scale, scale);
 }
 #endif
+
