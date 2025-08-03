@@ -6778,7 +6778,9 @@ ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error)
 		return true;
 	} else {
 		if (error) {
-			memset(error, 0, sizeof(ufbxw_error));
+			error->type = UFBXW_ERROR_NONE;
+			error->description[0] = '\0';
+			error->description_length = 0;
 		}
 		return false;
 	}
