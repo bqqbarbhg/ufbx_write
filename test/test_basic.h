@@ -6,6 +6,7 @@ UFBXWT_TEST(create_scene)
 {
 	ufbxw_scene *scene = ufbxw_create_scene(NULL);
 	ufbxwt_assert(scene);
+
 	ufbxw_free_scene(scene);
 }
 #endif
