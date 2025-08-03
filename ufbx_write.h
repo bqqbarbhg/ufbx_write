@@ -55,6 +55,8 @@
 	#define UFBXW_LIST_TYPE(p_name, p_type) typedef struct p_name { p_type *data; size_t count; } p_name
 #endif
 
+#define UFBXW_ERROR_DESCRIPTION_LENGTH 256
+
 // UTF-8
 typedef struct ufbxw_string {
 	const char *data;
@@ -199,9 +201,43 @@ typedef struct ufbxw_allocator {
 
 // -- Error
 
+typedef enum ufbxw_error_type {
+	UFBXW_ERROR_NONE,
+
+	UFBXW_ERROR_ELEMENT_NOT_FOUND,
+	UFBXW_ERROR_ELEMENT_WRONG_TYPE,
+	UFBXW_ERROR_ELEMENT_TYPE_NOT_FOUND,
+	UFBXW_ERROR_PROP_DATA_TYPE,
+	UFBXW_ERROR_PROP_NOT_FOUND,
+	UFBXW_ERROR_WRONG_DATA_TYPE,
+	UFBXW_ERROR_INDEX_OUT_OF_BOUNDS,
+
+	// Fatal errors
+	UFBXW_ERROR_FATAL,
+	UFBXW_ERROR_STRING_TOO_LONG,
+	UFBXW_ERROR_MEMORY_LIMIT,
+	UFBXW_ERROR_ALLOCATION_LIMIT,
+	UFBXW_ERROR_ALLOCATION_FAILURE,
+	UFBXW_ERROR_BUFFER_STREAM,
+	UFBXW_ERROR_WRITE_FAILED,
+
+} ufbxw_error_type;
+
 typedef struct ufbxw_error {
-	bool failed;
+	ufbxw_error_type type;
+
+	size_t description_length;
+	char description[UFBXW_ERROR_DESCRIPTION_LENGTH];
+
 } ufbxw_error;
+
+// -- Memory
+
+typedef struct ufbxw_memory_stats {
+	size_t allocated_bytes;
+	size_t allocation_count;
+	size_t block_allocation_count;
+} ufbxw_memory_stats;
 
 // -- Scene API
 
@@ -216,7 +252,9 @@ typedef struct ufbxw_scene_opts {
 	bool no_default_document;
 	bool no_default_anim_stack;
 	bool no_default_anim_layer;
-	bool no_creation_time;
+
+	// Maximum amount of allocations to do
+	size_t max_allocations;
 
 	uint32_t _end_zero;
 } ufbxw_scene_opts;
@@ -539,6 +577,7 @@ ufbxw_abi ufbxw_scene *ufbxw_create_scene(const ufbxw_scene_opts *opts);
 ufbxw_abi void ufbxw_free_scene(ufbxw_scene *scene);
 
 ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error);
+ufbxw_abi ufbxw_memory_stats ufbxw_get_memory_stats(ufbxw_scene *scene);
 
 ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type type);
 ufbxw_abi ufbxw_id ufbxw_create_element_ex(ufbxw_scene *scene, ufbxw_element_type type, const char *class_type);

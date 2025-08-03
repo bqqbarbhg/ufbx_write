@@ -61,6 +61,9 @@
 	#define ufbxwi_unlikely(cond) (cond)
 #endif
 
+// Should be standard in C99 and C++11
+#define ufbxwi_func __func__
+
 #if defined(UFBXW_STATIC_ANALYSIS)
 	bool ufbxwi_analysis_opaque;
 	#define ufbxwi_maybe_null(ptr) (ufbxwi_analysis_opaque ? (ptr) : NULL)
@@ -261,23 +264,80 @@
 
 // -- Error
 
-typedef struct {
-	bool failed;
-	ufbxw_error error;
-} ufbxwi_error;
+typedef struct ufbxwi_error ufbxwi_error;
 
-static void ufbxwi_fail_imp_err(ufbxwi_error *error)
+typedef void ufbxwi_error_fn(void *user, ufbxw_error_type error, const char *message);
+
+typedef void ufbxwi_fatal_fn(void *user, ufbxwi_error *error);
+
+struct ufbxwi_error {
+	ufbxw_error error;
+
+	ufbxwi_error_fn *error_fn;
+	void *error_user;
+
+	ufbxwi_fatal_fn *fatal_fn;
+	void *fatal_user;
+};
+
+static ufbxwi_noinline void ufbxwi_failf_imp(ufbxwi_error *error, ufbxw_error_type type, const char *func, const char *fmt, ...)
 {
-	error->failed = true;
+	if (error->error.type >= UFBXW_ERROR_FATAL) return;
+
+	if (type < UFBXW_ERROR_FATAL) {
+		if (error->error_fn) {
+			va_list args;
+			va_start(args, fmt);
+
+			char message[256];
+			vsnprintf(message, sizeof(message), fmt, args);
+
+			va_end(args);
+
+			error->error_fn(error->error_user, type, message);
+		}
+		return;
+	}
+
+	error->error.type = type;
+
+	va_list args;
+	va_start(args, fmt);
+	int desc_len = vsnprintf(error->error.description, sizeof(error->error.description), fmt, args);
+	va_end(args);
+	error->error.description_length = (size_t)desc_len;
+
+	if (error->error_fn) {
+		error->error_fn(error->error_user, type, error->error.description);
+	}
+
+	if (error->fatal_fn) {
+		error->fatal_fn(error->fatal_user, error);
+	}
 }
 
-#define ufbxwi_fail_err(err, msg) ufbxwi_fail_imp_err((err))
+static ufbxwi_noinline void ufbxwi_fail_imp(ufbxwi_error *error, ufbxw_error_type type, const char *func, const char *desc)
+{
+	ufbxwi_failf_imp(error, type, func, "%s", desc);
+}
 
-#define ufbxwi_check_err(err, cond) do { if (!(cond)) { ufbxwi_fail_imp_err((err)); return; } } while (0)
-#define ufbxwi_check(cond) do { if (!(cond)) { ufbxwi_fail_imp_err(&scene->error); return; } } while (0)
+#define ufbxwi_failf(error, type, ...) ufbxwi_failf_imp((error), (type), ufbxwi_func, __VA_ARGS__)
+#define ufbxwi_fail(error, type, desc) ufbxwi_fail_imp((error), (type), ufbxwi_func, (desc))
 
-#define ufbxwi_check_return_err(err, cond, ret) do { if (!(cond)) { ufbxwi_fail_imp_err((err)); return ret; } } while (0)
-#define ufbxwi_check_return(cond, ret) do { if (!(cond)) { ufbxwi_fail_imp_err(&scene->error); return ret; } } while (0)
+static ufbxwi_forceinline bool ufbxwi_is_fatal(ufbxwi_error *error)
+{
+	return error->error.type != UFBXW_ERROR_NONE;
+}
+
+#define ufbxwi_check(cond, ...) do { if (!(cond)) return __VA_ARGS__; } while (0)
+
+#define ufbxwi_check_index(error, index, count, ...) do { \
+		size_t mi_index = (index), mi_count = (count); \
+		if (mi_index >= mi_count) { \
+			ufbxwi_failf((error), UFBXW_ERROR_INDEX_OUT_OF_BOUNDS, "index (%zu) out of bounds (%zu)", mi_index, mi_count); \
+			return __VA_ARGS__; \
+		} \
+	} while (0)
 
 // -- Utility
 
@@ -469,9 +529,11 @@ struct ufbxwi_alloc {
 typedef struct {
 	ufbxwi_error *error;
 	ufbxw_allocator ator;
-	size_t max_size;
 	size_t num_allocs;
 	size_t max_allocs;
+	size_t total_size;
+	size_t max_size;
+	size_t num_block_allocs;
 
 	ufbxwi_alloc *free_root[UFBXWI_SIZE_CLASS_COUNT];
 	ufbxwi_alloc block_root;
@@ -482,6 +544,12 @@ typedef struct {
 
 	size_t next_block_size;
 } ufbxwi_allocator;
+
+static void ufbxwi_mark_allocator_failed(ufbxwi_allocator *ator)
+{
+	// Do not allow any further allocations
+	ator->max_allocs = 0;
+}
 
 static ufbxwi_forceinline bool ufbxwi_does_overflow(size_t total, size_t a, size_t b)
 {
@@ -495,13 +563,24 @@ static ufbxwi_forceinline bool ufbxwi_does_overflow(size_t total, size_t a, size
 static ufbxwi_noinline ufbxwi_alloc *ufbxwi_alloc_block(ufbxwi_allocator *ator, size_t size)
 {
 	size_t alloc_size = sizeof(ufbxwi_alloc) + size;
+	if (ator->max_size - ator->total_size < alloc_size) {
+		ufbxwi_failf(ator->error, UFBXW_ERROR_MEMORY_LIMIT, "Memory limit exceeded (%zu bytes)", ator->max_size);
+		return NULL;
+	}
+
 	ufbxwi_alloc *block = NULL;
 	if (ator->ator.alloc_fn) {
 		block = (ufbxwi_alloc*)ator->ator.alloc_fn(ator->ator.user, size);
 	} else {
 		block = ufbxw_malloc(alloc_size);
 	}
-	if (!block) return NULL;
+	if (!block) {
+		ufbxwi_failf(ator->error, UFBXW_ERROR_ALLOCATION_FAILURE, "Failed to allocate %zu bytes", alloc_size);
+		return NULL;
+	}
+
+	ator->total_size += alloc_size;
+	ator->num_block_allocs++;
 
 	block->size = size;
 	block->prev = &ator->block_root;
@@ -517,6 +596,8 @@ static ufbxwi_noinline void ufbxwi_free_block(ufbxwi_allocator *ator, ufbxwi_all
 	if (block->next) block->next->prev = block->prev;
 
 	size_t alloc_size = block->size + sizeof(ufbxwi_alloc);
+	ator->total_size -= alloc_size;
+
 	block->magic = UFBXWI_FREED_MAGIC;
 	if (ator->ator.alloc_fn) {
 		if (ator->ator.free_fn) {
@@ -537,12 +618,22 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 	}
 
 	size_t total = size * n;
-	ufbxwi_check_return_err(ator->error, !ufbxwi_does_overflow(total, size, n), NULL);
+	if (ufbxwi_does_overflow(total, size, n)) {
+		ufbxwi_fail(ator->error, UFBXW_ERROR_ALLOCATION_FAILURE, "Allocation size overflow");
+		return NULL;
+	}
+	if (ator->num_allocs >= ator->max_allocs) {
+		ufbxwi_failf(ator->error, UFBXW_ERROR_ALLOCATION_LIMIT, "Allocation limit exceeded (%zu)", ator->max_allocs);
+		return NULL;
+	}
+
+	ator->num_allocs++;
+	ator->total_size += total;
 
 	uint32_t size_class = ufbxwi_get_size_class(total);
 	if (size_class == ~0u) {
 		ufbxwi_alloc *block = ufbxwi_alloc_block(ator, total);
-		ufbxwi_check_return_err(ator->error, block, NULL);
+		ufbxwi_check(block, NULL);
 		block->magic = UFBXWI_HUGE_MAGIC;
 
 		if (p_alloc_size) {
@@ -567,7 +658,7 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 		size_t block_alloc_size = ufbxwi_min_sz(ufbxwi_max_sz(ator->next_block_size * 2, 0x10000), 0x100000);
 
 		ufbxwi_alloc *block = ufbxwi_alloc_block(ator, block_alloc_size - sizeof(ufbxwi_alloc));
-		ufbxwi_check_return_err(ator->error, block, NULL);
+		ufbxwi_check(block, NULL);
 		block->magic = UFBXWI_BLOCK_MAGIC;
 
 		ator->current_block = block;
@@ -657,9 +748,10 @@ static ufbxwi_noinline void *ufbxwi_list_push_size_slow(ufbxwi_allocator *ator, 
 
 	size_t alloc_size = 0;
 	char *new_data = ufbxwi_alloc_size(ator, size, new_capacity, &alloc_size);
-	ufbxwi_check_return_err(ator->error, new_data, NULL);
+	ufbxwi_check(new_data, NULL);
 
 	memcpy(new_data, list->data, count * size);
+	ufbxwi_free(ator, list->data);
 
 	list->data = new_data;
 	list->capacity = alloc_size / size;
@@ -686,7 +778,7 @@ static ufbxwi_noinline bool ufbxwi_list_resize_size_slow(ufbxwi_allocator *ator,
 
 	size_t alloc_size = 0;
 	char *new_data = ufbxwi_alloc_size(ator, size, new_capacity, &alloc_size);
-	ufbxwi_check_return_err(ator->error, new_data, false);
+	ufbxwi_check(new_data, false);
 
 	memcpy(new_data, list->data, list->count * size);
 
@@ -835,6 +927,7 @@ UFBXWI_LIST_TYPE(ufbxw_string_list, ufbxw_string);
 typedef struct ufbxwi_string_pool {
 	ufbxwi_allocator *ator;
 	ufbxwi_error *error;
+	bool failed;
 
 	ufbxwi_string_entry *entries;
 	uint32_t entry_count;
@@ -846,11 +939,20 @@ typedef struct ufbxwi_string_pool {
 	char *block_end;
 } ufbxwi_string_pool;
 
+static void ufbxwi_mark_string_pool_failed(ufbxwi_string_pool *pool)
+{
+	pool->tokens.data = NULL;
+	pool->tokens.count = 0;
+	pool->entries = NULL;
+	pool->entry_count = 0;
+	pool->entry_capacity = 0;
+}
+
 bool ufbxwi_string_pool_rehash(ufbxwi_string_pool *pool)
 {
-	size_t capacity = ufbxwi_max_sz(pool->entry_capacity * 2, 256);
+	size_t capacity = ufbxwi_max_sz(pool->entry_capacity * 2, 512);
 	ufbxwi_string_entry *new_entries = ufbxwi_alloc(pool->ator, ufbxwi_string_entry, capacity);
-	ufbxwi_check_return_err(pool->error, new_entries, false);
+	ufbxwi_check(new_entries, false);
 
 	memset(new_entries, 0, capacity * sizeof(ufbxwi_string_entry));
 	ufbxwi_for(ufbxwi_string_entry, entry, pool->entries, pool->entry_capacity) {
@@ -866,6 +968,8 @@ bool ufbxwi_string_pool_rehash(ufbxwi_string_pool *pool)
 		}
 	}
 
+	ufbxwi_free(pool->ator, pool->entries);
+
 	pool->entries = new_entries;
 	pool->entry_capacity = (uint32_t)capacity;
 	return true;
@@ -876,12 +980,12 @@ static char *ufbxwi_copy_string(ufbxwi_string_pool *pool, const char *str, size_
 	char *copy = NULL;
 	if (length >= 256) {
 		copy = ufbxwi_alloc(pool->ator, char, length + 1);
-		ufbxwi_check_return_err(pool->error, copy, false);
+		ufbxwi_check(copy, NULL);
 	} else {
 		if (ufbxwi_to_size(pool->block_end - pool->block_pos) < length + 1) {
 			const size_t block_size = 4096;
 			char *block = ufbxwi_alloc(pool->ator, char, block_size);
-			ufbxwi_check_return_err(pool->error, block, false);
+			ufbxwi_check(block, NULL);
 
 			pool->block_pos = block;
 			pool->block_end = block + block_size;
@@ -908,12 +1012,16 @@ static bool ufbxwi_intern_string(ufbxwi_string_pool *pool, ufbxw_string *dst, co
 		length = strlen(str);
 	}
 
-	ufbxwi_check_return_err(pool->error, length <= UINT32_MAX / 2, false);
+	size_t max_length = UINT32_MAX / 2;
+	if (length > max_length) {
+		ufbxwi_failf(pool->error, UFBXW_ERROR_STRING_TOO_LONG, "String is too long (%zu bytes, max %zu bytes)", length, max_length);
+		return false;
+	}
 
 	uint32_t hash = ufbxwi_hash_string(str, length);
 
 	if (pool->entry_count * 2 >= pool->entry_capacity) {
-		ufbxwi_check_return_err(pool->error, ufbxwi_string_pool_rehash(pool), false);
+		ufbxwi_check(ufbxwi_string_pool_rehash(pool), false);
 	}
 
 	uint32_t capacity = pool->entry_capacity;
@@ -933,7 +1041,7 @@ static bool ufbxwi_intern_string(ufbxwi_string_pool *pool, ufbxw_string *dst, co
 	}
 
 	char *copy = ufbxwi_copy_string(pool, str, length);
-	ufbxwi_check_return_err(pool->error, copy, false);
+	ufbxwi_check(copy, false);
 
 	pool->entry_count++;
 
@@ -952,12 +1060,16 @@ static uint32_t ufbxwi_intern_token(ufbxwi_string_pool *pool, const char *str, s
 {
 	if (length == 0) return 1; // UFBXWI_TOKEN_EMPTY
 
-	ufbxwi_check_return_err(pool->error, length <= UINT32_MAX / 2, 0);
+	size_t max_length = UINT32_MAX / 2;
+	if (length > max_length) {
+		ufbxwi_failf(pool->error, UFBXW_ERROR_STRING_TOO_LONG, "String is too long (%zu bytes, max %zu bytes)", length, max_length);
+		return false;
+	}
 
 	uint32_t hash = ufbxwi_hash_string(str, length);
 
 	if (pool->entry_count * 2 >= pool->entry_capacity) {
-		ufbxwi_check_return_err(pool->error, ufbxwi_string_pool_rehash(pool), 0);
+		ufbxwi_check(ufbxwi_string_pool_rehash(pool), 0);
 	}
 
 	uint32_t capacity = pool->entry_capacity;
@@ -972,7 +1084,7 @@ static uint32_t ufbxwi_intern_token(ufbxwi_string_pool *pool, const char *str, s
 			} else {
 				uint32_t token = (uint32_t)pool->tokens.count;
 				ufbxw_string *dst = ufbxwi_list_push_uninit(pool->ator, &pool->tokens, ufbxw_string);
-				ufbxwi_check_return_err(pool->error, dst, 0);
+				ufbxwi_check(dst, 0);
 				dst->data = entries[slot].data;
 				dst->length = length;
 				entries[slot].token = token;
@@ -985,13 +1097,13 @@ static uint32_t ufbxwi_intern_token(ufbxwi_string_pool *pool, const char *str, s
 	}
 
 	char *copy = ufbxwi_copy_string(pool, str, length);
-	ufbxwi_check_return_err(pool->error, copy, 0);
+	ufbxwi_check(copy, 0);
 
 	pool->entry_count++;
 
 	uint32_t token = (uint32_t)pool->tokens.count;
 	ufbxw_string *dst = ufbxwi_list_push_uninit(pool->ator, &pool->tokens, ufbxw_string);
-	ufbxwi_check_return_err(pool->error, dst, 0);
+	ufbxwi_check(dst, 0);
 	dst->data = copy;
 	dst->length = length;
 
@@ -1006,8 +1118,8 @@ static uint32_t ufbxwi_intern_token(ufbxwi_string_pool *pool, const char *str, s
 static uint32_t ufbxwi_get_token(const ufbxwi_string_pool *pool, const char *str, size_t length)
 {
 	if (length == 0) return 1; // UFBXWI_TOKEN_EMPTY
-
-	ufbxwi_check_return_err(pool->error, length <= UINT32_MAX / 2, 0);
+	if (length > UINT32_MAX / 2) return 0;
+	if (pool->entry_count == 0) return 0;
 
 	uint32_t hash = ufbxwi_hash_string(str, length);
 	uint32_t capacity = pool->entry_capacity;
@@ -1650,6 +1762,14 @@ static void ufbxwi_buffer_pool_init(ufbxwi_buffer_pool *pool, ufbxwi_allocator *
 	pool->error = error;
 }
 
+static void ufbxwi_mark_buffers_failed(ufbxwi_buffer_pool *pool)
+{
+	pool->buffers.data = NULL;
+	pool->buffers.count = 0;
+	pool->free_buffer_ids.data = NULL;
+	pool->free_buffer_ids.count = 0;
+}
+
 static ufbxwi_forceinline ufbxwi_buffer *ufbxwi_get_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
 {
 	size_t index = ufbxwi_buffer_id_index(id);
@@ -1822,7 +1942,7 @@ static ufbxw_buffer_id ufbxwi_create_buffer(ufbxwi_buffer_pool *pool, ufbxwi_buf
 		index = pool->free_buffer_ids.data[--pool->free_buffer_ids.count];
 	} else {
 		index = pool->buffers.count;
-		ufbxwi_check_return_err(pool->error, ufbxwi_list_push_zero(pool->ator, &pool->buffers, ufbxwi_buffer), 0);
+		if (!ufbxwi_list_push_zero(pool->ator, &pool->buffers, ufbxwi_buffer)) return 0;
 	}
 
 	ufbxwi_buffer *buffer = &pool->buffers.data[index];
@@ -1844,7 +1964,7 @@ static ufbxw_buffer_id ufbxwi_create_owned_buffer(ufbxwi_buffer_pool *pool, ufbx
 	size_t alloc_size = 0;
 	size_t type_size = ufbxwi_buffer_type_infos[type].size;
 	void *data = ufbxwi_alloc_size(pool->ator, type_size, count, &alloc_size);
-	ufbxwi_check_return_err(pool->error, data, 0);
+	if (!data) return 0;
 
 	buffer->state = UFBXWI_BUFFER_STATE_OWNED;
 	buffer->count = count;
@@ -1967,11 +2087,11 @@ static bool ufbxwi_make_buffer_owned(ufbxwi_buffer_pool *pool, ufbxw_buffer_id i
 	size_t type_size = ufbxwi_buffer_type_infos[type].size;
 	size_t alloc_size = 0;
 	void *data = ufbxwi_alloc_size(pool->ator, type_size, buffer->count, &alloc_size);
-	ufbxwi_check_return_err(pool->error, data, false);
+	ufbxwi_check(data, false);
 
 	if (ufbxwi_buffer_read_to(pool, buffer->id, data, buffer->count, 0) != buffer->count) {
 		ufbxwi_free(pool->ator, data);
-		ufbxwi_fail_err(pool->error, "failed to make buffer owned");
+		ufbxwi_fail(pool->error, UFBXW_ERROR_BUFFER_STREAM, "failed to read buffer data");
 		return false;
 	}
 
@@ -2058,7 +2178,7 @@ static ufbxwi_noinline bool ufbxwi_start_stream(ufbxwi_buffer_pool *pool, ufbxw_
 
 	// TODO: Pool these
 	void *data = ufbxwi_alloc_size(pool->ator, type_size, capacity, NULL);
-	ufbxwi_check_return_err(pool->error, data, false);
+	ufbxwi_check(data, false);
 
 	buf->stream_data = data;
 	buf->stream_capacity = capacity;
@@ -2502,7 +2622,26 @@ static const ufbxwi_prop_data_info ufbxwi_prop_data_infos[] = {
 	{ sizeof(ufbxw_user_enum), sizeof(int32_t) },
 };
 
+static const char *ufbxwi_prop_data_names[] = {
+	"",
+	"bool",
+	"int32",
+	"int64",
+	"real",
+	"vec2",
+	"vec3",
+	"vec4",
+	"string",
+	"id",
+	"real_string",
+	"blob",
+	"user_int",
+	"user_real",
+	"user_enum",
+};
+
 ufbxw_static_assert(ufbxwi_prop_data_type_count, ufbxwi_arraycount(ufbxwi_prop_data_infos) == UFBXW_PROP_DATA_TYPE_COUNT);
+ufbxw_static_assert(ufbxwi_prop_data_name_count, ufbxwi_arraycount(ufbxwi_prop_data_names) == UFBXW_PROP_DATA_TYPE_COUNT);
 
 static const ufbxwi_prop_type_desc ufbxwi_prop_types[] = {
 	{ "", "", UFBXW_PROP_DATA_NONE },
@@ -2907,7 +3046,27 @@ static const ufbxwi_element_type_info ufbxwi_element_type_infos[] = {
 	{ sizeof(ufbxwi_document) },
 };
 
+static const char *ufbxwi_element_type_names[] = {
+	"",
+	"CUSTOM",
+	"NODE",
+	"NODE_ATTRIBUTE",
+	"MESH",
+	"LIGHT",
+	"MATERIAL",
+	"TEXTURE",
+	"ANIM_CURVE",
+	"ANIM_PROP",
+	"ANIM_LAYER",
+	"ANIM_STACK",
+	"TEMPLATE",
+	"SCENE_INFO",
+	"GLOBAL_SETTINGS",
+	"DOCUMENT",
+};
+
 ufbxw_static_assert(ufbxwi_element_type_infos_count, ufbxwi_arraycount(ufbxwi_element_type_infos) == UFBXW_ELEMENT_TYPE_COUNT);
+ufbxw_static_assert(ufbxwi_element_type_names_count, ufbxwi_arraycount(ufbxwi_element_type_names) == UFBXW_ELEMENT_TYPE_COUNT);
 
 typedef enum {
 	UFBXWI_CONN_TYPE_ID = 0x1,
@@ -2980,13 +3139,13 @@ static bool ufbxwi_conn_add(ufbxw_scene *scene, ufbxwi_conn_type type, void *dat
 	} break;
 	case UFBXWI_CONN_TYPE_ID_LIST: {
 		ufbxwi_id_list *d = (ufbxwi_id_list*)data;
-		ufbxwi_check_return(ufbxwi_id_list_add(&scene->ator, d, id), false);
+		ufbxwi_check(ufbxwi_id_list_add(&scene->ator, d, id), false);
 		return true;
 	} break;
 	case UFBXWI_CONN_TYPE_CONN_LIST: {
 		ufbxwi_conn_list *d = (ufbxwi_conn_list*)data;
 		ufbxwi_conn *conn = ufbxwi_list_push_uninit(&scene->ator, d, ufbxwi_conn);
-		ufbxwi_check_return(conn, false);
+		ufbxwi_check(conn, false);
 		conn->id = id;
 		conn->src_prop = src_prop;
 		conn->dst_prop = dst_prop;
@@ -3096,25 +3255,25 @@ static bool ufbxwi_conn_collect_ids(ufbxw_scene *scene, ufbxwi_id_list *ids, ufb
 	case UFBXWI_CONN_TYPE_ID: {
 		const ufbxw_id *d = (const ufbxw_id*)data;
 		if (*d != ufbxw_null_id) {
-			ufbxwi_check_return(ufbxwi_list_push_copy(&scene->ator, ids, ufbxw_id, d), false);
+			ufbxwi_check(ufbxwi_list_push_copy(&scene->ator, ids, ufbxw_id, d), false);
 			return true;
 		}
 	} break;
 	case UFBXWI_CONN_TYPE_CONN: {
 		const ufbxwi_conn *d = (const ufbxwi_conn*)data;
 		if (d->id != ufbxw_null_id) {
-			ufbxwi_check_return(ufbxwi_list_push_copy(&scene->ator, ids, ufbxw_id, &d->id), false);
+			ufbxwi_check(ufbxwi_list_push_copy(&scene->ator, ids, ufbxw_id, &d->id), false);
 			return true;
 		}
 	} break;
 	case UFBXWI_CONN_TYPE_ID_LIST: {
 		ufbxwi_id_list d = *(const ufbxwi_id_list*)data;
-		ufbxwi_check_return(ufbxwi_list_push_copy_n(&scene->ator, ids, ufbxw_id, d.count, d.data), false);
+		ufbxwi_check(ufbxwi_list_push_copy_n(&scene->ator, ids, ufbxw_id, d.count, d.data), false);
 	} break;
 	case UFBXWI_CONN_TYPE_CONN_LIST: {
 		ufbxwi_conn_list d = *(const ufbxwi_conn_list*)data;
 		ufbxw_id *dst = ufbxwi_list_push_uninit_n(&scene->ator, ids, ufbxw_id, d.count);
-		ufbxwi_check_return(dst, false);
+		ufbxwi_check(dst, false);
 		for (size_t i = 0; i < d.count; i++) {
 			dst[i] = d.data[i].id;
 		}
@@ -3147,7 +3306,7 @@ static bool ufbxwi_conn_collect_conns(const ufbxw_scene *scene, ufbxwi_allocator
 		const ufbxw_id *d = (const ufbxw_id*)data;
 		if (*d != ufbxw_null_id) {
 			ufbxwi_conn *conn = ufbxwi_list_push_uninit(ator, conns, ufbxwi_conn);
-			ufbxwi_check_return_err(ator->error, conn, false);
+			ufbxwi_check(conn, false);
 			conn->id = *d;
 			conn->src_prop = UFBXWI_TOKEN_NONE;
 			conn->dst_prop = UFBXWI_TOKEN_NONE;
@@ -3157,14 +3316,13 @@ static bool ufbxwi_conn_collect_conns(const ufbxw_scene *scene, ufbxwi_allocator
 	case UFBXWI_CONN_TYPE_CONN: {
 		const ufbxwi_conn *d = (const ufbxwi_conn*)data;
 		if (d->id != ufbxw_null_id) {
-			ufbxwi_check_return_err(ator->error, ufbxwi_list_push_copy(ator, conns, ufbxwi_conn, d), false);
-			return true;
+			ufbxwi_check(ufbxwi_list_push_copy(ator, conns, ufbxwi_conn, d), false);
 		}
 	} break;
 	case UFBXWI_CONN_TYPE_ID_LIST: {
 		ufbxwi_id_list d = *(const ufbxwi_id_list*)data;
 		ufbxwi_conn *dst = ufbxwi_list_push_uninit_n(ator, conns, ufbxwi_conn, d.count);
-		ufbxwi_check_return_err(ator->error, dst, false);
+		ufbxwi_check(dst, false);
 		for (size_t i = 0; i < d.count; i++) {
 			dst[i].id = d.data[i];
 			dst[i].src_prop = UFBXWI_TOKEN_NONE;
@@ -3173,7 +3331,7 @@ static bool ufbxwi_conn_collect_conns(const ufbxw_scene *scene, ufbxwi_allocator
 	} break;
 	case UFBXWI_CONN_TYPE_CONN_LIST: {
 		ufbxwi_conn_list d = *(const ufbxwi_conn_list*)data;
-		ufbxwi_check_return_err(ator->error, ufbxwi_list_push_copy_n(ator, conns, ufbxwi_conn, d.count, d.data), false);
+		ufbxwi_check(ufbxwi_list_push_copy_n(ator, conns, ufbxwi_conn, d.count, d.data), false);
 	} break;
 	}
 
@@ -3370,7 +3528,7 @@ static bool ufbxwi_props_rehash(ufbxw_scene *scene, ufbxwi_props *props, size_t 
 	}
 
 	ufbxwi_prop *new_slots = ufbxwi_alloc(&scene->ator, ufbxwi_prop, new_capacity);
-	ufbxwi_check_return(new_slots, false);
+	ufbxwi_check(new_slots, false);
 
 	memset(new_slots, 0, new_capacity * sizeof(ufbxwi_prop));
 
@@ -3421,7 +3579,7 @@ static ufbxwi_prop *ufbxwi_props_add_prop(ufbxw_scene *scene, ufbxwi_props *prop
 {
 	ufbxw_assert(token != UFBXWI_TOKEN_NONE && token != UFBXWI_TOKEN_EMPTY);
 	if (props->count * 2 >= props->capacity) {
-		ufbxwi_check_return(ufbxwi_props_rehash(scene, props, 4), NULL);
+		ufbxwi_check(ufbxwi_props_rehash(scene, props, 4), NULL);
 	}
 
 	ufbxwi_prop *prop = NULL;
@@ -3452,7 +3610,7 @@ static ufbxwi_prop *ufbxwi_props_add_prop(ufbxw_scene *scene, ufbxwi_props *prop
 static bool ufbxwi_props_copy(ufbxw_scene *scene, ufbxwi_props *dst, const ufbxwi_props *src)
 {
 	ufbxwi_prop *copy = ufbxwi_alloc(&scene->ator, ufbxwi_prop, src->capacity);
-	ufbxwi_check_return(copy, false);
+	ufbxwi_check(copy, false);
 	memcpy(copy, src->props, src->capacity * sizeof(ufbxwi_prop));
 	*dst = *src;
 	dst->props = copy;
@@ -3520,7 +3678,7 @@ static ufbxwi_prop_value ufbxwi_element_add_prop_data(ufbxw_scene *scene, ufbxwi
 	if (data_end > element->prop_data_capacity) {
 		size_t new_capacity = ufbxwi_max_sz(data_end, element->prop_data_capacity * 2);
 		void *new_data = ufbxwi_alloc_size(&scene->ator, 1, new_capacity, &new_capacity);
-		ufbxwi_check_return(new_data, 0);
+		ufbxwi_check(new_data, 0);
 
 		memcpy(new_data, element->prop_data, element->prop_data_size);
 		memset((char*)new_data + element->prop_data_size, 0, new_capacity - element->prop_data_size);
@@ -3555,14 +3713,15 @@ static ufbxwi_prop *ufbxwi_element_edit_prop(ufbxw_scene *scene, ufbxwi_element 
 			if (!prop) return NULL;
 
 			ufbxwi_prop *new_prop = ufbxwi_props_add_prop(scene, &element->props, token);
-			ufbxwi_check_return(new_prop, NULL);
+			ufbxwi_check(new_prop, NULL);
+
 			*new_prop = *prop;
 			prop = new_prop;
 		}
 		if (ufbxwi_prop_value_type(prop->value) == UFBXWI_PROP_VALUE_DEFAULT) {
 			ufbxw_prop_data_type data_type = scene->prop_types.data[prop->type].data_type;
 			ufbxwi_prop_value value = ufbxwi_element_add_prop_data(scene, element, data_type);
-			ufbxwi_check_return(value != 0, NULL);
+			ufbxwi_check(value, NULL);
 
 			const void *src = ufbxwi_resolve_prop_value(element, prop->value);
 			void *dst = ufbxwi_edit_prop_value(element, value);
@@ -3576,7 +3735,7 @@ static ufbxwi_prop *ufbxwi_element_edit_prop(ufbxw_scene *scene, ufbxwi_element 
 		if (prop && ufbxwi_prop_value_type(prop->value) == UFBXWI_PROP_VALUE_DEFAULT) {
 			ufbxw_prop_data_type data_type = scene->prop_types.data[prop->type].data_type;
 			ufbxwi_prop_value value = ufbxwi_element_add_prop_data(scene, element, data_type);
-			ufbxwi_check_return(value != 0, NULL);
+			ufbxwi_check(value, NULL);
 			prop->value = value;
 		}
 
@@ -3595,14 +3754,18 @@ static ufbxwi_prop *ufbxwi_element_add_prop(ufbxw_scene *scene, ufbxwi_element *
 			prop = ufbxwi_props_find_prop(default_props, token);
 		}
 		if (prop) {
-			ufbxwi_check_return(scene->prop_types.data[prop->type].data_type == data_type, NULL);
+			ufbxw_prop_data_type existing_type = scene->prop_types.data[prop->type].data_type;
+			if (existing_type != data_type) {
+				// TODO: Is this even a good check?
+				return NULL;
+			}
 		}
 		if (!prop || ufbxwi_prop_value_type(prop->value) == UFBXWI_PROP_VALUE_DEFAULT) {
 			ufbxwi_prop *new_prop = ufbxwi_props_add_prop(scene, &element->props, token);
-			ufbxwi_check_return(new_prop, NULL);
+			ufbxwi_check(new_prop, NULL);
 
 			ufbxwi_prop_value value = ufbxwi_element_add_prop_data(scene, element, data_type);
-			ufbxwi_check_return(value != 0, NULL);
+			ufbxwi_check(value, NULL);
 			if (prop) {
 				const void *src = ufbxwi_resolve_prop_value(element, prop->value);
 				void *dst = ufbxwi_edit_prop_value(element, value);
@@ -3620,15 +3783,16 @@ static ufbxwi_prop *ufbxwi_element_add_prop(ufbxw_scene *scene, ufbxwi_element *
 		return prop;
 	} else {
 		ufbxwi_prop *prop = ufbxwi_props_add_prop(scene, &element->props, token);
-		ufbxwi_check_return(prop, NULL);
+		ufbxwi_check(prop, NULL);
 
 		if (ufbxwi_prop_value_type(prop->value) == UFBXWI_PROP_VALUE_DEFAULT) {
 			ufbxwi_prop_value value = ufbxwi_element_add_prop_data(scene, element, data_type);
-			ufbxwi_check_return(value != 0, NULL);
+			ufbxwi_check(value, NULL);
 			prop->value = value;
 			prop->type = type;
 		} else {
-			ufbxwi_check_return(scene->prop_types.data[prop->type].data_type == data_type, NULL);
+			// TODO: Is this even a good check?
+			return NULL;
 		}
 
 		return prop;
@@ -3770,11 +3934,11 @@ static ufbxwi_forceinline bool ufbxwi_init_element_type_imp(ufbxw_scene *scene, 
 	et->initialized = true;
 
 	if (desc->num_props > 0) {
-		ufbxwi_check_return(ufbxwi_props_rehash(scene, &et->props, desc->num_props), false);
+		ufbxwi_check(ufbxwi_props_rehash(scene, &et->props, desc->num_props), false);
 
 		ufbxwi_for(const ufbxwi_prop_desc, pd, desc->props, desc->num_props) {
 			ufbxwi_prop *prop = ufbxwi_props_add_prop(scene, &et->props, pd->name);
-			ufbxwi_check_return(prop, false);
+			if (!prop) return false;
 			prop->type = pd->type;
 			prop->value = pd->value_offset;
 			prop->flags = pd->flags & 0xff; // TODO: Better mapping, compact flags
@@ -3783,7 +3947,7 @@ static ufbxwi_forceinline bool ufbxwi_init_element_type_imp(ufbxw_scene *scene, 
 
 	if (desc->tmpl_type != UFBXWI_TOKEN_NONE) {
 		ufbxw_id template_id = ufbxw_create_element(scene, UFBXW_ELEMENT_TEMPLATE);
-		ufbxwi_check_return(template_id, 0);
+		ufbxwi_check(template_id, false);
 
 		ufbxwi_element *tmpl_elem = ufbxwi_get_element(scene, template_id);
 		ufbxw_assert(tmpl_elem);
@@ -3793,13 +3957,13 @@ static ufbxwi_forceinline bool ufbxwi_init_element_type_imp(ufbxw_scene *scene, 
 		ufbxwi_template *tmpl_data = (ufbxwi_template*)tmpl_elem;
 		tmpl_data->type = desc->tmpl_type;
 
-		ufbxwi_check_return(ufbxwi_props_rehash(scene, &tmpl_elem->props, desc->num_props), 0);
+		ufbxwi_check(ufbxwi_props_rehash(scene, &tmpl_elem->props, desc->num_props), false);
 
 		ufbxwi_for(const ufbxwi_prop_desc, pd, desc->props, desc->num_props) {
 			if (pd->flags & UFBXWI_PROP_FLAG_EXCLUDE_FROM_TEMPLATE) continue;
 
 			ufbxwi_prop *prop = ufbxwi_props_add_prop(scene, &tmpl_elem->props, pd->name);
-			ufbxwi_check_return(prop, false);
+			ufbxwi_check(prop, false);
 			prop->type = pd->type;
 			prop->value = ufbxwi_prop_value_type(pd->value_offset) == UFBXWI_PROP_VALUE_DEFAULT ? pd->value_offset : pd->default_offset;
 			prop->flags = pd->flags & 0xff; // TODO: Better mapping, compact flags
@@ -3810,6 +3974,19 @@ static ufbxwi_forceinline bool ufbxwi_init_element_type_imp(ufbxw_scene *scene, 
 	return true;
 }
 
+static void ufbxwi_fail_element(ufbxw_scene *scene, ufbxw_id id, const char *func)
+{
+	ufbxwi_get_element(scene, id);
+}
+
+
+#define ufbxwi_check_element(scene, id, cond, ...) do { \
+		if (!(cond)) { \
+			ufbxwi_fail_element((scene), id, __func__); \
+			return __VA_ARGS__; \
+		} \
+	} while (0)
+
 static ufbxwi_forceinline bool ufbxwi_init_element_type(ufbxw_scene *scene, ufbxwi_element_type *et)
 {
 	if (et->initialized) return true;
@@ -3819,21 +3996,29 @@ static ufbxwi_forceinline bool ufbxwi_init_element_type(ufbxw_scene *scene, ufbx
 static ufbxw_id ufbxwi_create_element(ufbxw_scene *scene, ufbxw_element_type type, ufbxwi_token class_type)
 {
 	uint32_t type_id = ufbxwi_find_element_type_id(scene, type, class_type);
-	ufbxwi_check_return(type_id != ~0u, ufbxw_null_id);
+	if (type_id == ~0u) {
+		if (class_type > UFBXWI_TOKEN_EMPTY) {
+			const char *class_name = scene->string_pool.tokens.data[class_type].data;
+			ufbxwi_failf(&scene->error, UFBXW_ERROR_ELEMENT_TYPE_NOT_FOUND, "Element type not found: %s (%s)",
+				ufbxwi_element_type_names[type], class_name);
+		} else {
+			ufbxwi_failf(&scene->error, UFBXW_ERROR_ELEMENT_TYPE_NOT_FOUND, "Element type not found: %s",
+				ufbxwi_element_type_names[type]);
+		}
+		return 0;
+	}
 
 	const ufbxwi_element_type_info *type_info = &ufbxwi_element_type_infos[type];
 	ufbxwi_element_type *element_type = &scene->element_types.data[type_id];
-	ufbxwi_check_return(ufbxwi_init_element_type(scene, element_type), 0);
+	ufbxwi_check(ufbxwi_init_element_type(scene, element_type), 0);
 
 	uint32_t data_size = type_info->data_size;
 	if (data_size < sizeof(ufbxwi_element)) {
 		data_size = sizeof(ufbxwi_element);
 	}
 
-	void *data = NULL;
-
-	data = ufbxwi_alloc_size(&scene->ator, 1, data_size, NULL);
-	ufbxwi_check_return(data, 0);
+	void *data = ufbxwi_alloc_size(&scene->ator, 1, data_size, NULL);
+	ufbxwi_check(data, 0);
 	memset(data, 0, data_size);
 
 	ufbxwi_element *element = (ufbxwi_element*)data;
@@ -3843,7 +4028,7 @@ static ufbxw_id ufbxwi_create_element(ufbxw_scene *scene, ufbxw_element_type typ
 		index = scene->free_element_ids.data[--scene->free_element_ids.count];
 	} else {
 		index = scene->elements.count;
-		ufbxwi_check_return(ufbxwi_list_push_zero(&scene->ator, &scene->elements, ufbxwi_element_slot), 0);
+		ufbxwi_check(ufbxwi_list_push_zero(&scene->ator, &scene->elements, ufbxwi_element_slot), 0);
 	}
 
 	ufbxwi_element_slot *slot = &scene->elements.data[index];
@@ -3863,14 +4048,14 @@ static ufbxw_id ufbxwi_create_element(ufbxw_scene *scene, ufbxw_element_type typ
 	if (element_type->props.count == 0) {
 		// No properties
 	} else if ((element_type->flags & UFBXWI_ELEMENT_TYPE_FLAG_EAGER_PROPS) != 0) {
-		ufbxwi_check_return(ufbxwi_props_copy(scene, &element->props, &element_type->props), 0);
+		ufbxwi_check(ufbxwi_props_copy(scene, &element->props, &element_type->props), 0);
 	} else {
 		element->flags |= UFBXWI_ELEMENT_FLAG_HAS_DEFAULT_PROPS;
 		element->props.order_counter = element_type->props.order_counter;
 	}
 
 	if (element_type->init_fn) {
-		ufbxwi_check_return(element_type->init_fn(scene, data), 0);
+		ufbxwi_check(element_type->init_fn(scene, data), 0);
 	}
 
 	scene->num_elements++;
@@ -3885,7 +4070,10 @@ static ufbxwi_noinline bool ufbxwi_set_prop(ufbxw_scene *scene, ufbxw_id id, con
 	if (!token || !element) return false;
 
 	ufbxwi_prop *p = ufbxwi_element_edit_prop(scene, element, token);
-	if (!p) return false;
+	if (!p) {
+		ufbxwi_failf(&scene->error, UFBXW_ERROR_PROP_NOT_FOUND, "Property not found: %.*s", (int)prop_len, prop);
+		return false;
+	}
 
 	ufbxw_prop_data_type data_type = scene->prop_types.data[p->type].data_type;
 
@@ -3894,7 +4082,12 @@ static ufbxwi_noinline bool ufbxwi_set_prop(ufbxw_scene *scene, ufbxw_id id, con
 		memcpy(dst, src, ufbxwi_prop_data_infos[src_type].size);
 		return true;
 	} else {
-		return ufbxwi_cast_value(dst, src, data_type, src_type);
+		if (!ufbxwi_cast_value(dst, src, data_type, src_type)) {
+			ufbxwi_failf(&scene->error, UFBXW_ERROR_WRONG_DATA_TYPE, "Could not convert value from %s to %s",
+				ufbxwi_prop_data_names[src_type], ufbxwi_prop_data_names[data_type]);
+			return false;
+		}
+		return true;
 	}
 }
 
@@ -3905,7 +4098,7 @@ static ufbxwi_noinline bool ufbxwi_add_prop(ufbxw_scene *scene, ufbxw_id id, con
 	if (!token || !element) return false;
 
 	ufbxwi_prop *p = ufbxwi_element_add_prop(scene, element, token, type);
-	if (!p) return false;
+	ufbxwi_check(p, false);
 
 	ufbxw_prop_data_type data_type = scene->prop_types.data[type].data_type;
 	void *dst = ufbxwi_edit_prop_value(element, p->value);
@@ -3913,7 +4106,12 @@ static ufbxwi_noinline bool ufbxwi_add_prop(ufbxw_scene *scene, ufbxw_id id, con
 		memcpy(dst, src, ufbxwi_prop_data_infos[src_type].size);
 		return true;
 	} else {
-		return ufbxwi_cast_value(dst, src, data_type, src_type);
+		if (!ufbxwi_cast_value(dst, src, data_type, src_type)) {
+			ufbxwi_failf(&scene->error, UFBXW_ERROR_WRONG_DATA_TYPE, "Could not convert value from %s to %s",
+				ufbxwi_prop_data_names[src_type], ufbxwi_prop_data_names[data_type]);
+			return false;
+		}
+		return true;
 	}
 }
 
@@ -4174,19 +4372,19 @@ static bool ufbwi_init_tokens(ufbxw_scene *scene)
 	// Reserve the none and empty tokens
 	{
 		ufbxw_string *null_tokens = ufbxwi_list_push_zero_n(&scene->ator, &scene->string_pool.tokens, ufbxw_string, 2);
-		ufbxwi_check_return(null_tokens, false);
+		ufbxwi_check(null_tokens, false);
 		null_tokens[0].data = ufbxwi_empty_char;
 		null_tokens[1].data = ufbxwi_empty_char;
 	}
 
 	ufbxwi_for(const ufbxw_string, str, ufbxwi_tokens, ufbxwi_arraycount(ufbxwi_tokens)) {
-		ufbxwi_check_return(ufbxwi_intern_token(&scene->string_pool, str->data, str->length), false);
+		ufbxwi_check(ufbxwi_intern_token(&scene->string_pool, str->data, str->length), false);
 	}
 
 	// Reserve the count token
 	{
 		ufbxw_string *null_tokens = ufbxwi_list_push_zero_n(&scene->ator, &scene->string_pool.tokens, ufbxw_string, 1);
-		ufbxwi_check_return(null_tokens, false);
+		ufbxwi_check(null_tokens, false);
 		null_tokens[0].data = ufbxwi_empty_char;
 	}
 
@@ -4196,11 +4394,11 @@ static bool ufbwi_init_tokens(ufbxw_scene *scene)
 static bool ufbxwi_init_prop_types(ufbxw_scene *scene)
 {
 	ufbxwi_prop_type *dst_type = ufbxwi_list_push_zero_n(&scene->ator, &scene->prop_types, ufbxwi_prop_type, ufbxwi_arraycount(ufbxwi_prop_types));
-	ufbxwi_check_return(dst_type, false);
+	ufbxwi_check(dst_type, false);
 
 	ufbxwi_for(const ufbxwi_prop_type_desc, desc, ufbxwi_prop_types, ufbxwi_arraycount(ufbxwi_prop_types)) {
-		ufbxwi_check_return(ufbxwi_intern_string(&scene->string_pool, &dst_type->type, desc->type, strlen(desc->type)), false);
-		ufbxwi_check_return(ufbxwi_intern_string(&scene->string_pool, &dst_type->sub_type, desc->sub_type, strlen(desc->sub_type)), false);
+		ufbxwi_check(ufbxwi_intern_string(&scene->string_pool, &dst_type->type, desc->type, strlen(desc->type)), false);
+		ufbxwi_check(ufbxwi_intern_string(&scene->string_pool, &dst_type->sub_type, desc->sub_type, strlen(desc->sub_type)), false);
 		dst_type->data_type = desc->data_type;
 
 		dst_type++;
@@ -4212,7 +4410,7 @@ static bool ufbxwi_init_prop_types(ufbxw_scene *scene)
 static bool ufbxwi_create_object_types(ufbxw_scene *scene)
 {
 	ufbxwi_object_type *object_types = ufbxwi_list_push_zero_n(&scene->ator, &scene->object_types, ufbxwi_object_type, ufbxwi_arraycount(ufbxwi_object_types));
-	ufbxwi_check_return(object_types, false);
+	ufbxwi_check(object_types, false);
 
 	ufbxwi_object_type *dst = object_types;
 	ufbxwi_for(const ufbxwi_object_desc, desc, ufbxwi_object_types, ufbxwi_arraycount(ufbxwi_object_types)) {
@@ -4228,6 +4426,7 @@ static bool ufbxwi_create_element_types(ufbxw_scene *scene)
 	for (size_t type_ix = 0; type_ix < ufbxwi_arraycount(ufbxwi_element_types); type_ix++) {
 		const ufbxwi_element_type_desc *desc = &ufbxwi_element_types[type_ix];
 		ufbxwi_element_type *et = ufbxwi_list_push_zero(&scene->ator, &scene->element_types, ufbxwi_element_type);
+		ufbxwi_check(et, false);
 
 		et->element_type = desc->element_type;
 		et->class_type = desc->class_type;
@@ -4371,8 +4570,28 @@ static ufbxw_string ufbxwi_format_date(char *dst, size_t dst_size, const ufbxw_d
 	}
 }
 
+static void ufbxwi_mark_scene_failed(ufbxw_scene *scene)
+{
+	ufbxwi_mark_allocator_failed(&scene->ator);
+	ufbxwi_mark_buffers_failed(&scene->buffers);
+	scene->elements.data = NULL;
+	scene->elements.count = 0;
+}
+
+static void ufbxwi_scene_fatal(void *user, ufbxwi_error *error)
+{
+	ufbxw_scene *scene = (ufbxw_scene*)user;
+
+	ufbxwi_mark_scene_failed(scene);
+}
+
 static void ufbxwi_init_scene(ufbxw_scene *scene)
 {
+	scene->error.fatal_fn = &ufbxwi_scene_fatal;
+	scene->error.fatal_user = scene;
+
+	scene->ator.error = &scene->error;
+
 	scene->string_pool.ator = &scene->ator;
 	scene->string_pool.error = &scene->error;
 
@@ -4470,7 +4689,7 @@ static ufbxwi_mesh_attribute *ufbxwi_edit_mesh_attribute(ufbxw_scene *scene, ufb
 	}
 
 	ufbxwi_mesh_attribute *attrib = ufbxwi_list_push_zero(&scene->ator, &md->attributes, ufbxwi_mesh_attribute);
-	ufbxwi_check_return(attrib, NULL);
+	ufbxwi_check(attrib, NULL);
 
 	attrib->attribute = attribute;
 	attrib->set = set;
@@ -4490,13 +4709,11 @@ static void ufbxwi_generate_indices(ufbxw_scene *scene, ufbxw_mesh_attribute_des
 	ufbxwi_buffer_type value_type = ufbxwi_buffer_id_type(desc->values);
 	size_t value_size = ufbxwi_buffer_type_infos[value_type].size;
 
-	ufbxwi_check(ufbxwi_make_buffer_owned(&scene->buffers, desc->values));
+	ufbxwi_make_buffer_owned(&scene->buffers, desc->values);
 	ufbxwi_mutable_void_span values = ufbxwi_get_buffer_owned_data(&scene->buffers, desc->values);
-
 	ufbxw_int_buffer index_buffer = ufbxw_create_int_buffer(scene, values.count);
-	ufbxwi_check(index_buffer.id);
-
 	ufbxw_int_list indices = ufbxw_edit_int_buffer(scene, index_buffer);
+	if (ufbxwi_is_fatal(&scene->error)) return;
 
 	size_t hash_count = 1;
 	while (hash_count < values.count * 2) {
@@ -4506,7 +4723,7 @@ static void ufbxwi_generate_indices(ufbxw_scene *scene, ufbxw_mesh_attribute_des
 	size_t value_count = 0;
 
 	ufbxwi_index_hash_entry *hashes = ufbxwi_alloc(&scene->ator, ufbxwi_index_hash_entry, hash_count);
-	ufbxwi_check(hashes);
+	if (!hashes) return;
 	memset(hashes, 0, hash_count * sizeof(ufbxwi_index_hash_entry));
 
 	for (size_t i = 0; i < values.count; i++) {
@@ -4544,9 +4761,9 @@ static void ufbxwi_generate_indices(ufbxw_scene *scene, ufbxw_mesh_attribute_des
 	ufbxw_free_buffer(scene, desc->values);
 
 	ufbxw_buffer_id value_buffer = ufbxwi_create_owned_buffer(&scene->buffers, value_type, value_count);
-	ufbxwi_check(value_buffer);
-
 	ufbxwi_mutable_void_span result_values = ufbxwi_get_buffer_owned_data(&scene->buffers, value_buffer);
+	if (ufbxwi_is_fatal(&scene->error)) return;
+
 	memcpy(result_values.data, values.data, value_count * value_size);
 
 	desc->values = ufbxwi_to_user_buffer(&scene->buffers, value_buffer);
@@ -4566,7 +4783,8 @@ static void ufbxwi_sort_anim_kefyrames(ufbxw_scene *scene, ufbxwi_anim_curve *c)
 {
 	size_t key_count = c->key_values.count;
 	size_t capacity = key_count * 2 * sizeof(ufbxwi_sort_keyframe);
-	ufbxwi_check(ufbxwi_list_resize_uninit(&scene->ator, &scene->tmp_list, char, capacity));
+	ufbxwi_list_resize_uninit(&scene->ator, &scene->tmp_list, char, capacity);
+	if (ufbxwi_is_fatal(&scene->error)) return;
 
 	ufbxwi_sort_keyframe *keys = (ufbxwi_sort_keyframe*)scene->tmp_list.data;
 	ufbxwi_sort_keyframe *tmp_keys = keys + key_count;
@@ -4661,7 +4879,7 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 	ufbxwi_id_span elements;
 	elements.count = scene->num_elements;
 	elements.data = ufbxwi_alloc(&scene->ator, ufbxw_id, elements.count);
-	ufbxwi_check(elements.data);
+	if (!elements.data) return;
 
 	size_t real_count = ufbxw_get_elements(scene, elements.data, elements.count);
 	ufbxw_assert(real_count == element_count);
@@ -4754,6 +4972,8 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 			}
 		}
 	}
+
+	ufbxwi_free(&scene->ator, elements.data);
 }
 
 // -- Saving
@@ -4793,24 +5013,31 @@ typedef struct {
 
 	ufbxwi_mesh_attribute_ptr_list tmp_attributes;
 
-} ufbxw_save_context;
+} ufbxwi_save_context;
 
 // -- Writing IO
 
-static ufbxwi_noinline void ufbxwi_write_flush(ufbxw_save_context *sc)
+static ufbxwi_noinline void ufbxwi_write_flush(ufbxwi_save_context *sc)
 {
+	if (ufbxwi_is_fatal(&sc->error)) return;
+
 	size_t size = ufbxwi_to_size(sc->buffer_pos - sc->buffer);
 	if (size == 0) return;
 
 	bool write_ok = sc->stream.write_fn(sc->stream.user, sc->file_pos, sc->buffer, size);
-	ufbxwi_check_err(&sc->error, write_ok);
+	if (!write_ok) {
+		ufbxwi_fail(&sc->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
+		return;
+	}
 
 	sc->file_pos += (uint64_t)size;
 	sc->buffer_pos = sc->buffer;
 }
 
-static ufbxwi_noinline void ufbxwi_write_slow(ufbxw_save_context *sc, const void *data, size_t length)
+static ufbxwi_noinline void ufbxwi_write_slow(ufbxwi_save_context *sc, const void *data, size_t length)
 {
+	if (ufbxwi_is_fatal(&sc->error)) return;
+
 	char *dst = sc->buffer_pos;
 	size_t left = ufbxwi_to_size(sc->buffer_end - dst);
 	if (left >= length) {
@@ -4826,7 +5053,11 @@ static ufbxwi_noinline void ufbxwi_write_slow(ufbxw_save_context *sc, const void
 
 		if (length >= sc->direct_write_size) {
 			bool write_ok = sc->stream.write_fn(sc->stream.user, sc->file_pos, data, length);
-			ufbxwi_check_err(&sc->error, write_ok);
+			if (!write_ok) {
+				ufbxwi_fail(&sc->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
+				return;
+			}
+
 			sc->file_pos += (uint64_t)length;
 			sc->buffer_pos = sc->buffer;
 		} else {
@@ -4836,7 +5067,7 @@ static ufbxwi_noinline void ufbxwi_write_slow(ufbxw_save_context *sc, const void
 	}
 }
 
-static ufbxwi_forceinline void ufbxwi_write(ufbxw_save_context *sc, const void *data, size_t length)
+static ufbxwi_forceinline void ufbxwi_write(ufbxwi_save_context *sc, const void *data, size_t length)
 {
 	char *dst = sc->buffer_pos;
 	size_t left = ufbxwi_to_size(sc->buffer_end - dst);
@@ -4848,14 +5079,14 @@ static ufbxwi_forceinline void ufbxwi_write(ufbxw_save_context *sc, const void *
 	}
 }
 
-static ufbxwi_noinline char *ufbxwi_write_reserve_slow(ufbxw_save_context *sc, size_t length)
+static ufbxwi_noinline char *ufbxwi_write_reserve_slow(ufbxwi_save_context *sc, size_t length)
 {
 	ufbxwi_write_flush(sc);
 	ufbxw_assert(length < ufbxwi_to_size(sc->buffer_end - sc->buffer_pos));
 	return sc->buffer_pos;
 }
 
-static ufbxwi_forceinline char *ufbxwi_write_reserve(ufbxw_save_context *sc, size_t length)
+static ufbxwi_forceinline char *ufbxwi_write_reserve(ufbxwi_save_context *sc, size_t length)
 {
 	char *dst = sc->buffer_pos;
 	size_t left = ufbxwi_to_size(sc->buffer_end - dst);
@@ -4866,7 +5097,7 @@ static ufbxwi_forceinline char *ufbxwi_write_reserve(ufbxw_save_context *sc, siz
 	}
 }
 
-static ufbxwi_forceinline void ufbxwi_write_commit(ufbxw_save_context *sc, size_t length)
+static ufbxwi_forceinline void ufbxwi_write_commit(ufbxwi_save_context *sc, size_t length)
 {
 	ufbxw_assert(length < ufbxwi_to_size(sc->buffer_end - sc->buffer_pos));
 	sc->buffer_pos += length;
@@ -4874,7 +5105,7 @@ static ufbxwi_forceinline void ufbxwi_write_commit(ufbxw_save_context *sc, size_
 
 // -- ASCII
 
-static void ufbxwi_ascii_indent(ufbxw_save_context *sc)
+static void ufbxwi_ascii_indent(ufbxwi_save_context *sc)
 {
 	size_t indent = ufbxwi_min_sz(sc->depth, 64);
 	char *dst = ufbxwi_write_reserve(sc, indent);
@@ -4884,7 +5115,7 @@ static void ufbxwi_ascii_indent(ufbxw_save_context *sc)
 	ufbxwi_write_commit(sc, indent);
 }
 
-static void ufbxwi_ascii_comment(ufbxw_save_context *sc, const char *fmt, va_list args)
+static void ufbxwi_ascii_comment(ufbxwi_save_context *sc, const char *fmt, va_list args)
 {
 	// TODO: More rigorous
 	// TODO: Sanitize \n's and other special characters
@@ -4895,7 +5126,7 @@ static void ufbxwi_ascii_comment(ufbxw_save_context *sc, const char *fmt, va_lis
 	ufbxwi_write_commit(sc, (size_t)len);
 }
 
-static void ufbxwi_ascii_dom_string(ufbxw_save_context *sc, const char *str, size_t length)
+static void ufbxwi_ascii_dom_string(ufbxwi_save_context *sc, const char *str, size_t length)
 {
 	ufbxwi_write(sc, "\"", 1);
 
@@ -4915,7 +5146,7 @@ static void ufbxwi_ascii_dom_string(ufbxw_save_context *sc, const char *str, siz
 	ufbxwi_write(sc, "\"", 1);
 }
 
-static void ufbxwi_ascii_dom_write(ufbxw_save_context *sc, const char *tag, const char *fmt, va_list args, bool open)
+static void ufbxwi_ascii_dom_write(ufbxwi_save_context *sc, const char *tag, const char *fmt, va_list args, bool open)
 {
 	ufbxwi_ascii_indent(sc);
 
@@ -4983,7 +5214,7 @@ static void ufbxwi_ascii_dom_write(ufbxw_save_context *sc, const char *tag, cons
 	ufbxwi_write(sc, "\n", 1);
 }
 
-static void ufbxwi_ascii_dom_write_int_array(ufbxw_save_context *sc, ufbxwi_buffer *buffer)
+static void ufbxwi_ascii_dom_write_int_array(ufbxwi_save_context *sc, ufbxwi_buffer *buffer)
 {
 	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer->id);
 	ufbxwi_buffer_type_info type_info = ufbxwi_buffer_type_infos[type];
@@ -5036,7 +5267,7 @@ static void ufbxwi_ascii_dom_write_int_array(ufbxw_save_context *sc, ufbxwi_buff
 }
 
 // TODO: Deduplicate these
-static void ufbxwi_ascii_dom_write_long_array(ufbxw_save_context *sc, ufbxwi_buffer *buffer)
+static void ufbxwi_ascii_dom_write_long_array(ufbxwi_save_context *sc, ufbxwi_buffer *buffer)
 {
 	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer->id);
 	ufbxwi_buffer_type_info type_info = ufbxwi_buffer_type_infos[type];
@@ -5088,7 +5319,7 @@ static void ufbxwi_ascii_dom_write_long_array(ufbxw_save_context *sc, ufbxwi_buf
 	}
 }
 
-static void ufbxwi_ascii_dom_write_real_array(ufbxw_save_context *sc, ufbxwi_buffer *buffer)
+static void ufbxwi_ascii_dom_write_real_array(ufbxwi_save_context *sc, ufbxwi_buffer *buffer)
 {
 	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer->id);
 	ufbxwi_buffer_type_info type_info = ufbxwi_buffer_type_infos[type];
@@ -5135,7 +5366,7 @@ static void ufbxwi_ascii_dom_write_real_array(ufbxw_save_context *sc, ufbxwi_buf
 	}
 }
 
-static void ufbxwi_ascii_dom_write_float_array(ufbxw_save_context *sc, ufbxwi_buffer *buffer)
+static void ufbxwi_ascii_dom_write_float_array(ufbxwi_save_context *sc, ufbxwi_buffer *buffer)
 {
 	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer->id);
 	ufbxwi_buffer_type_info type_info = ufbxwi_buffer_type_infos[type];
@@ -5182,7 +5413,7 @@ static void ufbxwi_ascii_dom_write_float_array(ufbxw_save_context *sc, ufbxwi_bu
 	}
 }
 
-static void ufbxwi_ascii_dom_write_array(ufbxw_save_context *sc, const char *tag, ufbxw_buffer_id buffer_id)
+static void ufbxwi_ascii_dom_write_array(ufbxwi_save_context *sc, const char *tag, ufbxw_buffer_id buffer_id)
 {
 	ufbxwi_buffer *buffer = ufbxwi_get_buffer(&sc->buffers, buffer_id);
 	if (!buffer) return;
@@ -5233,7 +5464,7 @@ static void ufbxwi_ascii_dom_write_array(ufbxw_save_context *sc, const char *tag
 	ufbxwi_write(sc, "}\n", 2);
 }
 
-static void ufbxwi_ascii_dom_close(ufbxw_save_context *sc)
+static void ufbxwi_ascii_dom_close(ufbxwi_save_context *sc)
 {
 	ufbxwi_ascii_indent(sc);
 	ufbxwi_write(sc, "}\n", 2);
@@ -5243,7 +5474,7 @@ static void ufbxwi_ascii_dom_close(ufbxw_save_context *sc)
 
 static const char *ufbxwi_dom_section_str = "------------------------------------------------------------------";
 
-static ufbxwi_forceinline void ufbxwi_dom_comment(ufbxw_save_context *sc, const char *fmt, ...)
+static ufbxwi_forceinline void ufbxwi_dom_comment(ufbxwi_save_context *sc, const char *fmt, ...)
 {
 	if (sc->opts.ascii) {
 		va_list args;
@@ -5253,14 +5484,14 @@ static ufbxwi_forceinline void ufbxwi_dom_comment(ufbxw_save_context *sc, const 
 	}
 }
 
-static void ufbxwi_dom_section(ufbxw_save_context *sc, const char *name)
+static void ufbxwi_dom_section(ufbxwi_save_context *sc, const char *name)
 {
 	if (sc->opts.ascii) {
 		ufbxwi_dom_comment(sc, "\n; %s\n;%.66s\n\n", name, ufbxwi_dom_section_str);
 	}
 }
 
-static void ufbxwi_dom_open(ufbxw_save_context *sc, const char *tag, const char *fmt, ...)
+static void ufbxwi_dom_open(ufbxwi_save_context *sc, const char *tag, const char *fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
@@ -5276,7 +5507,7 @@ static void ufbxwi_dom_open(ufbxw_save_context *sc, const char *tag, const char 
 	va_end(args);
 }
 
-static void ufbxwi_dom_close(ufbxw_save_context *sc)
+static void ufbxwi_dom_close(ufbxwi_save_context *sc)
 {
 	sc->depth--;
 
@@ -5287,7 +5518,7 @@ static void ufbxwi_dom_close(ufbxw_save_context *sc)
 	}
 }
 
-static void ufbxwi_dom_value(ufbxw_save_context *sc, const char *tag, const char *fmt, ...)
+static void ufbxwi_dom_value(ufbxwi_save_context *sc, const char *tag, const char *fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
@@ -5301,7 +5532,7 @@ static void ufbxwi_dom_value(ufbxw_save_context *sc, const char *tag, const char
 	va_end(args);
 }
 
-static void ufbxwi_dom_array(ufbxw_save_context *sc, const char *tag, ufbxw_buffer_id buffer)
+static void ufbxwi_dom_array(ufbxwi_save_context *sc, const char *tag, ufbxw_buffer_id buffer)
 {
 	if (sc->opts.ascii) {
 		ufbxwi_ascii_dom_write_array(sc, tag, buffer);
@@ -5334,7 +5565,7 @@ static int ufbxwi_cmp_prop_order(const void *va, const void *vb)
 	return 0;
 }
 
-static void ufbxwi_save_props(ufbxw_save_context *sc, const ufbxwi_element *element, const ufbxwi_props *default_props, const ufbxwi_element *tmpl)
+static void ufbxwi_save_props(ufbxwi_save_context *sc, const ufbxwi_element *element, const ufbxwi_props *default_props, const ufbxwi_element *tmpl)
 {
 	ufbxw_scene *scene = sc->scene;
 
@@ -5343,7 +5574,7 @@ static void ufbxwi_save_props(ufbxw_save_context *sc, const ufbxwi_element *elem
 	if (default_props) prop_count += default_props->count;
 	if (tmpl) prop_count += tmpl->props.count;
 
-	ufbxwi_check_err(&sc->error, ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_prop_list, ufbxwi_prop, prop_count));
+	ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_prop_list, ufbxwi_prop, prop_count));
 
 	ufbxwi_prop *props = sc->tmp_prop_list.data;
 
@@ -5504,7 +5735,7 @@ static void ufbxwi_save_props(ufbxw_save_context *sc, const ufbxwi_element *elem
 	ufbxwi_dom_close(sc);
 }
 
-static void ufbxwi_save_template(ufbxw_save_context *sc, ufbxwi_element *element, uint32_t flags)
+static void ufbxwi_save_template(ufbxwi_save_context *sc, ufbxwi_element *element, uint32_t flags)
 {
 	ufbxwi_template *tmpl = (ufbxwi_template*)element;
 
@@ -5584,7 +5815,7 @@ static size_t ufbxwi_stream_polygon_vertex_index(void *user, int32_t *dst, size_
 static ufbxw_buffer_id ufbxwi_create_polygon_vertex_index_stream(ufbxwi_buffer_pool *buffers, ufbxw_int_buffer indices, ufbxw_int_buffer face_offsets)
 {
 	ufbxwi_polygon_vertex_index_stream *stream = ufbxwi_alloc(buffers->ator, ufbxwi_polygon_vertex_index_stream, 1);
-	ufbxwi_check_return_err(buffers->error, stream, 0);
+	ufbxwi_check(stream, 0);
 	memset(stream, 0, sizeof(ufbxwi_polygon_vertex_index_stream));
 
 	stream->buffers = buffers;
@@ -5598,13 +5829,13 @@ static ufbxw_buffer_id ufbxwi_create_polygon_vertex_index_stream(ufbxwi_buffer_p
 	ufbxwi_stream_fn stream_fn;
 	stream_fn.int_fn = &ufbxwi_stream_polygon_vertex_index;
 	ufbxw_buffer_id index_buffer = ufbxwi_create_stream_buffer(buffers, UFBXWI_BUFFER_TYPE_INT, stream_fn, stream, index_count);
-	ufbxwi_check_return_err(buffers->error, index_buffer, 0);
+	ufbxwi_check(index_buffer, 0);
 	ufbxwi_buffer_set_deleter(buffers, index_buffer, &ufbxwi_deleter_free, buffers->ator);
 
 	return index_buffer;
 }
 
-static void ufbxwi_save_mesh_data(ufbxw_save_context *sc, ufbxwi_element *element)
+static void ufbxwi_save_mesh_data(ufbxwi_save_context *sc, ufbxwi_element *element)
 {
 	ufbxwi_mesh *mesh = (ufbxwi_mesh*)element;
 
@@ -5619,7 +5850,7 @@ static void ufbxwi_save_mesh_data(ufbxw_save_context *sc, ufbxwi_element *elemen
 
 	ufbxwi_dom_value(sc, "GeometryVersion", "I", 124);
 
-	ufbxwi_check_err(&sc->error, ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_attributes, ufbxwi_mesh_attribute*, mesh->attributes.count));
+	ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_attributes, ufbxwi_mesh_attribute*, mesh->attributes.count));
 	for (size_t i = 0; i < mesh->attributes.count; i++) {
 		sc->tmp_attributes.data[i] = &mesh->attributes.data[i];
 	}
@@ -5701,7 +5932,7 @@ typedef enum {
 	UFBXWI_KEY_VELOCITY_NEXT_LEFT = 0x20000000,
 } ufbxwi_key_flags;
 
-static void ufbxwi_save_anim_curve_keys(ufbxw_save_context *sc, ufbxwi_element *element)
+static void ufbxwi_save_anim_curve_keys(ufbxwi_save_context *sc, ufbxwi_element *element)
 {
 	const ufbxwi_anim_curve *curve = (const ufbxwi_anim_curve*)element;
 
@@ -5714,7 +5945,7 @@ static void ufbxwi_save_anim_curve_keys(ufbxw_save_context *sc, ufbxwi_element *
 	int32_t *key_flags = ufbxwi_alloc(&sc->ator, int32_t, max_attrs);
 	int32_t *key_refcounts = ufbxwi_alloc(&sc->ator, int32_t, max_attrs);
 	ufbxwi_key_attr *key_attrs = ufbxwi_alloc(&sc->ator, ufbxwi_key_attr, max_attrs);
-	ufbxwi_check_err(&sc->error, key_flags && key_refcounts && key_attrs);
+	ufbxwi_check(key_flags && key_refcounts && key_attrs);
 
 	size_t attr_count = 0;
 	size_t key_count = curve->key_values.count;
@@ -5797,7 +6028,7 @@ static void ufbxwi_save_anim_curve_keys(ufbxw_save_context *sc, ufbxwi_element *
 	ufbxwi_dom_array(sc, "KeyAttrRefCount", buf_refcounts);
 }
 
-static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element, uint32_t flags)
+static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element, uint32_t flags)
 {
 	ufbxw_scene *scene = sc->scene;
 
@@ -5914,7 +6145,7 @@ static void ufbxwi_save_element(ufbxw_save_context *sc, ufbxwi_element *element,
 	ufbxwi_dom_close(sc);
 }
 
-static void ufbxwi_save_timestamp(ufbxw_save_context *sc)
+static void ufbxwi_save_timestamp(ufbxwi_save_context *sc)
 {
 	ufbxw_datetime timestamp = sc->opts.local_timestamp;
 	if (ufbxwi_is_zero_date(&timestamp) && !sc->opts.no_default_timestamp) {
@@ -5933,7 +6164,7 @@ static void ufbxwi_save_timestamp(ufbxw_save_context *sc)
 	ufbxwi_dom_close(sc);
 }
 
-static void ufbxwi_save_documents(ufbxw_save_context *sc)
+static void ufbxwi_save_documents(ufbxwi_save_context *sc)
 {
 	ufbxw_scene *scene = sc->scene;
 
@@ -5960,7 +6191,7 @@ static void ufbxwi_save_documents(ufbxw_save_context *sc)
 	ufbxwi_dom_close(sc);
 }
 
-static void ufbxwi_save_definitions(ufbxw_save_context *sc)
+static void ufbxwi_save_definitions(ufbxwi_save_context *sc)
 {
 	ufbxw_scene *scene = sc->scene;
 
@@ -5996,7 +6227,7 @@ static void ufbxwi_save_definitions(ufbxw_save_context *sc)
 	ufbxwi_dom_close(sc);
 }
 
-static void ufbxwi_save_objects(ufbxw_save_context *sc)
+static void ufbxwi_save_objects(ufbxwi_save_context *sc)
 {
 	ufbxw_scene *scene = sc->scene;
 
@@ -6026,7 +6257,7 @@ static void ufbxwi_save_objects(ufbxw_save_context *sc)
 	ufbxwi_dom_close(sc);
 }
 
-static void ufbxwi_save_connections(ufbxw_save_context *sc)
+static void ufbxwi_save_connections(ufbxwi_save_context *sc)
 {
 	ufbxw_scene *scene = sc->scene;
 
@@ -6104,7 +6335,7 @@ static void ufbxwi_save_connections(ufbxw_save_context *sc)
 	ufbxwi_dom_close(sc);
 }
 
-static void ufbxwi_save_takes(ufbxw_save_context *sc)
+static void ufbxwi_save_takes(ufbxwi_save_context *sc)
 {
 	ufbxwi_dom_open(sc, "Takes", "");
 
@@ -6131,7 +6362,7 @@ static void ufbxwi_save_takes(ufbxw_save_context *sc)
 	ufbxwi_dom_close(sc);
 }
 
-static void ufbxwi_save_root(ufbxw_save_context *sc)
+static void ufbxwi_save_root(ufbxwi_save_context *sc)
 {
 	ufbxw_scene *scene = sc->scene;
 
@@ -6195,12 +6426,12 @@ static void ufbxwi_save_root(ufbxw_save_context *sc)
 	ufbxwi_save_takes(sc);
 }
 
-static void ufbxwi_save_init(ufbxw_save_context *sc)
+static void ufbxwi_save_init(ufbxwi_save_context *sc)
 {
 	ufbxw_scene *scene = sc->scene;
 
 	ufbxwi_save_object_type *object_types = ufbxwi_list_push_zero_n(&sc->ator, &sc->object_types, ufbxwi_save_object_type, scene->object_types.count);
-	ufbxwi_check_err(&sc->error, object_types);
+	ufbxwi_check(object_types);
 
 	ufbxwi_for_list(ufbxwi_element_slot, slot, scene->elements) {
 		ufbxwi_element *element = slot->element;
@@ -6222,11 +6453,30 @@ static void ufbxwi_save_init(ufbxw_save_context *sc)
 
 // -- Save root
 
-static bool ufbxwi_save_imp(ufbxw_save_context *sc)
+static void ufbxwi_mark_save_context_failed(ufbxwi_save_context *sc)
+{
+	ufbxwi_mark_buffers_failed(&sc->buffers);
+}
+
+static void ufbxwi_save_fatal(void *user, ufbxwi_error *error)
+{
+	ufbxwi_save_context *sc = (ufbxwi_save_context*)user;
+	ufbxwi_mark_save_context_failed(sc);
+}
+
+static void ufbxwi_save_imp(ufbxwi_save_context *sc)
 {
 	ufbxw_assert(sc->opts._begin_zero == 0 && sc->opts._end_zero == 0);
 
 	if (sc->opts.version == 0) sc->opts.version = 7500;
+
+	sc->error.fatal_fn = &ufbxwi_save_fatal;
+	sc->error.fatal_user = sc;
+	sc->ator.error = &sc->error;
+
+	// TODO: Options for these
+	sc->ator.max_allocs = SIZE_MAX;
+	sc->ator.max_size = SIZE_MAX / 4;
 
 	// TODO: Proper hanling
 	memcpy(&sc->buffers, &sc->scene->buffers, sizeof(ufbxwi_buffer_pool));
@@ -6235,17 +6485,15 @@ static bool ufbxwi_save_imp(ufbxw_save_context *sc)
 
 	size_t buffer_size = 0x10000;
 	sc->buffer = ufbxwi_alloc(&sc->ator, char, buffer_size);
+	ufbxwi_check(sc->buffer);
+
 	sc->buffer_pos = sc->buffer;
 	sc->buffer_end = sc->buffer + buffer_size;
 	sc->direct_write_size = buffer_size / 2;
 
-	if (!sc->buffer) return false;
-
 	ufbxwi_save_init(sc);
 	ufbxwi_save_root(sc);
 	ufbxwi_write_flush(sc);
-
-	return true;
 }
 
 // -- API
@@ -6487,14 +6735,23 @@ ufbxw_abi ufbxw_scene *ufbxw_create_scene(const ufbxw_scene_opts *opts)
 		memset(&default_opts, 0, sizeof(default_opts));
 		opts = &default_opts;
 	}
+	ufbxw_assert(opts->_begin_zero == 0 && opts->_end_zero == 0);
+
+	ufbxwi_error alloc_error;
+	memset(&alloc_error, 0, sizeof(alloc_error));
 
 	ufbxwi_allocator ator = { 0 };
 	ator.ator = opts->allocator;
 	ator.max_allocs = SIZE_MAX;
 	ator.max_size = SIZE_MAX / 4;
+	ator.error = &alloc_error;
 
 	ufbxw_scene *scene = ufbxwi_alloc(&ator, ufbxw_scene, 1);
 	if (!scene) return NULL;
+
+	if (opts->max_allocations > 0) {
+		ator.max_allocs = opts->max_allocations;
+	}
 
 	memset(scene, 0, sizeof(ufbxw_scene));
 	scene->opts = *opts;
@@ -6514,7 +6771,7 @@ ufbxw_abi void ufbxw_free_scene(ufbxw_scene *scene)
 
 ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error)
 {
-	if (scene->error.failed) {
+	if (scene->error.error.type != UFBXW_ERROR_NONE) {
 		if (error) {
 			*error = scene->error.error;
 		}
@@ -6525,6 +6782,15 @@ ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error)
 		}
 		return false;
 	}
+}
+
+ufbxw_abi ufbxw_memory_stats ufbxw_get_memory_stats(ufbxw_scene *scene)
+{
+	ufbxw_memory_stats stats;
+	stats.allocated_bytes = scene->ator.total_size;
+	stats.allocation_count = scene->ator.num_allocs;
+	stats.block_allocation_count = scene->ator.num_block_allocs;
+	return stats;
 }
 
 ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type type)
@@ -6545,8 +6811,10 @@ ufbxw_abi ufbxw_id ufbxw_create_element_ex_len(ufbxw_scene *scene, ufbxw_element
 
 ufbxw_abi void ufbxw_delete_element(ufbxw_scene *scene, ufbxw_id id)
 {
+	if (id == 0) return;
+
 	ufbxwi_element_slot *slot = ufbxwi_get_element_slot(scene, id);
-	ufbxwi_check(slot);
+	ufbxwi_check_element(scene, id, slot);
 
 	// TODO: This could be accelerated with a bit-mask of active connection types
 	for (uint32_t i = 1; i < UFBXW_CONNECTION_TYPE_COUNT; i++) {
@@ -6596,7 +6864,7 @@ ufbxw_abi void ufbxw_set_name(ufbxw_scene *scene, ufbxw_id id, const char *name)
 ufbxw_abi void ufbxw_set_name_len(ufbxw_scene *scene, ufbxw_id id, const char *name, size_t name_len)
 {
 	ufbxwi_element *element = ufbxwi_get_element(scene, id);
-	ufbxwi_check(element);
+	ufbxwi_check_element(scene, id, element);
 
 	ufbxwi_intern_string(&scene->string_pool, &element->name, name, name_len);
 }
@@ -6604,7 +6872,8 @@ ufbxw_abi void ufbxw_set_name_len(ufbxw_scene *scene, ufbxw_id id, const char *n
 ufbxw_abi ufbxw_string ufbxw_get_name(ufbxw_scene *scene, ufbxw_id id)
 {
 	ufbxwi_element *element = ufbxwi_get_element(scene, id);
-	ufbxwi_check_return(element, ufbxwi_empty_string);
+	ufbxwi_check_element(scene, id, element, ufbxw_empty_string);
+
 	return element->name;
 }
 
@@ -6800,57 +7069,57 @@ ufbxw_abi ufbxw_node ufbxw_as_node(ufbxw_id id)
 ufbxw_abi size_t ufbxw_node_get_num_children(ufbxw_scene *scene, ufbxw_node node)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check_return(data, 0);
+	ufbxwi_check_element(scene, node.id, data, 0);
 	return data->children.count;
 }
 
 ufbxw_abi ufbxw_node ufbxw_node_get_child(ufbxw_scene *scene, ufbxw_node node, size_t index)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check_return(data, ufbxw_as_node(0));
-	ufbxwi_check_return(index < data->children.count, ufbxw_as_node(0));
+	ufbxwi_check_element(scene, node.id, data, ufbxw_null_node);
+	ufbxwi_check_index(&scene->error, index, data->children.count, ufbxw_null_node);
 	return data->children.data[index];
 }
 
 ufbxw_abi void ufbxw_node_set_translation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 translation)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check(data);
+	ufbxwi_check_element(scene, node.id, data);
 	data->lcl_translation = translation;
 }
 
 ufbxw_abi void ufbxw_node_set_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check(data);
+	ufbxwi_check_element(scene, node.id, data);
 	data->lcl_rotation = rotation;
 }
 
 ufbxw_abi void ufbxw_node_set_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 scaling)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check(data);
+	ufbxwi_check_element(scene, node.id, data);
 	data->lcl_scaling = scaling;
 }
 
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_translation(ufbxw_scene *scene, ufbxw_node node)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check_return(data, ufbxw_zero_vec3);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
 	return data->lcl_translation;
 }
 
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation(ufbxw_scene *scene, ufbxw_node node)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check_return(data, ufbxw_zero_vec3);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
 	return data->lcl_rotation;
 }
 
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling(ufbxw_scene *scene, ufbxw_node node)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check_return(data, ufbxw_zero_vec3);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
 	return data->lcl_scaling;
 }
 
@@ -6881,7 +7150,7 @@ ufbxw_abi void ufbxw_node_set_parent(ufbxw_scene *scene, ufbxw_node node, ufbxw_
 ufbxw_abi ufbxw_node ufbxw_node_get_parent(ufbxw_scene *scene, ufbxw_node node)
 {
 	ufbxwi_node *nd = ufbxwi_get_node(scene, node);
-	ufbxwi_check_return(nd, ufbxw_as_node(0));
+	ufbxwi_check_element(scene, node.id, nd, ufbxw_null_node);
 	return nd->parent;
 }
 
@@ -6900,7 +7169,7 @@ ufbxw_abi ufbxw_mesh ufbxw_as_mesh(ufbxw_id id)
 ufbxw_abi void ufbxw_mesh_set_vertices(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_vec3_buffer vertices)
 {
 	ufbxwi_mesh *md = ufbxwi_get_mesh(scene, mesh);
-	ufbxwi_check(md);
+	ufbxwi_check_element(scene, mesh.id, md);
 
 	ufbxwi_set_buffer_from_user(&scene->buffers, &md->vertices.id, vertices.id);
 }
@@ -6915,7 +7184,7 @@ ufbxw_abi void ufbxw_mesh_set_triangles(ufbxw_scene *scene, ufbxw_mesh mesh, ufb
 	ufbxwi_check(face_offsets.id);
 
 	ufbxwi_mesh *md = ufbxwi_get_mesh(scene, mesh);
-	ufbxwi_check(md);
+	ufbxwi_check_element(scene, mesh.id, md);
 
 	ufbxwi_set_buffer(&scene->buffers, &md->polygon_vertex_index.id, 0);
 	ufbxwi_set_buffer_from_user(&scene->buffers, &md->vertex_indices.id, indices.id);
@@ -6925,7 +7194,7 @@ ufbxw_abi void ufbxw_mesh_set_triangles(ufbxw_scene *scene, ufbxw_mesh mesh, ufb
 ufbxw_abi void ufbxw_mesh_set_polygons(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer indices, ufbxw_int_buffer face_offsets)
 {
 	ufbxwi_mesh *md = ufbxwi_get_mesh(scene, mesh);
-	ufbxwi_check(md);
+	ufbxwi_check_element(scene, mesh.id, md);
 
 	ufbxwi_set_buffer(&scene->buffers, &md->polygon_vertex_index.id, 0);
 	ufbxwi_set_buffer_from_user(&scene->buffers, &md->vertex_indices.id, indices.id);
@@ -6935,7 +7204,7 @@ ufbxw_abi void ufbxw_mesh_set_polygons(ufbxw_scene *scene, ufbxw_mesh mesh, ufbx
 ufbxw_abi void ufbxw_mesh_set_fbx_polygon_vertex_index(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer polygon_vertex_index)
 {
 	ufbxwi_mesh *md = ufbxwi_get_mesh(scene, mesh);
-	ufbxwi_check(md);
+	ufbxwi_check_element(scene, mesh.id, md);
 
 	ufbxwi_set_buffer(&scene->buffers, &md->vertex_indices.id, 0);
 	ufbxwi_set_buffer(&scene->buffers, &md->face_offsets.id, 0);
@@ -7066,7 +7335,7 @@ ufbxw_abi void ufbxw_mesh_set_attribute_name_len(ufbxw_scene *scene, ufbxw_mesh 
 ufbxw_vec3_buffer ufbxw_mesh_get_vertices(ufbxw_scene *scene, ufbxw_mesh mesh)
 {
 	ufbxwi_mesh *md = ufbxwi_get_mesh(scene, mesh);
-	ufbxwi_check_return(md, ufbxwi_empty_vec3_buffer);
+	ufbxwi_check_element(scene, mesh.id, md, ufbxwi_empty_vec3_buffer);
 	return md->vertices;
 }
 
@@ -7370,7 +7639,7 @@ ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type 
 	uint32_t type_id = ufbxwi_find_element_type_id(scene, type, UFBXWI_TOKEN_NONE);
 	if (type_id == ~0u) return ufbxw_null_id;
 	ufbxwi_element_type *et = &scene->element_types.data[type_id];
-	ufbxwi_check_return(ufbxwi_init_element_type(scene, et), 0);
+	ufbxwi_check(ufbxwi_init_element_type(scene, et), 0);
 	return et->template_id;
 }
 
@@ -7452,29 +7721,29 @@ ufbxw_abi bool ufbxw_save_file_len(ufbxw_scene *scene, const char *path, size_t 
 
 ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error)
 {
-	ufbxw_save_context sc = { 0 };
+	ufbxwi_save_context sc = { 0 };
 	sc.scene = scene;
 	sc.stream = *stream;
 	if (opts) {
 		sc.opts = *opts;
 	}
 
-	bool ok = ufbxwi_save_imp(&sc);
+	ufbxwi_save_imp(&sc);
 	if (sc.stream.close_fn) {
 		sc.stream.close_fn(sc.stream.user);
 	}
 
 	ufbxwi_free_allocator(&sc.ator);
 
-	if (!ok) {
+	if (sc.error.error.type != UFBXW_ERROR_NONE) {
 		if (error) {
-			error->failed = true;
+			*error = sc.error.error;
 		}
 		return false;
-	} else {
-		if (error) {
-			error->failed = false;
-		}
+	}
+
+	if (error) {
+		error->type = UFBXW_ERROR_NONE;
 	}
 
 	return true;

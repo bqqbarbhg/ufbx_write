@@ -11,6 +11,20 @@ UFBXWT_TEST(create_scene)
 }
 #endif
 
+UFBXWT_TEST(memory_stats)
+#if UFBXWT_IMPL
+{
+	ufbxw_scene *scene = ufbxw_create_scene(NULL);
+	ufbxwt_assert(scene);
+
+	ufbxw_memory_stats stats = ufbxw_get_memory_stats(scene);
+	ufbxwt_assert(stats.allocated_bytes > 0);
+	ufbxwt_assert(stats.allocation_count > 0);
+
+	ufbxw_free_scene(scene);
+}
+#endif
+
 UFBXWT_SCENE_TEST(simple_node)
 #if UFBXWT_IMPL
 {
@@ -22,6 +36,8 @@ UFBXWT_SCENE_TEST(simple_node)
 
 	ufbxw_vec3 scaling = { 1.0f, 0.5f, 0.25f };
 	ufbxw_set_vec3(scene, node.id, "Lcl Scaling", scaling);
+
+	ufbxwt_check_error(scene);
 
 	ufbxw_vec3 field_translation = ufbxw_node_get_translation(scene, node);
 	ufbxw_vec3 prop_translation = ufbxw_get_vec3(scene, node.id, "Lcl Translation");

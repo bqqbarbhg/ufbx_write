@@ -63,6 +63,8 @@ static void ufbxwt_longjmp(int env, int value, const char *file, uint32_t line, 
 		if (!(cond)) ufbxwt_assert_fail_imp(__FILE__, __LINE__, #cond); \
 	} while (0)
 
+// Avoid ufbxw_assert()
+#undef ufbxw_assert
 
 typedef struct {
 	bool failed;
@@ -154,12 +156,15 @@ void ufbxwt_log_uerror(ufbx_error *err)
 
 void ufbxwt_log_error(ufbxw_error *err)
 {
-	// TODO
+	ufbxwt_logf("Error: %s", err->description);
 }
 
 #include "testing_utils.h"
 
+bool ufbxwt_check_scene_error_imp(ufbxw_scene *scene, const char *file, int line);
 void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, ufbxwt_diff_error *err), void (*check_fn)(ufbx_scene *scene, ufbxwt_diff_error *err), const ufbxw_scene_opts *user_opts, uint32_t flags);
+
+#define ufbxwt_check_error(scene) do { if (ufbxwt_check_scene_error_imp((scene), __FILE__, __LINE__)) return; } while (0)
 
 #define UFBXWT_IMPL 1
 
@@ -244,21 +249,53 @@ void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr)
 	ufbxwt_longjmp(g_test_jmp, 1, file, line, expr);
 }
 
-void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, ufbxwt_diff_error *err), void (*check_fn)(ufbx_scene *scene, ufbxwt_diff_error *err), const ufbxw_scene_opts *user_opts, uint32_t flags)
+bool g_fuzz = false;
+bool g_allow_scene_error = false;
+
+bool ufbxwt_check_scene_error_imp(ufbxw_scene *scene, const char *file, int line)
 {
-	ufbxw_scene_opts opts = { 0 };
-	if (user_opts) {
-		opts = *user_opts;
+	ufbxw_error error;
+	if (!ufbxw_get_error(scene, &error)) {
+		// No error: Keep going
+		return false;
 	}
 
-	ufbxw_scene *scene = ufbxw_create_scene(&opts);
+	if (g_allow_scene_error) {
+		// We allow errors and hit one, return to not break the rest of the test
+		return true;
+	}
+
+	ufbxwt_log_error(&error);
+
+	// This will longjmp/abort out of the function
+	ufbxwt_assert_fail(file, line, "ufbxwt_check_error()");
+	return false;
+}
+
+void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, ufbxwt_diff_error *err), void (*check_fn)(ufbx_scene *scene, ufbxwt_diff_error *err), const ufbxw_scene_opts *user_opts, uint32_t flags)
+{
+	ufbxw_scene_opts scene_opts = { 0 };
+	if (user_opts) {
+		scene_opts = *user_opts;
+	}
+
+	ufbxw_scene *scene = ufbxw_create_scene(&scene_opts);
 
 	ufbxwt_diff_error err = { 0 };
+
+	g_allow_scene_error = false;
 
 	// Create the scene
 	test_fn(scene, &err);
 
 	ufbxw_prepare_scene(scene, NULL);
+
+	ufbxw_memory_stats memory_stats = ufbxw_get_memory_stats(scene);
+	ufbxwt_logf(".. Scene %.1fkB (%zu allocs, %zu blocks)",
+		(double)memory_stats.allocated_bytes * 1e-3,
+		memory_stats.allocation_count,
+		memory_stats.block_allocation_count
+	);
 
 	ufbxw_save_opts save_opts = { 0 };
 	save_opts.version = 7500;
@@ -272,7 +309,7 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 
 	ufbxw_error save_error;
 	ufbxw_save_file(scene, output_path, &save_opts, &save_error);
-	if (save_error.failed) {
+	if (save_error.type != UFBXW_ERROR_NONE) {
 		ufbxwt_log_error(&save_error);
 	}
 
@@ -292,6 +329,30 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 
 		ufbx_free_scene(loaded_scene);
 	}
+
+	if (g_fuzz) {
+		for (size_t max_allocs = 1; max_allocs < memory_stats.allocation_count; max_allocs++) {
+			ufbxw_scene_opts fuzz_opts = scene_opts;
+			ufbxwt_hintf("max_allocs=%zu", max_allocs);
+
+			fuzz_opts.max_allocations = max_allocs;
+
+			ufbxw_scene *fuzz_scene = ufbxw_create_scene(&fuzz_opts);
+			ufbxwt_diff_error fuzz_err = { 0 };
+
+			g_allow_scene_error = true;
+			test_fn(fuzz_scene, &fuzz_err);
+
+			if (!ufbxw_get_error(fuzz_scene, NULL)) {
+				ufbxw_prepare_scene(fuzz_scene, NULL);
+			}
+
+			ufbxw_error fuzz_error;
+			ufbxwt_assert(ufbxw_get_error(fuzz_scene, &fuzz_error));
+
+			ufbxw_free_scene(fuzz_scene);
+		}
+	}
 }
 
 int ufbxwt_run_test(ufbxwt_test *test)
@@ -299,7 +360,7 @@ int ufbxwt_run_test(ufbxwt_test *test)
 	printf("%s: ", test->name);
 	fflush(stdout);
 
-	g_error.failed = false;
+	memset(&g_error, 0, sizeof(g_error));
 	g_hint[0] = '\0';
 
 	g_current_test = test;
@@ -315,7 +376,7 @@ int ufbxwt_run_test(ufbxwt_test *test)
 		if (g_hint[0]) {
 			printf("Hint: %s\n", g_hint);
 		}
-		if (g_error.failed) {
+		if (g_error.type != UFBXW_ERROR_NONE) {
 			ufbxwt_log_error(&g_error);
 		}
 
@@ -377,6 +438,9 @@ int main(int argc, char **argv)
 					output_root[len - 1] = '\0';
 				}
 			}
+		}
+		if (!strcmp(argv[i], "--fuzz")) {
+			g_fuzz = true;
 		}
 		if (!strcmp(argv[i], "-g") || !strcmp(argv[i], "--group")) {
 			if (++i < argc) {
