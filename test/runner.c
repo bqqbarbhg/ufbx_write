@@ -154,7 +154,7 @@ void ufbxwt_log_uerror(ufbx_error *err)
 	}
 }
 
-void ufbxwt_log_error(ufbxw_error *err)
+void ufbxwt_log_error(const ufbxw_error *err)
 {
 	ufbxwt_logf("Error: %s(): %s", err->function.data, err->description);
 }
