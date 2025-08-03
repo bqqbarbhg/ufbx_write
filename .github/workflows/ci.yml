@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main, integration ]
+
+# Cancel any in-flight jobs for the same PR/branch so there's only one active
+# at a time
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci_ubuntu:
+    runs-on: ubuntu-latest
+    needs: ci_pre_hashes
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Update apt
+        run: sudo apt-get update
+      - name: Compile test runner
+        run: |
+          mkdir -p build
+          clang -g ufbx_write.c test/runner.c test/ufbx.c -o build/test-runner
+      - name: Run tests
+        run: |
+          build/test-runner -d data
