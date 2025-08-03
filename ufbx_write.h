@@ -122,6 +122,7 @@ typedef enum ufbxw_element_type {
 	UFBXW_ELEMENT_SKIN_CLUSTER,
 	UFBXW_ELEMENT_LIGHT,
 	UFBXW_ELEMENT_SKELETON,
+	UFBXW_ELEMENT_BIND_POSE,
 
 	UFBXW_ELEMENT_MATERIAL,
 
@@ -145,6 +146,7 @@ typedef struct ufbxw_node { ufbxw_id id; } ufbxw_node;
 typedef struct ufbxw_mesh { ufbxw_id id; } ufbxw_mesh;
 typedef struct ufbxw_skin_deformer { ufbxw_id id; } ufbxw_skin_deformer;
 typedef struct ufbxw_skin_cluster { ufbxw_id id; } ufbxw_skin_cluster;
+typedef struct ufbxw_bind_pose { ufbxw_id id; } ufbxw_bind_pose;
 typedef struct ufbxw_material { ufbxw_id id; } ufbxw_material;
 typedef struct ufbxw_anim_prop { ufbxw_id id; } ufbxw_anim_prop;
 typedef struct ufbxw_anim_curve { ufbxw_id id; } ufbxw_anim_curve;
@@ -178,6 +180,7 @@ typedef struct ufbxw_ktime_range {
 #define ufbxw_null_mesh ((ufbxw_mesh){0})
 #define ufbxw_null_skin_deformer ((ufbxw_skin_deformer){0})
 #define ufbxw_null_skin_cluster ((ufbxw_skin_cluster){0})
+#define ufbxw_null_bind_pose ((ufbxw_bind_pose){0})
 #define ufbxw_null_material ((ufbxw_material){0})
 #define ufbxw_null_anim_prop ((ufbxw_anim_prop){0})
 #define ufbxw_null_anim_curve ((ufbxw_anim_curve){0})
@@ -719,6 +722,8 @@ ufbxw_abi void ufbxw_skin_deformer_add_mesh(ufbxw_scene *scene, ufbxw_skin_defor
 ufbxw_abi void ufbxw_skin_deformer_set_skinning_type(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_skinning_type type);
 ufbxw_abi ufbxw_skinning_type ufbxw_skin_deformer_get_skinning_type(ufbxw_scene *scene, ufbxw_skin_deformer skin);
 
+ufbxw_abi void ufbxw_skin_deformer_set_bind_pose(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_bind_pose pose);
+
 // -- Skin cluster
 
 ufbxw_abi ufbxw_skin_cluster ufbxw_create_skin_cluster(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_node node);
@@ -731,6 +736,12 @@ ufbxw_abi void ufbxw_skin_cluster_set_weights(ufbxw_scene *scene, ufbxw_skin_clu
 // TODO: Better naming?
 ufbxw_abi void ufbxw_skin_cluster_set_transform(ufbxw_scene *scene, ufbxw_skin_cluster cluster, ufbxw_matrix matrix);
 ufbxw_abi void ufbxw_skin_cluster_set_link_transform(ufbxw_scene *scene, ufbxw_skin_cluster cluster, ufbxw_matrix matrix);
+
+// -- Bind pose
+
+ufbxw_abi ufbxw_bind_pose ufbxw_create_bind_pose(ufbxw_scene *scene);
+
+ufbxw_abi void ufbxw_bind_pose_add_node(ufbxw_scene *scene, ufbxw_bind_pose pose, ufbxw_node node, ufbxw_matrix matrix);
 
 // -- Animation stack
 
@@ -835,6 +846,7 @@ typedef struct ufbxw_prepare_opts {
 	bool patch_anim_stack_reference_times;
 	bool patch_global_settings_times;
 	bool add_missing_skeletons;
+	bool add_missing_bind_poses;
 } ufbxw_prepare_opts;
 
 ufbxw_abi_data const ufbxw_prepare_opts ufbxw_default_prepare_opts;

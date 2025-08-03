@@ -1173,6 +1173,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_AxisLen,
 	UFBXWI_BBoxMax,
 	UFBXWI_BBoxMin,
+	UFBXWI_BindPose,
 	UFBXWI_BlendMode,
 	UFBXWI_BlendModeBypass,
 	UFBXWI_BottomBarnDoor,
@@ -1284,6 +1285,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_Original_FileName,
 	UFBXWI_OuterAngle,
 	UFBXWI_Path,
+	UFBXWI_Pose,
 	UFBXWI_PostRotation,
 	UFBXWI_PreRotation,
 	UFBXWI_PreferedAngleX,
@@ -1404,6 +1406,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "AxisLen", 7 },
 	{ "BBoxMax", 7 },
 	{ "BBoxMin", 7 },
+	{ "BindPose", 8 },
 	{ "BlendMode", 9 },
 	{ "BlendModeBypass", 15 },
 	{ "BottomBarnDoor", 14 },
@@ -1515,6 +1518,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "Original|FileName", 17 },
 	{ "OuterAngle", 10 },
 	{ "Path", 4 },
+	{ "Pose", 4 },
 	{ "PostRotation", 12 },
 	{ "PreRotation", 11 },
 	{ "PreferedAngleX", 14 },
@@ -2522,6 +2526,9 @@ typedef struct {
 	ufbxwi_id_list clusters;
 	ufbxw_skinning_type skinning_type;
 
+	// TODO: This is kind of cheesy..
+	ufbxw_bind_pose bind_pose;
+
 } ufbxwi_skin_deformer;
 
 typedef struct {
@@ -2559,6 +2566,21 @@ typedef struct {
 	ufbxw_real limb_length;
 	ufbxw_real size;
 } ufbxwi_skeleton;
+
+typedef struct {
+	ufbxw_node node;
+	ufbxw_matrix matrix;
+} ufbxwi_pose_node;
+
+UFBXWI_LIST_TYPE(ufbxwi_pose_node_list, ufbxwi_pose_node);
+
+typedef struct {
+	union {
+		ufbxwi_element element;
+	};
+
+	ufbxwi_pose_node_list pose_nodes;
+} ufbxwi_bind_pose;
 
 typedef struct {
 	ufbxwi_element element;
@@ -2818,6 +2840,7 @@ static const ufbxwi_object_desc ufbxwi_object_types[] = {
 	{ UFBXWI_AnimationCurveNode },
 	{ UFBXWI_AnimationCurve },
 	{ UFBXWI_Deformer },
+	{ UFBXWI_Pose },
 };
 
 typedef struct {
@@ -3165,6 +3188,7 @@ static const ufbxwi_element_type_info ufbxwi_element_type_infos[] = {
 	{ sizeof(ufbxwi_skin_cluster), UFBXWI_CONN_BIT_TYPE_SKIN_CLUSTER },
 	{ sizeof(ufbxwi_light), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE },
 	{ sizeof(ufbxwi_skeleton), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE },
+	{ sizeof(ufbxwi_bind_pose) },
 	{ sizeof(ufbxwi_material), UFBXWI_CONN_BIT_TYPE_MATERIAL },
 	{ sizeof(ufbxwi_texture), UFBXWI_CONN_BIT_TYPE_TEXTURE },
 	{ sizeof(ufbxwi_anim_curve), UFBXWI_CONN_BIT_TYPE_ANIM_CURVE },
@@ -3187,6 +3211,7 @@ static const char *ufbxwi_element_type_names[] = {
 	"skin_cluster",
 	"light",
 	"skeleton",
+	"bind_pose",
 	"material",
 	"texture",
 	"anim_curve",
@@ -3645,6 +3670,11 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 	{
 		UFBXW_ELEMENT_SKELETON, UFBXWI_TOKEN_NONE, UFBXWI_LimbNode, UFBXWI_NodeAttribute, UFBXWI_NodeAttribute, UFBXWI_FbxSkeleton,
 		ufbxwi_skeleton_props, ufbxwi_arraycount(ufbxwi_skeleton_props), &ufbxwi_init_skeleton,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_BIND_POSE, UFBXWI_TOKEN_NONE, UFBXWI_BindPose, UFBXWI_Pose, UFBXWI_Pose, UFBXWI_TOKEN_NONE,
+		NULL, 0, NULL,
 		0,
 	},
 	{
@@ -4546,6 +4576,7 @@ static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node(ufbxw_scene *scene, ufbxw
 static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh(ufbxw_scene *scene, ufbxw_mesh id) { return (ufbxwi_mesh*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_MESH); }
 static ufbxwi_forceinline ufbxwi_skin_deformer *ufbxwi_get_skin_deformer(ufbxw_scene *scene, ufbxw_skin_deformer id) { return (ufbxwi_skin_deformer*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_SKIN_DEFORMER); }
 static ufbxwi_forceinline ufbxwi_skin_cluster *ufbxwi_get_skin_cluster(ufbxw_scene *scene, ufbxw_skin_cluster id) { return (ufbxwi_skin_cluster*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_SKIN_CLUSTER); }
+static ufbxwi_forceinline ufbxwi_bind_pose *ufbxwi_get_bind_pose(ufbxw_scene *scene, ufbxw_bind_pose id) { return (ufbxwi_bind_pose*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BIND_POSE); }
 static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve(ufbxw_scene *scene, ufbxw_anim_curve id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_CURVE); }
 static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop(ufbxw_scene *scene, ufbxw_anim_prop id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_PROP); }
 static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer(ufbxw_scene *scene, ufbxw_anim_layer id) { return (ufbxwi_anim_layer*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_LAYER); }
@@ -4555,6 +4586,7 @@ static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node_by_id(ufbxw_scene *scene,
 static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_mesh*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_MESH); }
 static ufbxwi_forceinline ufbxwi_skin_deformer *ufbxwi_get_skin_deformer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_skin_deformer*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_SKIN_DEFORMER); }
 static ufbxwi_forceinline ufbxwi_skin_cluster *ufbxwi_get_skin_cluster_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_skin_cluster*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_SKIN_CLUSTER); }
+static ufbxwi_forceinline ufbxwi_bind_pose *ufbxwi_get_bind_pose_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_bind_pose*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BIND_POSE); }
 static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_CURVE); }
 static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_PROP); }
 static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_layer*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_LAYER); }
@@ -5078,7 +5110,7 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 	ufbxwi_id_span elements;
 	elements.count = scene->num_elements;
 	elements.data = ufbxwi_alloc(&scene->ator, ufbxw_id, elements.count);
-	if (!elements.data) return;
+	ufbxwi_check(elements.data);
 
 	size_t real_count = ufbxw_get_elements(scene, elements.data, elements.count);
 	ufbxw_assert(real_count == element_count);
@@ -5183,6 +5215,50 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 
 			ufbxw_id skeleton = ufbxw_create_element(scene, UFBXW_ELEMENT_SKELETON);
 			ufbxwi_connect(scene, UFBXW_CONNECTION_NODE_ATTRIBUTE, skeleton, node->element.id, 0);
+			ufbxwi_check(!ufbxwi_is_fatal(&scene->error));
+		}
+	}
+
+	if (opts->add_missing_bind_poses) {
+		ufbxwi_for_id_list(ufbxw_id, skin_id, elements_by_type[UFBXW_ELEMENT_SKIN_DEFORMER]) {
+			ufbxwi_skin_deformer *skin = ufbxwi_get_skin_deformer_by_id(scene, skin_id);
+			if (skin->bind_pose.id) continue;
+
+			ufbxw_bind_pose pose = ufbxw_create_bind_pose(scene);
+			skin->bind_pose = pose;
+
+			ufbxw_node mesh_node = { 0 };
+
+			// HACK
+			ufbxwi_for_id_list(ufbxw_id, geom_id, skin->deformer.geometries) {
+				ufbxwi_node_attribute *geom = (ufbxwi_node_attribute*)ufbxwi_get_element(scene, geom_id);
+				if (!geom) continue;
+
+				ufbxwi_for_id_list(ufbxw_node, node_id, geom->instances) {
+					ufbxwi_node *node = ufbxwi_get_node(scene, node_id);
+					if (!node) continue;
+
+					mesh_node = node_id;
+					break;
+				}
+			}
+
+			// Use current position for bind pose?
+			if (mesh_node.id) {
+				// TODO: Actually calculate this
+				ufbxw_bind_pose_add_node(scene, pose, mesh_node, ufbxw_identity_matrix);
+			}
+
+			ufbxwi_for_id_list(ufbxw_id, cluster_id, skin->clusters) {
+				ufbxwi_skin_cluster *cluster = ufbxwi_get_skin_cluster_by_id(scene, cluster_id);
+				if (!cluster) continue;
+
+				ufbxwi_node *node = ufbxwi_get_node(scene, cluster->node);
+				if (!node) continue;
+
+				ufbxw_bind_pose_add_node(scene, pose, cluster->node, cluster->transform);
+			}
+
 			ufbxwi_check(!ufbxwi_is_fatal(&scene->error));
 		}
 	}
@@ -6138,6 +6214,35 @@ static void ufbxwi_save_skin_cluster(ufbxwi_save_context *sc, ufbxwi_skin_cluste
 	ufbxwi_save_matrix(sc, "TransformLink", &cluster->transform_link);
 }
 
+static void ufbxwi_save_bind_pose(ufbxwi_save_context *sc, ufbxwi_bind_pose *pose)
+{
+	ufbxw_scene *scene = sc->scene;
+
+	ufbxwi_dom_value(sc, "Type", "C", "BindPose");
+	ufbxwi_dom_value(sc, "Version", "I", 100);
+
+	size_t num_nodes = 0;
+	ufbxwi_for_list(ufbxwi_pose_node, pose_node, pose->pose_nodes) {
+		if (!ufbxwi_get_node(scene, pose_node->node)) continue;
+		num_nodes++;
+	}
+
+	ufbxwi_dom_value(sc, "NbPoseNodes", "I", (int32_t)num_nodes);
+
+	ufbxwi_for_list(ufbxwi_pose_node, pose_node, pose->pose_nodes) {
+		ufbxwi_node *node = ufbxwi_get_node(scene, pose_node->node);
+		if (!node) continue;
+
+		ufbxwi_dom_open(sc, "PoseNode", "");
+
+		// TODO: fbx_id lookup here
+		ufbxwi_dom_value(sc, "Node", "L", pose_node->node.id);
+		ufbxwi_save_matrix(sc, "Matrix", &pose_node->matrix);
+
+		ufbxwi_dom_close(sc);
+	}
+}
+
 static uint32_t ufbxwi_pack_weight(float weight)
 {
 	if (!(weight >= 0.0f)) weight = 0.0f;
@@ -6390,6 +6495,10 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 
 	if (type == UFBXW_ELEMENT_SKELETON) {
 		ufbxwi_dom_value(sc, "TypeFlags", "C", "Skeleton");
+	}
+
+	if (type == UFBXW_ELEMENT_BIND_POSE) {
+		ufbxwi_save_bind_pose(sc, (ufbxwi_bind_pose*)element);
 	}
 
 	if (type == UFBXW_ELEMENT_LIGHT) {
@@ -7656,6 +7765,13 @@ ufbxw_abi ufbxw_skinning_type ufbxw_skin_deformer_get_skinning_type(ufbxw_scene 
 	return sd->skinning_type;
 }
 
+ufbxw_abi void ufbxw_skin_deformer_set_bind_pose(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_bind_pose pose)
+{
+	ufbxwi_skin_deformer *sd = ufbxwi_get_skin_deformer(scene, skin);
+	ufbxwi_check_element(scene, skin.id, sd);
+	sd->bind_pose = pose;
+}
+
 ufbxw_abi ufbxw_skin_cluster ufbxw_create_skin_cluster(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_node node)
 {
 	ufbxw_skin_cluster cluster = { ufbxw_create_element(scene, UFBXW_ELEMENT_SKIN_CLUSTER) };
@@ -7703,6 +7819,25 @@ ufbxw_abi void ufbxw_skin_cluster_set_link_transform(ufbxw_scene *scene, ufbxw_s
 	ufbxwi_skin_cluster *sc = ufbxwi_get_skin_cluster(scene, cluster);
 	ufbxwi_check_element(scene, cluster.id, sc);
 	sc->transform_link = matrix;
+}
+
+ufbxw_abi ufbxw_bind_pose ufbxw_create_bind_pose(ufbxw_scene *scene)
+{
+	ufbxw_bind_pose pose = { ufbxw_create_element(scene, UFBXW_ELEMENT_BIND_POSE) };
+	return pose;
+}
+
+ufbxw_abi void ufbxw_bind_pose_add_node(ufbxw_scene *scene, ufbxw_bind_pose pose, ufbxw_node node, ufbxw_matrix matrix)
+{
+	ufbxwi_bind_pose *bp = ufbxwi_get_bind_pose(scene, pose);
+	ufbxwi_check_element(scene, pose.id, bp);
+
+	// TODO: Search existing?
+	ufbxwi_pose_node *pose_node = ufbxwi_list_push_uninit(&scene->ator, &bp->pose_nodes, ufbxwi_pose_node);
+	ufbxwi_check(pose_node);
+
+	pose_node->node = node;
+	pose_node->matrix = matrix;
 }
 
 ufbxw_abi ufbxw_anim_stack ufbxw_get_default_anim_stack(ufbxw_scene *scene)
@@ -8007,7 +8142,7 @@ ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type 
 // -- Pre-saving
 
 ufbxw_abi_data_def const ufbxw_prepare_opts ufbxw_default_prepare_opts = {
-	true, true, true, true, true,
+	true, true, true, true, true, true,
 };
 
 ufbxw_abi void ufbxw_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *opts)

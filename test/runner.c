@@ -156,7 +156,7 @@ void ufbxwt_log_uerror(ufbx_error *err)
 
 void ufbxwt_log_error(ufbxw_error *err)
 {
-	ufbxwt_logf("Error: %s(): %s", err->function, err->description);
+	ufbxwt_logf("Error: %s(): %s", err->function.data, err->description);
 }
 
 #include "testing_utils.h"
