@@ -12,6 +12,7 @@ static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr
 }
 
 #include "../ufbx_write.h"
+#include "ufbx.h"
 
 #define ufbxwt_arraycount(arr) (sizeof(arr) / sizeof(*(arr)))
 
@@ -62,6 +63,7 @@ static void ufbxwt_longjmp(int env, int value, const char *file, uint32_t line, 
 		if (!(cond)) ufbxwt_assert_fail_imp(__FILE__, __LINE__, #cond); \
 	} while (0)
 
+
 typedef struct {
 	bool failed;
 	const char *file;
@@ -80,76 +82,15 @@ typedef struct {
 ufbxwt_test *g_current_test;
 
 char data_root[256];
+char output_root[256];
 
-#define UFBXWT_IMPL 1
-#define UFBXWT_TEST(name) void ufbxwt_test_fn_##name(void)
-#define UFBXWT_TEST_GROUP ""
-
-#include "all_tests.h"
-
-#undef UFBXWT_IMPL
-#undef UFBXWT_TEST
-#undef UFBXWT_TEST_GROUP
-
-#define UFBXWT_IMPL 0
-#define UFBXWT_TEST(name) { UFBXWT_TEST_GROUP, #name, &ufbxwt_test_fn_##name },
-#define UFBXWT_TEST_GROUP ""
-
-ufbxwt_test g_tests[] = {
-	#include "all_tests.h"
-};
-
-ufbxwt_jmp_buf g_test_jmp;
 int g_verbose;
+ufbxw_error g_error;
 
 char g_log_buf[16*1024];
 uint32_t g_log_pos;
 
 char g_hint[8*1024];
-
-ufbxw_error g_error;
-
-#undef UFBXWT_IMPL
-#undef UFBXWT_TEST
-#undef UFBXWT_TEST_GROUP
-
-typedef struct {
-	const char *name;
-	uint32_t num_total;
-	uint32_t num_ran;
-	uint32_t num_ok;
-} ufbxwt_test_stats;
-
-ufbxwt_test_stats g_test_groups[ufbxwt_arraycount(g_tests)];
-size_t g_num_groups = 0;
-
-ufbxwt_test_stats *ufbxwt_get_test_group(const char *name)
-{
-	for (size_t i = g_num_groups; i > 0; --i) {
-		ufbxwt_test_stats *group = &g_test_groups[i - 1];
-		if (!strcmp(group->name, name)) return group;
-	}
-
-	ufbxwt_test_stats *group = &g_test_groups[g_num_groups++];
-	group->name = name;
-	return group;
-}
-
-ufbxwt_threadlocal ufbxwt_jmp_buf *t_jmp_buf;
-
-void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr)
-{
-	if (t_jmp_buf) {
-		ufbxwt_longjmp(*t_jmp_buf, 1, file, line, expr);
-	}
-
-	g_current_test->fail.failed = 1;
-	g_current_test->fail.file = file;
-	g_current_test->fail.line = line;
-	g_current_test->fail.expr = expr;
-
-	ufbxwt_longjmp(g_test_jmp, 1, file, line, expr);
-}
 
 void ufbxwt_logf(const char *fmt, ...)
 {
@@ -197,9 +138,160 @@ void ufbxwt_log_flush(bool print_always)
 	g_log_pos = 0;
 }
 
+void ufbxwt_log_uerror(ufbx_error *err)
+{
+	if (!err) return;
+	if (err->info_length > 0) {
+		ufbxwt_logf("Error: %s (%s)", err->description.data, err->info);
+	} else {
+		ufbxwt_logf("Error: %s", err->description.data);
+	}
+	for (size_t i = 0; i < err->stack_size; i++) {
+		ufbx_error_frame *f = &err->stack[i];
+		ufbxwt_logf("Line %u %s: %s", f->source_line, f->function.data, f->description.data);
+	}
+}
+
 void ufbxwt_log_error(ufbxw_error *err)
 {
 	// TODO
+}
+
+#include "testing_utils.h"
+
+void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, ufbxwt_diff_error *err), void (*check_fn)(ufbx_scene *scene, ufbxwt_diff_error *err), const ufbxw_scene_opts *user_opts, uint32_t flags);
+
+#define UFBXWT_IMPL 1
+
+#define UFBXWT_TEST(name) void ufbxwt_test_fn_##name(void)
+
+#define UFBXWT_SCENE_TEST_FLAGS(name, flags) \
+	void ufbxwt_test_fn_imp_scene_##name(ufbxw_scene *scene, ufbxwt_diff_error *err); \
+	void ufbxwt_check_scene_##name(ufbx_scene *scene, ufbxwt_diff_error *err); \
+	void ufbxwt_test_fn_scene_##name(void) { \
+		ufbxwt_do_scene_test(#name, &ufbxwt_test_fn_imp_scene_##name, &ufbxwt_check_scene_##name, NULL, flags); \
+	} \
+	void ufbxwt_test_fn_imp_scene_##name(ufbxw_scene *scene, ufbxwt_diff_error *err)
+
+#define UFBXWT_SCENE_CHECK_FLAGS(name, flags) void ufbxwt_check_scene_##name(ufbx_scene *scene, ufbxwt_diff_error *err)
+
+#define UFBXWT_TEST_GROUP ""
+
+#define UFBXWT_SCENE_TEST(name) UFBXWT_SCENE_TEST_FLAGS(name, 0)
+#define UFBXWT_SCENE_CHECK(name) UFBXWT_SCENE_CHECK_FLAGS(name, 0)
+
+#include "all_tests.h"
+
+#undef UFBXWT_IMPL
+#undef UFBXWT_TEST
+#undef UFBXWT_SCENE_TEST_FLAGS
+#undef UFBXWT_SCENE_CHECK_FLAGS
+#undef UFBXWT_TEST_GROUP
+
+#define UFBXWT_IMPL 0
+#define UFBXWT_TEST(name) { UFBXWT_TEST_GROUP, #name, &ufbxwt_test_fn_##name },
+#define UFBXWT_SCENE_TEST_FLAGS(name, flags) { UFBXWT_TEST_GROUP, #name, &ufbxwt_test_fn_scene_##name },
+#define UFBXWT_SCENE_CHECK_FLAGS(name, flags)
+#define UFBXWT_TEST_GROUP ""
+
+ufbxwt_test g_tests[] = {
+	#include "all_tests.h"
+};
+
+ufbxwt_jmp_buf g_test_jmp;
+
+#undef UFBXWT_IMPL
+#undef UFBXWT_TEST
+#undef UFBXWT_SCENE_TEST_FLAGS
+#undef UFBXWT_SCENE_CHECK_FLAGS
+#undef UFBXWT_TEST_GROUP
+
+typedef struct {
+	const char *name;
+	uint32_t num_total;
+	uint32_t num_ran;
+	uint32_t num_ok;
+} ufbxwt_test_stats;
+
+ufbxwt_test_stats g_test_groups[ufbxwt_arraycount(g_tests)];
+size_t g_num_groups = 0;
+
+ufbxwt_test_stats *ufbxwt_get_test_group(const char *name)
+{
+	for (size_t i = g_num_groups; i > 0; --i) {
+		ufbxwt_test_stats *group = &g_test_groups[i - 1];
+		if (!strcmp(group->name, name)) return group;
+	}
+
+	ufbxwt_test_stats *group = &g_test_groups[g_num_groups++];
+	group->name = name;
+	return group;
+}
+
+ufbxwt_threadlocal ufbxwt_jmp_buf *t_jmp_buf;
+
+void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr)
+{
+	if (t_jmp_buf) {
+		ufbxwt_longjmp(*t_jmp_buf, 1, file, line, expr);
+	}
+
+	g_current_test->fail.failed = 1;
+	g_current_test->fail.file = file;
+	g_current_test->fail.line = line;
+	g_current_test->fail.expr = expr;
+
+	ufbxwt_longjmp(g_test_jmp, 1, file, line, expr);
+}
+
+void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, ufbxwt_diff_error *err), void (*check_fn)(ufbx_scene *scene, ufbxwt_diff_error *err), const ufbxw_scene_opts *user_opts, uint32_t flags)
+{
+	ufbxw_scene_opts opts = { 0 };
+	if (user_opts) {
+		opts = *user_opts;
+	}
+
+	ufbxw_scene *scene = ufbxw_create_scene(&opts);
+
+	ufbxwt_diff_error err = { 0 };
+
+	// Create the scene
+	test_fn(scene, &err);
+
+	ufbxw_prepare_scene(scene, NULL);
+
+	ufbxw_save_opts save_opts = { 0 };
+	save_opts.version = 7500;
+	save_opts.ascii = true;
+
+	uint32_t version = save_opts.version;
+	const char *format = save_opts.ascii ? "ascii" : "binary";
+
+	char output_path[256];
+	snprintf(output_path, sizeof(output_path), "%s/%s_%u_%s.fbx", output_root, name, version, format);
+
+	ufbxw_error save_error;
+	ufbxw_save_file(scene, output_path, &save_opts, &save_error);
+	if (save_error.failed) {
+		ufbxwt_log_error(&save_error);
+	}
+
+	ufbxw_free_scene(scene);
+
+	if (check_fn) {
+		ufbx_load_opts load_opts = { 0 };
+		ufbx_error load_error;
+
+		ufbx_scene *loaded_scene = ufbx_load_file(output_path, &load_opts, &load_error);
+		if (!loaded_scene) {
+			ufbxwt_log_uerror(&load_error);
+		}
+		ufbxwt_assert(loaded_scene);
+
+		check_fn(loaded_scene, &err);
+
+		ufbx_free_scene(loaded_scene);
+	}
 }
 
 int ufbxwt_run_test(ufbxwt_test *test)
@@ -238,6 +330,9 @@ int main(int argc, char **argv)
 	const char *test_filter = NULL;
 	const char *test_group = NULL;
 
+	snprintf(data_root, sizeof(data_root), "data");
+	snprintf(output_root, sizeof(output_root), "output");
+
 	for (int i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "-v") || !strcmp(argv[i], "--verbose")) {
 			g_verbose = 1;
@@ -250,15 +345,36 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[i], "-d") || !strcmp(argv[i], "--data")) {
 			if (++i < argc) {
 				size_t len = strlen(argv[i]);
+				if (len == 0) {
+					fprintf(stderr, "-d: Expected data root");
+					return 1;
+				}
 				if (len + 2 > sizeof(data_root)) {
 					fprintf(stderr, "-d: Data root too long");
 					return 1;
 				}
 				memcpy(data_root, argv[i], len);
 				char end = argv[i][len - 1];
-				if (end != '/' && end != '\\') {
-					data_root[len] = '/';
-					data_root[len + 1] = '\0';
+				if (end == '/' || end == '\\') {
+					data_root[len - 1] = '\0';
+				}
+			}
+		}
+		if (!strcmp(argv[i], "-o") || !strcmp(argv[i], "--output")) {
+			if (++i < argc) {
+				size_t len = strlen(argv[i]);
+				if (len == 0) {
+					fprintf(stderr, "-d: Expected output root");
+					return 1;
+				}
+				if (len + 2 > sizeof(output_root)) {
+					fprintf(stderr, "-d: Output root too long");
+					return 1;
+				}
+				memcpy(output_root, argv[i], len);
+				char end = argv[i][len - 1];
+				if (end == '/' || end == '\\') {
+					output_root[len - 1] = '\0';
 				}
 			}
 		}

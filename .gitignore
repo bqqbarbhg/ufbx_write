@@ -5,6 +5,9 @@ proj/
 # Build output
 build/
 
+# Test output
+output/
+
 # Python cache files
 __pycache__/
 

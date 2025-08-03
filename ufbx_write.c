@@ -6224,6 +6224,8 @@ static void ufbxwi_save_init(ufbxw_save_context *sc)
 
 static bool ufbxwi_save_imp(ufbxw_save_context *sc)
 {
+	ufbxw_assert(sc->opts._begin_zero == 0 && sc->opts._end_zero == 0);
+
 	if (sc->opts.version == 0) sc->opts.version = 7500;
 
 	// TODO: Proper hanling
@@ -7465,7 +7467,14 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 	ufbxwi_free_allocator(&sc.ator);
 
 	if (!ok) {
+		if (error) {
+			error->failed = true;
+		}
 		return false;
+	} else {
+		if (error) {
+			error->failed = false;
+		}
 	}
 
 	return true;

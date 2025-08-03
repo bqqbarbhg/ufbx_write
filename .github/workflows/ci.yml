@@ -19,12 +19,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      - name: Update apt
-        run: sudo apt-get update
+      - name: Create temporary directories
+        run: mkdir -p build output
       - name: Compile test runner
-        run: |
-          mkdir -p build
-          clang -Werror -g -lm ufbx_write.c test/runner.c test/ufbx.c -o build/test-runner
+        run: clang -Werror -g -lm ufbx_write.c test/runner.c test/ufbx.c -o build/test-runner
       - name: Run tests
-        run: |
-          build/test-runner -d data
+        run: build/test-runner
