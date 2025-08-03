@@ -1255,6 +1255,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_WrapModeU,
 	UFBXWI_WrapModeV,
 	UFBXWI_d,
+	UFBXWI_d_W,
 	UFBXWI_d_X,
 	UFBXWI_d_Y,
 	UFBXWI_d_Z,
@@ -1477,6 +1478,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "WrapModeU", 9 },
 	{ "WrapModeV", 9 },
 	{ "d", 1 },
+	{ "d|W", 3 },
 	{ "d|X", 3 },
 	{ "d|Y", 3 },
 	{ "d|Z", 3 },
@@ -1562,7 +1564,7 @@ typedef struct {
 } ufbxwi_int_span;
 
 #define ufbxwi_buffer_id_index(id) (uint32_t)(id)
-#define ufbxwi_buffer_id_type(id) (ufbxw_element_type)(((id) >> 48))
+#define ufbxwi_buffer_id_type(id) (ufbxwi_buffer_type)(((id) >> 48))
 #define ufbxwi_buffer_id_generation(id) (uint32_t)(((id) >> 32) & 0xffff)
 
 typedef enum {
@@ -1588,6 +1590,7 @@ typedef size_t ufbxwi_key_attr_stream_fn(void *user, ufbxwi_key_attr *dst, size_
 
 typedef union {
 	ufbxw_int_stream_fn *int_fn;
+	ufbxw_long_stream_fn *long_fn;
 	ufbxw_real_stream_fn *real_fn;
 	ufbxw_vec2_stream_fn *vec2_fn;
 	ufbxw_vec3_stream_fn *vec3_fn;
@@ -1712,8 +1715,13 @@ static void ufbxwi_reset_buffer(ufbxwi_buffer_pool *pool, ufbxwi_buffer *buffer)
 static size_t ufbxwi_buffer_stream_read(void *dst, size_t dst_count, size_t offset, ufbxwi_buffer_type type, ufbxwi_stream_fn fn, void *user)
 {
 	switch (type) {
+	case UFBXWI_BUFFER_TYPE_NONE:
+		ufbxwi_unreachable("reading form uninitialized buffer");
+		break;
 	case UFBXWI_BUFFER_TYPE_INT:
 		return fn.int_fn(user, (int32_t*)dst, dst_count, offset);
+	case UFBXWI_BUFFER_TYPE_LONG:
+		return fn.long_fn(user, (int64_t*)dst, dst_count, offset);
 	case UFBXWI_BUFFER_TYPE_REAL:
 		return fn.real_fn(user, (ufbxw_real*)dst, dst_count, offset);
 	case UFBXWI_BUFFER_TYPE_VEC2:
@@ -2032,6 +2040,9 @@ static ufbxwi_noinline bool ufbxwi_start_stream(ufbxwi_buffer_pool *pool, ufbxw_
 			break;
 		case UFBXWI_BUFFER_STATE_EXTERNAL:
 			buf->stream_data = (void*)buf->data.external.data;
+			break;
+		case UFBXWI_BUFFER_STATE_STREAM:
+			ufbxwi_unreachable("not a stream");
 			break;
 		}
 
@@ -3640,6 +3651,8 @@ static ufbxwi_noinline bool ufbxwi_cast_value(void *dst, const void *src, ufbxw_
 		case UFBXW_PROP_DATA_INT64:
 			*d = *(const int64_t*)src != 0;
 			return true;
+		default:
+			break;
 		}
 	} else if (dst_type == UFBXW_PROP_DATA_INT32) {
 		int32_t *d = (int32_t*)dst;
@@ -3657,6 +3670,8 @@ static ufbxwi_noinline bool ufbxwi_cast_value(void *dst, const void *src, ufbxw_
 		case UFBXW_PROP_DATA_USER_ENUM:
 			*d = ((const ufbxw_user_enum*)src)->value;
 			return true;
+		default:
+			break;
 		}
 	} else if (dst_type == UFBXW_PROP_DATA_INT64) {
 		uint64_t *d = (uint64_t*)dst;
@@ -3673,6 +3688,8 @@ static ufbxwi_noinline bool ufbxwi_cast_value(void *dst, const void *src, ufbxw_
 		case UFBXW_PROP_DATA_USER_ENUM:
 			*d = ((const ufbxw_user_enum*)src)->value;
 			return true;
+		default:
+			break;
 		}
 	} else if (dst_type == UFBXW_PROP_DATA_REAL) {
 		ufbxw_real *d = (ufbxw_real*)dst;
@@ -3680,6 +3697,8 @@ static ufbxwi_noinline bool ufbxwi_cast_value(void *dst, const void *src, ufbxw_
 		case UFBXW_PROP_DATA_USER_REAL:
 			*d = ((const ufbxw_user_real*)src)->value;
 			return true;
+		default:
+			break;
 		}
 	} else if (dst_type == UFBXW_PROP_DATA_USER_INT) {
 		ufbxw_user_int *d = (ufbxw_user_int*)dst;
@@ -3694,6 +3713,8 @@ static ufbxwi_noinline bool ufbxwi_cast_value(void *dst, const void *src, ufbxw_
 			// TODO: Handle out of bounds
 			d->value = (int32_t)*(const int64_t*)src;
 			return true;
+		default:
+			break;
 		}
 	} else if (dst_type == UFBXW_PROP_DATA_USER_REAL) {
 		ufbxw_user_real *d = (ufbxw_user_real*)dst;
@@ -3701,6 +3722,8 @@ static ufbxwi_noinline bool ufbxwi_cast_value(void *dst, const void *src, ufbxw_
 		case UFBXW_PROP_DATA_REAL:
 			d->value = *(const int32_t*)src;
 			return true;
+		default:
+			break;
 		}
 	} else if (dst_type == UFBXW_PROP_DATA_USER_ENUM) {
 		ufbxw_user_enum *d = (ufbxw_user_enum*)dst;
@@ -3715,6 +3738,8 @@ static ufbxwi_noinline bool ufbxwi_cast_value(void *dst, const void *src, ufbxw_
 			// TODO: Handle out of bounds
 			d->value = (int32_t)*(const int64_t*)src;
 			return true;
+		default:
+			break;
 		}
 	}
 
@@ -4055,6 +4080,14 @@ static ufbxw_anim_prop ufbxwi_animate_prop(ufbxw_scene *scene, ufbxw_id id, ufbx
 	case UFBXW_PROP_DATA_VEC3:
 		curve_count = 3;
 		break;
+
+	case UFBXW_PROP_DATA_VEC4:
+		curve_count = 4;
+		break;
+
+	default:
+		// Not supported for animation.
+		break;
 	}
 
 	if (curve_count == 0) return ufbxw_null_anim_prop;
@@ -4085,7 +4118,7 @@ static ufbxw_anim_prop ufbxwi_animate_prop(ufbxw_scene *scene, ufbxw_id id, ufbx
 	}
 
 	static const ufbxwi_token curve_props[] = {
-		UFBXWI_d_X, UFBXWI_d_Y, UFBXWI_d_Z,
+		UFBXWI_d_X, UFBXWI_d_Y, UFBXWI_d_Z, UFBXWI_d_W,
 	};
 
 	ufbxwi_token first_curve_prop = curve_props[0];
@@ -4929,7 +4962,7 @@ static void ufbxwi_ascii_dom_write(ufbxw_save_context *sc, const char *tag, cons
 			ufbxwi_ascii_dom_string(sc, str, strlen(str));
 		} break;
 		case 'c': {
-			char str = va_arg(args, char);
+			char str = (char)va_arg(args, int);
 			ufbxwi_write(sc, &str, 1);
 		} break;
 		case 'S': {
@@ -5190,6 +5223,8 @@ static void ufbxwi_ascii_dom_write_array(ufbxw_save_context *sc, const char *tag
 	case UFBXWI_BUFFER_TYPE_FLOAT:
 		ufbxwi_ascii_dom_write_float_array(sc, buffer);
 		break;
+	default:
+		ufbxwi_unreachable("bad scalar type");
 	}
 
 	sc->depth--;
@@ -5461,6 +5496,8 @@ static void ufbxwi_save_props(ufbxw_save_context *sc, const ufbxwi_element *elem
 				const ufbxw_user_enum *d = (const ufbxw_user_enum*)data;
 				ufbxwi_dom_value(sc, "P", "SSSCIS", name, type->type, type->sub_type, flags, d->value, d->options);
 			} break;
+			default:
+				ufbxwi_unreachable("bad data type");
 		}
 	}
 
@@ -5977,6 +6014,8 @@ static void ufbxwi_save_objects(ufbxw_save_context *sc)
 		case UFBXW_ELEMENT_GLOBAL_SETTINGS:
 			do_save = false;
 			break;
+		default:
+			break;
 		}
 
 		if (do_save) {
@@ -6209,10 +6248,10 @@ static bool ufbxwi_save_imp(ufbxw_save_context *sc)
 
 // -- API
 
-ufbxw_abi_data const ufbxw_string ufbxw_empty_string = { ufbxwi_empty_char, 0 };
-ufbxw_abi_data const ufbxw_vec2 ufbxw_zero_vec2 = { 0.0f, 0.0f };
-ufbxw_abi_data const ufbxw_vec3 ufbxw_zero_vec3 = { 0.0f, 0.0f, 0.0f };
-ufbxw_abi_data const ufbxw_vec4 ufbxw_zero_vec4 = { 0.0f, 0.0f, 0.0f, 0.0f };
+ufbxw_abi_data_def const ufbxw_string ufbxw_empty_string = { ufbxwi_empty_char, 0 };
+ufbxw_abi_data_def const ufbxw_vec2 ufbxw_zero_vec2 = { 0.0f, 0.0f };
+ufbxw_abi_data_def const ufbxw_vec3 ufbxw_zero_vec3 = { 0.0f, 0.0f, 0.0f };
+ufbxw_abi_data_def const ufbxw_vec4 ufbxw_zero_vec4 = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 ufbxw_abi void ufbxw_retain_buffer(ufbxw_scene *scene, ufbxw_buffer_id buffer)
 {
@@ -7286,12 +7325,12 @@ ufbxw_abi void ufbxw_anim_curve_add_keyframe_key(ufbxw_scene *scene, ufbxw_anim_
 	if (c->key_attr_data.count > 0 && !memcmp(&c->key_attr_data.data[c->key_attr_data.count - 1], &key_attr, sizeof(ufbxwi_anim_key_attr))) {
 		key_attr_index -= 1;
 	} else {
-		ufbxwi_list_push_copy(&scene->ator, &c->key_attr_data, ufbxwi_anim_key_attr, &key_attr);
+		ufbxwi_ignore(ufbxwi_list_push_copy(&scene->ator, &c->key_attr_data, ufbxwi_anim_key_attr, &key_attr));
 	}
 
-	ufbxwi_list_push_copy(&scene->ator, &c->key_times, ufbxw_ktime, &key.time);
-	ufbxwi_list_push_copy(&scene->ator, &c->key_values, float, &value);
-	ufbxwi_list_push_copy(&scene->ator, &c->key_attr_indices, uint32_t, &key_attr_index);
+	ufbxwi_ignore(ufbxwi_list_push_copy(&scene->ator, &c->key_times, ufbxw_ktime, &key.time));
+	ufbxwi_ignore(ufbxwi_list_push_copy(&scene->ator, &c->key_values, float, &value));
+	ufbxwi_ignore(ufbxwi_list_push_copy(&scene->ator, &c->key_attr_indices, uint32_t, &key_attr_index));
 }
 
 ufbxw_abi void ufbxw_anim_curve_finish_keyframes(ufbxw_scene *scene, ufbxw_anim_curve curve)
@@ -7335,7 +7374,7 @@ ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type 
 
 // -- Pre-saving
 
-extern const ufbxw_prepare_opts ufbxw_default_prepare_opts = {
+ufbxw_abi_data_def const ufbxw_prepare_opts ufbxw_default_prepare_opts = {
 	true, true, true, true,
 };
 

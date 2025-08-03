@@ -24,7 +24,7 @@ jobs:
       - name: Compile test runner
         run: |
           mkdir -p build
-          clang -g ufbx_write.c test/runner.c test/ufbx.c -o build/test-runner
+          clang -Werror -g -lm ufbx_write.c test/runner.c test/ufbx.c -o build/test-runner
       - name: Run tests
         run: |
           build/test-runner -d data

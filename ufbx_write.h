@@ -25,6 +25,17 @@
 	#endif
 #endif
 
+// Linkage of the main ufbx data fields in the source.
+// Defaults to nothing, or `static` if `UFBX_STATIC` is defined.
+#ifndef ufbxw_abi_data_def
+	#if defined(UFBX_STATIC)
+		#define ufbxw_abi_data_def static
+	#else
+		#define ufbxw_abi_data_def
+	#endif
+#endif
+
+
 #ifndef ufbxw_assert
 	#if defined(UFBXW_NO_ASSERT) || defined(UFBXW_NO_LIBC)
 		#define ufbxw_assert(cond) (void)0
@@ -475,6 +486,7 @@ typedef struct ufbxw_mesh_attribute_desc {
 // --
 
 typedef size_t ufbxw_int_stream_fn(void *user, int32_t *dst, size_t dst_size, size_t offset);
+typedef size_t ufbxw_long_stream_fn(void *user, int64_t *dst, size_t dst_size, size_t offset);
 typedef size_t ufbxw_real_stream_fn(void *user, ufbxw_real *dst, size_t dst_size, size_t offset);
 typedef size_t ufbxw_vec2_stream_fn(void *user, ufbxw_vec2 *dst, size_t dst_size, size_t offset);
 typedef size_t ufbxw_vec3_stream_fn(void *user, ufbxw_vec3 *dst, size_t dst_size, size_t offset);
@@ -735,7 +747,7 @@ typedef struct ufbxw_prepare_opts {
 	bool patch_global_settings_times;
 } ufbxw_prepare_opts;
 
-extern const ufbxw_prepare_opts ufbxw_default_prepare_opts;
+ufbxw_abi_data const ufbxw_prepare_opts ufbxw_default_prepare_opts;
 
 ufbxw_abi void ufbxw_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *opts);
 
