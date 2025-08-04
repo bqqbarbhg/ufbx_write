@@ -4,3 +4,4 @@
 #include "test_mesh.h"
 #include "test_animation.h"
 #include "test_skin.h"
+#include "test_blend_shape.h"

@@ -1176,6 +1176,8 @@ typedef enum ufbxwi_token {
 	UFBXWI_BindPose,
 	UFBXWI_BlendMode,
 	UFBXWI_BlendModeBypass,
+	UFBXWI_BlendShape,
+	UFBXWI_BlendShapeChannel,
 	UFBXWI_BottomBarnDoor,
 	UFBXWI_Bump,
 	UFBXWI_BumpFactor,
@@ -1194,6 +1196,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_DecayType,
 	UFBXWI_DefaultAttributeIndex,
 	UFBXWI_DefaultCamera,
+	UFBXWI_DeformPercent,
 	UFBXWI_Deformer,
 	UFBXWI_Description,
 	UFBXWI_DiffuseColor,
@@ -1333,6 +1336,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_SceneInfo,
 	UFBXWI_ShadingModel,
 	UFBXWI_ShadowColor,
+	UFBXWI_Shape,
 	UFBXWI_Show,
 	UFBXWI_Size,
 	UFBXWI_Skin,
@@ -1409,6 +1413,8 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "BindPose", 8 },
 	{ "BlendMode", 9 },
 	{ "BlendModeBypass", 15 },
+	{ "BlendShape", 10 },
+	{ "BlendShapeChannel", 17 },
 	{ "BottomBarnDoor", 14 },
 	{ "Bump", 4 },
 	{ "BumpFactor", 10 },
@@ -1427,6 +1433,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "DecayType", 9 },
 	{ "DefaultAttributeIndex", 21 },
 	{ "DefaultCamera", 13 },
+	{ "DeformPercent", 13 },
 	{ "Deformer", 8 },
 	{ "Description", 11 },
 	{ "DiffuseColor", 12 },
@@ -1566,6 +1573,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "SceneInfo", 9 },
 	{ "ShadingModel", 12 },
 	{ "ShadowColor", 11 },
+	{ "Shape", 5 },
 	{ "Show", 4 },
 	{ "Size", 4 },
 	{ "Skin", 4 },
@@ -2534,7 +2542,6 @@ typedef struct {
 typedef struct {
 	union {
 		ufbxwi_element element;
-		ufbxwi_node_attribute attrib;
 	};
 
 	ufbxw_id deformer;
@@ -2547,6 +2554,46 @@ typedef struct {
 	ufbxw_matrix transform_link;
 
 } ufbxwi_skin_cluster;
+
+typedef struct {
+	union {
+		ufbxwi_element element;
+	};
+
+	ufbxwi_id_list channels;
+
+} ufbxwi_blend_deformer;
+
+typedef struct {
+	ufbxw_blend_shape shape;
+	ufbxw_real target_weight;
+} ufbxwi_blend_shape_conn;
+
+UFBXWI_LIST_TYPE(ufbxwi_blend_shape_conn_list, ufbxwi_blend_shape_conn);
+
+typedef struct {
+	union {
+		ufbxwi_element element;
+	};
+
+	ufbxw_blend_deformer deformer;
+	ufbxwi_blend_shape_conn_list blend_shapes;
+	ufbxw_real deform_percent;
+
+} ufbxwi_blend_channel;
+
+typedef struct {
+	union {
+		ufbxwi_element element;
+	};
+
+	ufbxwi_id_list blend_channels;
+
+	ufbxw_int_buffer indices;
+	ufbxw_vec3_buffer vertices;
+	ufbxw_vec3_buffer normals;
+
+} ufbxwi_blend_shape;
 
 typedef struct {
 	union {
@@ -2995,6 +3042,10 @@ static const ufbxwi_prop_desc ufbxwi_mesh_props[] = {
 	{ UFBXWI_Receive_Shadows, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 };
 
+static const ufbxwi_prop_desc ufbxwi_blend_channel_props[] = {
+	{ UFBXWI_DeformPercent, UFBXW_PROP_TYPE_NUMBER, ufbxwi_field(ufbxwi_blend_channel, deform_percent), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+};
+
 static const ufbxwi_prop_desc ufbxwi_light_props[] = {
 	{ UFBXWI_Color, UFBXW_PROP_TYPE_COLOR, ufbxwi_default(vec3_1), 0, UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_LightType, UFBXW_PROP_TYPE_ENUM, },
@@ -3155,6 +3206,9 @@ static const ufbxwi_prop_desc ufbxwi_document_props[] = {
 #define UFBXWI_CONN_BIT_TYPE_DEFORMER UINT64_C(0x2000)
 #define UFBXWI_CONN_BIT_TYPE_SKIN_DEFORMER UINT64_C(0x4000)
 #define UFBXWI_CONN_BIT_TYPE_SKIN_CLUSTER UINT64_C(0x8000)
+#define UFBXWI_CONN_BIT_TYPE_BLEND_DEFORMER UINT64_C(0x10000)
+#define UFBXWI_CONN_BIT_TYPE_BLEND_CHANNEL UINT64_C(0x20000)
+#define UFBXWI_CONN_BIT_TYPE_BLEND_SHAPE UINT64_C(0x40000)
 
 #define UFBXWI_CONN_BIT_ELEMENT_NODE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_NODE)
 #define UFBXWI_CONN_BIT_ELEMENT_NODE_ATTRIBUTE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE)
@@ -3164,6 +3218,9 @@ static const ufbxwi_prop_desc ufbxwi_document_props[] = {
 #define UFBXWI_CONN_BIT_ELEMENT_DEFORMER (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_DEFORMER)
 #define UFBXWI_CONN_BIT_ELEMENT_SKIN_DEFORMER (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_SKIN_DEFORMER)
 #define UFBXWI_CONN_BIT_ELEMENT_SKIN_CLUSTER (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_SKIN_CLUSTER)
+#define UFBXWI_CONN_BIT_ELEMENT_BLEND_DEFORMER (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_BLEND_DEFORMER)
+#define UFBXWI_CONN_BIT_ELEMENT_BLEND_CHANNEL (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_BLEND_CHANNEL)
+#define UFBXWI_CONN_BIT_ELEMENT_BLEND_SHAPE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_BLEND_SHAPE)
 #define UFBXWI_CONN_BIT_ELEMENT_ANIM_CURVE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_ANIM_CURVE)
 #define UFBXWI_CONN_BIT_ELEMENT_ANIM_PROP (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_ANIM_PROP)
 #define UFBXWI_CONN_BIT_ELEMENT_ANIM_LAYER (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_ANIM_LAYER)
@@ -3186,6 +3243,9 @@ static const ufbxwi_element_type_info ufbxwi_element_type_infos[] = {
 	{ sizeof(ufbxwi_mesh), UFBXWI_CONN_BIT_TYPE_MESH | UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE },
 	{ sizeof(ufbxwi_skin_deformer), UFBXWI_CONN_BIT_TYPE_SKIN_DEFORMER | UFBXWI_CONN_BIT_TYPE_DEFORMER },
 	{ sizeof(ufbxwi_skin_cluster), UFBXWI_CONN_BIT_TYPE_SKIN_CLUSTER },
+	{ sizeof(ufbxwi_blend_deformer), UFBXWI_CONN_BIT_TYPE_BLEND_DEFORMER | UFBXWI_CONN_BIT_TYPE_DEFORMER },
+	{ sizeof(ufbxwi_blend_channel), UFBXWI_CONN_BIT_TYPE_BLEND_CHANNEL },
+	{ sizeof(ufbxwi_blend_shape), UFBXWI_CONN_BIT_TYPE_BLEND_SHAPE },
 	{ sizeof(ufbxwi_light), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE },
 	{ sizeof(ufbxwi_skeleton), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE },
 	{ sizeof(ufbxwi_bind_pose) },
@@ -3209,6 +3269,9 @@ static const char *ufbxwi_element_type_names[] = {
 	"mesh",
 	"skin_deformer",
 	"skin_cluster",
+	"blend_deformer",
+	"blend_channel",
+	"blend_shape",
 	"light",
 	"skeleton",
 	"bind_pose",
@@ -3232,6 +3295,7 @@ typedef enum {
 	UFBXWI_CONN_TYPE_CONN = 0x2,
 	UFBXWI_CONN_TYPE_ID_LIST = 0x3,
 	UFBXWI_CONN_TYPE_CONN_LIST = 0x4,
+	UFBXWI_CONN_TYPE_BLEND_SHAPE_LIST = 0x5,
 	UFBXWI_CONN_TYPE_DATA_MASK = 0xf,
 
 	UFBXWI_CONN_TYPE_UNORDERED = 0x10,
@@ -3248,6 +3312,7 @@ typedef enum {
 #define ufbxwi_conn_id_list_ex(type, field, flags) ufbxwi_conn_make(UFBXWI_CONN_TYPE_ID_LIST | (flags), type, field)
 #define ufbxwi_conn_conn_list(type, field) ufbxwi_conn_make(UFBXWI_CONN_TYPE_CONN_LIST, type, field)
 #define ufbxwi_conn_conn_list_ex(type, field, flags) ufbxwi_conn_make(UFBXWI_CONN_TYPE_CONN_LIST | (flags), type, field)
+#define ufbxwi_conn_blend_shape_list(type, field) ufbxwi_conn_make(UFBXWI_CONN_TYPE_BLEND_SHAPE_LIST, type, field)
 
 typedef struct {
 	const char *debug_name;
@@ -3266,6 +3331,8 @@ static const ufbxwi_connection_info ufbxwi_connection_infos[] = {
 	{ "Mesh Deformer", UFBXWI_CONN_BIT_ELEMENT_DEFORMER, UFBXWI_CONN_BIT_ELEMENT_MESH, ufbxwi_conn_id_list(ufbxwi_deformer, geometries), ufbxwi_conn_id_list(ufbxwi_mesh, deformers) },
 	{ "Skin Cluster", UFBXWI_CONN_BIT_ELEMENT_SKIN_CLUSTER, UFBXWI_CONN_BIT_ELEMENT_SKIN_DEFORMER, ufbxwi_conn_id(ufbxwi_skin_cluster, deformer), ufbxwi_conn_id_list(ufbxwi_skin_deformer, clusters) },
 	{ "Skin Cluster Node", UFBXWI_CONN_BIT_ELEMENT_NODE, UFBXWI_CONN_BIT_ELEMENT_SKIN_CLUSTER, ufbxwi_conn_id_list_ex(ufbxwi_node, skin_clusters, UFBXWI_CONN_TYPE_UNORDERED), ufbxwi_conn_id(ufbxwi_skin_cluster, node) },
+	{ "Blend Channel", UFBXWI_CONN_BIT_ELEMENT_BLEND_CHANNEL, UFBXWI_CONN_BIT_ELEMENT_BLEND_DEFORMER, ufbxwi_conn_id(ufbxwi_blend_channel, deformer), ufbxwi_conn_id_list(ufbxwi_blend_deformer, channels) },
+	{ "Blend Shape", UFBXWI_CONN_BIT_ELEMENT_BLEND_SHAPE, UFBXWI_CONN_BIT_ELEMENT_BLEND_CHANNEL, ufbxwi_conn_id(ufbxwi_blend_shape, blend_channels), ufbxwi_conn_blend_shape_list(ufbxwi_blend_channel, blend_shapes) },
 	{ "Animated Property", UFBXWI_CONN_BIT_ELEMENT_ANIM_PROP, UFBXWI_CONN_BIT_PROPERTY_ANY, ufbxwi_conn_conn(ufbxwi_anim_prop, prop), ufbxwi_conn_conn_list_ex(ufbxwi_element, anim_props, UFBXWI_CONN_TYPE_UNORDERED) },
 	{ "Animation Curve Property", UFBXWI_CONN_BIT_ELEMENT_ANIM_CURVE, UFBXWI_CONN_BIT_PROPERTY_ANIM_PROP, ufbxwi_conn_conn(ufbxwi_anim_curve, prop), ufbxwi_conn_conn_list(ufbxwi_anim_prop, curves) },
 	{ "Animation Property Layer", UFBXWI_CONN_BIT_ELEMENT_ANIM_PROP, UFBXWI_CONN_BIT_ELEMENT_ANIM_LAYER, ufbxwi_conn_id(ufbxwi_anim_prop, layer), ufbxwi_conn_id_list_ex(ufbxwi_anim_layer, anim_props, UFBXWI_CONN_TYPE_UNORDERED) },
@@ -3313,6 +3380,14 @@ static bool ufbxwi_conn_add(ufbxw_scene *scene, ufbxwi_conn_type type, void *dat
 		conn->dst_prop = dst_prop;
 		return true;
 	} break;
+	case UFBXWI_CONN_TYPE_BLEND_SHAPE_LIST: {
+		ufbxwi_blend_shape_conn_list *d = (ufbxwi_blend_shape_conn_list*)data;
+		ufbxwi_blend_shape_conn *conn = ufbxwi_list_push_uninit(&scene->ator, d, ufbxwi_blend_shape_conn);
+		ufbxwi_check(conn, false);
+		conn->shape.id = id;
+		conn->target_weight = (ufbxw_real)100.0;
+		return true;
+	} break;
 	}
 
 	return false;
@@ -3348,7 +3423,20 @@ static bool ufbxwi_conn_remove_one(ufbxw_scene *scene, ufbxwi_conn_type type, vo
 			if (conn->id == id) {
 				ufbxwi_conn *last = d->data + d->count - 1;
 				if (conn != last) {
-					memmove(conn, conn + 1, ufbxwi_to_size(last - conn));
+					memmove(conn, conn + 1, ufbxwi_to_size(last - conn) * sizeof(ufbxwi_conn));
+				}
+				return true;
+			}
+		}
+	} break;
+	case UFBXWI_CONN_TYPE_BLEND_SHAPE_LIST: {
+		ufbxwi_blend_shape_conn_list *d = (ufbxwi_blend_shape_conn_list*)data;
+		// TODO: Unordered/sparse
+		ufbxwi_for_list(ufbxwi_blend_shape_conn, conn, *d) {
+			if (conn->shape.id == id) {
+				ufbxwi_blend_shape_conn *last = d->data + d->count - 1;
+				if (conn != last) {
+					memmove(conn, conn + 1, ufbxwi_to_size(last - conn) * sizeof(ufbxwi_blend_shape_conn));
 				}
 				return true;
 			}
@@ -3401,6 +3489,19 @@ static void ufbxwi_conn_remove_all(ufbxw_scene *scene, ufbxwi_conn_type type, vo
 		}
 		d->count = dst;
 	} break;
+	case UFBXWI_CONN_TYPE_BLEND_SHAPE_LIST: {
+		ufbxwi_blend_shape_conn_list *d = (ufbxwi_blend_shape_conn_list*)data;
+		// TODO: Unordered/sparse
+		ufbxwi_blend_shape_conn *conns = d->data;
+		size_t dst = 0, count = d->count;
+		for (size_t src = 0; src < count; src++) {
+			if (conns[src].shape.id != id) {
+				if (dst != src) conns[dst] = conns[src];
+				dst++;
+			}
+		}
+		d->count = dst;
+	} break;
 	}
 }
 
@@ -3438,6 +3539,14 @@ static bool ufbxwi_conn_collect_ids(ufbxw_scene *scene, ufbxwi_id_list *ids, ufb
 		ufbxwi_check(dst, false);
 		for (size_t i = 0; i < d.count; i++) {
 			dst[i] = d.data[i].id;
+		}
+	} break;
+	case UFBXWI_CONN_TYPE_BLEND_SHAPE_LIST: {
+		ufbxwi_blend_shape_conn_list d = *(const ufbxwi_blend_shape_conn_list*)data;
+		ufbxw_id *dst = ufbxwi_list_push_uninit_n(&scene->ator, ids, ufbxw_id, d.count);
+		ufbxwi_check(dst, false);
+		for (size_t i = 0; i < d.count; i++) {
+			dst[i] = d.data[i].shape.id;
 		}
 	} break;
 	}
@@ -3495,6 +3604,16 @@ static bool ufbxwi_conn_collect_conns(const ufbxw_scene *scene, ufbxwi_allocator
 		ufbxwi_conn_list d = *(const ufbxwi_conn_list*)data;
 		ufbxwi_check(ufbxwi_list_push_copy_n(ator, conns, ufbxwi_conn, d.count, d.data), false);
 	} break;
+	case UFBXWI_CONN_TYPE_BLEND_SHAPE_LIST: {
+		ufbxwi_blend_shape_conn_list d = *(const ufbxwi_blend_shape_conn_list*)data;
+		ufbxwi_conn *dst = ufbxwi_list_push_uninit_n(ator, conns, ufbxwi_conn, d.count);
+		ufbxwi_check(dst, false);
+		for (size_t i = 0; i < d.count; i++) {
+			dst[i].id = d.data[i].shape.id;
+			dst[i].src_prop = UFBXWI_TOKEN_NONE;
+			dst[i].dst_prop = UFBXWI_TOKEN_NONE;
+		}
+	} break;
 	}
 
 	return true;
@@ -3518,6 +3637,10 @@ static void ufbxwi_conn_clear(ufbxw_scene *scene, ufbxwi_conn_type type, const v
 	} break;
 	case UFBXWI_CONN_TYPE_CONN_LIST: {
 		ufbxwi_conn_list *d = (ufbxwi_conn_list*)data;
+		d->count = 0;
+	} break;
+	case UFBXWI_CONN_TYPE_BLEND_SHAPE_LIST: {
+		ufbxwi_blend_shape_conn_list *d = (ufbxwi_blend_shape_conn_list*)data;
 		d->count = 0;
 	} break;
 	}
@@ -3660,6 +3783,21 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 	{
 		UFBXW_ELEMENT_SKIN_CLUSTER, UFBXWI_TOKEN_NONE, UFBXWI_Cluster, UFBXWI_Deformer, UFBXWI_SubDeformer, UFBXWI_TOKEN_NONE,
 		NULL, 0, &ufbxwi_init_skin_cluster,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_BLEND_DEFORMER, UFBXWI_TOKEN_NONE, UFBXWI_BlendShape, UFBXWI_Deformer, UFBXWI_Deformer, UFBXWI_TOKEN_NONE,
+		NULL, 0, NULL,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_BLEND_CHANNEL, UFBXWI_TOKEN_NONE, UFBXWI_BlendShapeChannel, UFBXWI_Deformer, UFBXWI_SubDeformer, UFBXWI_TOKEN_NONE,
+		ufbxwi_blend_channel_props, ufbxwi_arraycount(ufbxwi_blend_channel_props), NULL,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_BLEND_SHAPE, UFBXWI_TOKEN_NONE, UFBXWI_Shape, UFBXWI_Geometry, UFBXWI_Geometry, UFBXWI_TOKEN_NONE,
+		NULL, 0, NULL,
 		0,
 	},
 	{
@@ -4576,6 +4714,9 @@ static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node(ufbxw_scene *scene, ufbxw
 static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh(ufbxw_scene *scene, ufbxw_mesh id) { return (ufbxwi_mesh*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_MESH); }
 static ufbxwi_forceinline ufbxwi_skin_deformer *ufbxwi_get_skin_deformer(ufbxw_scene *scene, ufbxw_skin_deformer id) { return (ufbxwi_skin_deformer*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_SKIN_DEFORMER); }
 static ufbxwi_forceinline ufbxwi_skin_cluster *ufbxwi_get_skin_cluster(ufbxw_scene *scene, ufbxw_skin_cluster id) { return (ufbxwi_skin_cluster*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_SKIN_CLUSTER); }
+static ufbxwi_forceinline ufbxwi_blend_deformer *ufbxwi_get_blend_deformer(ufbxw_scene *scene, ufbxw_blend_deformer id) { return (ufbxwi_blend_deformer*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BLEND_DEFORMER); }
+static ufbxwi_forceinline ufbxwi_blend_channel *ufbxwi_get_blend_channel(ufbxw_scene *scene, ufbxw_blend_channel id) { return (ufbxwi_blend_channel*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BLEND_CHANNEL); }
+static ufbxwi_forceinline ufbxwi_blend_shape *ufbxwi_get_blend_shape(ufbxw_scene *scene, ufbxw_blend_shape id) { return (ufbxwi_blend_shape*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BLEND_SHAPE); }
 static ufbxwi_forceinline ufbxwi_bind_pose *ufbxwi_get_bind_pose(ufbxw_scene *scene, ufbxw_bind_pose id) { return (ufbxwi_bind_pose*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BIND_POSE); }
 static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve(ufbxw_scene *scene, ufbxw_anim_curve id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_CURVE); }
 static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop(ufbxw_scene *scene, ufbxw_anim_prop id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_PROP); }
@@ -4586,6 +4727,9 @@ static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node_by_id(ufbxw_scene *scene,
 static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_mesh*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_MESH); }
 static ufbxwi_forceinline ufbxwi_skin_deformer *ufbxwi_get_skin_deformer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_skin_deformer*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_SKIN_DEFORMER); }
 static ufbxwi_forceinline ufbxwi_skin_cluster *ufbxwi_get_skin_cluster_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_skin_cluster*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_SKIN_CLUSTER); }
+static ufbxwi_forceinline ufbxwi_blend_deformer *ufbxwi_get_blend_deformer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_blend_deformer*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BLEND_DEFORMER); }
+static ufbxwi_forceinline ufbxwi_blend_channel *ufbxwi_get_blend_channel_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_blend_channel*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BLEND_CHANNEL); }
+static ufbxwi_forceinline ufbxwi_blend_shape *ufbxwi_get_blend_shape_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_blend_shape*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BLEND_SHAPE); }
 static ufbxwi_forceinline ufbxwi_bind_pose *ufbxwi_get_bind_pose_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_bind_pose*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BIND_POSE); }
 static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_CURVE); }
 static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_PROP); }
@@ -5952,6 +6096,7 @@ static void ufbxwi_save_props(ufbxwi_save_context *sc, const ufbxwi_element *ele
 		const ufbxwi_prop_type *type = &scene->prop_types.data[p->type];
 		const void *data = ufbxwi_resolve_prop_value(element, p->value);
 
+		// TODO: Proper flags
 		char flags[16];
 		char *flag = flags;
 		if (p->flags & UFBXW_PROP_FLAG_ANIMATABLE) *flag++ = 'A';
@@ -6214,6 +6359,33 @@ static void ufbxwi_save_skin_cluster(ufbxwi_save_context *sc, ufbxwi_skin_cluste
 	ufbxwi_save_matrix(sc, "TransformLink", &cluster->transform_link);
 }
 
+static size_t ufbxwi_stream_full_weights(void *user, ufbxw_real *dst, size_t dst_size, size_t offset)
+{
+	const ufbxwi_blend_shape_conn *conns = (const ufbxwi_blend_shape_conn*)user;
+	for (size_t i = 0; i < dst_size; i++) {
+		dst[i] = conns[offset + i].target_weight;
+	}
+	return dst_size;
+}
+
+static void ufbxwi_save_blend_channel(ufbxwi_save_context *sc, ufbxwi_blend_channel *channel)
+{
+	ufbxwi_dom_value(sc, "DeformPercent", "D", channel->deform_percent);
+
+	ufbxwi_stream_fn full_weights_fn;
+	full_weights_fn.real_fn = &ufbxwi_stream_full_weights;
+	ufbxw_buffer_id full_weights_buffer = ufbxwi_create_stream_buffer(&sc->buffers, UFBXWI_BUFFER_TYPE_REAL, full_weights_fn, channel->blend_shapes.data, channel->blend_shapes.count);
+	ufbxwi_dom_array(sc, "FullWeights", full_weights_buffer);
+}
+
+static void ufbxwi_save_blend_shape(ufbxwi_save_context *sc, ufbxwi_blend_shape *shape)
+{
+	ufbxwi_dom_value(sc, "Version", "I", 100);
+	ufbxwi_dom_array(sc, "Indexes", shape->indices.id);
+	ufbxwi_dom_array(sc, "Vertices", shape->vertices.id);
+	ufbxwi_dom_array(sc, "Normals", shape->normals.id);
+}
+
 static void ufbxwi_save_bind_pose(ufbxwi_save_context *sc, ufbxwi_bind_pose *pose)
 {
 	ufbxw_scene *scene = sc->scene;
@@ -6409,6 +6581,10 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 	if (type == UFBXW_ELEMENT_NODE) {
 		ufbxwi_dom_value(sc, "Version", "I", 232);
 	} else if (type == UFBXW_ELEMENT_MESH) {
+	} else if (type == UFBXW_ELEMENT_BLEND_DEFORMER) {
+		ufbxwi_dom_value(sc, "Version", "I", 100);
+	} else if (type == UFBXW_ELEMENT_BLEND_CHANNEL) {
+		ufbxwi_dom_value(sc, "Version", "I", 100);
 	} else if (type == UFBXW_ELEMENT_SCENE_INFO) {
 		ufbxwi_dom_value(sc, "Type", "C", "UserData");
 		ufbxwi_dom_value(sc, "Version", "I", 100);
@@ -6491,6 +6667,14 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 
 	if (type == UFBXW_ELEMENT_SKIN_CLUSTER) {
 		ufbxwi_save_skin_cluster(sc, (ufbxwi_skin_cluster*)element);
+	}
+
+	if (type == UFBXW_ELEMENT_BLEND_CHANNEL) {
+		ufbxwi_save_blend_channel(sc, (ufbxwi_blend_channel*)element);
+	}
+
+	if (type == UFBXW_ELEMENT_BLEND_SHAPE) {
+		ufbxwi_save_blend_shape(sc, (ufbxwi_blend_shape*)element);
 	}
 
 	if (type == UFBXW_ELEMENT_SKELETON) {
@@ -7821,6 +8005,108 @@ ufbxw_abi void ufbxw_skin_cluster_set_link_transform(ufbxw_scene *scene, ufbxw_s
 	sc->transform_link = matrix;
 }
 
+ufbxw_abi ufbxw_blend_deformer ufbxw_create_blend_deformer(ufbxw_scene *scene, ufbxw_mesh mesh)
+{
+	ufbxw_blend_deformer deformer = { ufbxw_create_element(scene, UFBXW_ELEMENT_BLEND_DEFORMER) };
+	if (mesh.id) {
+		ufbxwi_connect(scene, UFBXW_CONNECTION_MESH_DEFORMER, deformer.id, mesh.id, 0);
+	}
+	return deformer;
+}
+
+ufbxw_abi void ufbxw_blend_deformer_add_mesh(ufbxw_scene *scene, ufbxw_blend_deformer deformer, ufbxw_mesh mesh)
+{
+	ufbxwi_connect(scene, UFBXW_CONNECTION_MESH_DEFORMER, deformer.id, mesh.id, 0);
+}
+
+ufbxw_abi ufbxw_blend_channel ufbxw_create_blend_channel(ufbxw_scene *scene, ufbxw_blend_deformer deformer)
+{
+	ufbxw_blend_channel channel = { ufbxw_create_element(scene, UFBXW_ELEMENT_BLEND_CHANNEL) };
+	if (deformer.id) {
+		ufbxwi_connect(scene, UFBXW_CONNECTION_BLEND_CHANNEL, channel.id, deformer.id, 0);
+	}
+	return channel;
+}
+
+ufbxw_abi void ufbxw_blend_channel_set_deformer(ufbxw_scene *scene, ufbxw_blend_channel channel, ufbxw_blend_deformer deformer)
+{
+	// TODO: Allow these to be null to disconnect?
+	ufbxwi_connect(scene, UFBXW_CONNECTION_BLEND_CHANNEL, channel.id, deformer.id, UFBXWI_CONNECT_FLAG_DISCONNECT_SRC);
+}
+
+ufbxw_abi void ufbxw_blend_channel_set_shape(ufbxw_scene *scene, ufbxw_blend_channel channel, ufbxw_blend_shape shape)
+{
+	// TODO: Test and hack RootGroup to prepare scene?
+	ufbxwi_disconnect_all_src(scene, UFBXW_CONNECTION_BLEND_SHAPE, channel.id);
+	ufbxw_blend_channel_add_shape(scene, channel, shape, 100.0);
+}
+
+ufbxw_abi void ufbxw_blend_channel_add_shape(ufbxw_scene *scene, ufbxw_blend_channel channel, ufbxw_blend_shape shape, ufbxw_real target_weight)
+{
+	// Manually add connections
+	ufbxwi_blend_channel *bc = ufbxwi_get_blend_channel(scene, channel);
+	ufbxwi_blend_shape *bs = ufbxwi_get_blend_shape(scene, shape);
+	ufbxwi_check_element(scene, channel.id, bc);
+	ufbxwi_check_element(scene, shape.id, bs);
+
+	ufbxwi_check(ufbxwi_list_push_zero(&scene->ator, &bc->blend_shapes, ufbxwi_blend_shape_conn));
+	ufbxwi_check(ufbxwi_list_push_copy(&scene->ator, &bs->blend_channels, ufbxw_id, &channel.id));
+
+	ufbxwi_blend_shape_conn *shapes = bc->blend_shapes.data;
+	size_t prev_count = bc->blend_shapes.count - 1;
+
+	// Insert to the right position
+	size_t pos = 0;
+	while (pos < prev_count && shapes[pos].target_weight <= target_weight) {
+		pos++;
+	}
+
+	memmove(shapes + pos, shapes + pos + 1, (prev_count - pos) * sizeof(ufbxwi_blend_shape_conn));
+	shapes[pos].shape = shape;
+	shapes[pos].target_weight = target_weight;
+}
+
+ufbxw_abi void ufbxw_blend_channel_set_weight(ufbxw_scene *scene, ufbxw_blend_channel channel, ufbxw_real weight)
+{
+	ufbxwi_blend_channel *bc = ufbxwi_get_blend_channel(scene, channel);
+	ufbxwi_check_element(scene, channel.id, bc);
+	bc->deform_percent = weight;
+}
+
+ufbxw_abi ufbxw_real ufbxw_blend_channel_get_weight(ufbxw_scene *scene, ufbxw_blend_channel channel)
+{
+	ufbxwi_blend_channel *bc = ufbxwi_get_blend_channel(scene, channel);
+	ufbxwi_check_element(scene, channel.id, bc, 0.0f);
+	return bc->deform_percent;
+}
+
+ufbxw_abi ufbxw_blend_shape ufbxw_create_blend_shape(ufbxw_scene *scene)
+{
+	ufbxw_blend_shape shape = { ufbxw_create_element(scene, UFBXW_ELEMENT_BLEND_SHAPE) };
+	return shape;
+}
+
+ufbxw_abi void ufbxw_blend_shape_set_offsets(ufbxw_scene *scene, ufbxw_blend_shape shape, ufbxw_int_buffer indices, ufbxw_vec3_buffer offsets)
+{
+	ufbxwi_blend_shape *bs = ufbxwi_get_blend_shape(scene, shape);
+	ufbxwi_check_element(scene, shape.id, bs);
+
+	size_t index_count = ufbxwi_get_buffer_size(&scene->buffers, indices.id);
+	size_t offset_count = ufbxwi_get_buffer_size(&scene->buffers, offsets.id);
+	ufbxw_assert(index_count == offset_count);
+
+	ufbxwi_set_buffer_from_user(&scene->buffers, &bs->indices.id, indices.id);
+	ufbxwi_set_buffer_from_user(&scene->buffers, &bs->vertices.id, offsets.id);
+}
+
+ufbxw_abi void ufbxw_blend_shape_set_normals(ufbxw_scene *scene, ufbxw_blend_shape shape, ufbxw_vec3_buffer normals)
+{
+	ufbxwi_blend_shape *bs = ufbxwi_get_blend_shape(scene, shape);
+	ufbxwi_check_element(scene, shape.id, bs);
+
+	ufbxwi_set_buffer_from_user(&scene->buffers, &bs->normals.id, normals.id);
+}
+
 ufbxw_abi ufbxw_bind_pose ufbxw_create_bind_pose(ufbxw_scene *scene)
 {
 	ufbxw_bind_pose pose = { ufbxw_create_element(scene, UFBXW_ELEMENT_BIND_POSE) };
@@ -8160,6 +8446,8 @@ ufbxw_abi void ufbxw_validate_scene(const ufbxw_scene *scene)
 	// TODO: Check and report errors somehow
 	// - Missing materials
 	// - Cyclical node hierarchies
+	// - Unnamed blend channels
+	// - Unnamed blend shapes
 }
 
 // -- Streams

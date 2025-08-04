@@ -120,6 +120,9 @@ typedef enum ufbxw_element_type {
 	UFBXW_ELEMENT_MESH,
 	UFBXW_ELEMENT_SKIN_DEFORMER,
 	UFBXW_ELEMENT_SKIN_CLUSTER,
+	UFBXW_ELEMENT_BLEND_DEFORMER,
+	UFBXW_ELEMENT_BLEND_CHANNEL,
+	UFBXW_ELEMENT_BLEND_SHAPE,
 	UFBXW_ELEMENT_LIGHT,
 	UFBXW_ELEMENT_SKELETON,
 	UFBXW_ELEMENT_BIND_POSE,
@@ -146,6 +149,9 @@ typedef struct ufbxw_node { ufbxw_id id; } ufbxw_node;
 typedef struct ufbxw_mesh { ufbxw_id id; } ufbxw_mesh;
 typedef struct ufbxw_skin_deformer { ufbxw_id id; } ufbxw_skin_deformer;
 typedef struct ufbxw_skin_cluster { ufbxw_id id; } ufbxw_skin_cluster;
+typedef struct ufbxw_blend_deformer { ufbxw_id id; } ufbxw_blend_deformer;
+typedef struct ufbxw_blend_channel { ufbxw_id id; } ufbxw_blend_channel;
+typedef struct ufbxw_blend_shape { ufbxw_id id; } ufbxw_blend_shape;
 typedef struct ufbxw_bind_pose { ufbxw_id id; } ufbxw_bind_pose;
 typedef struct ufbxw_material { ufbxw_id id; } ufbxw_material;
 typedef struct ufbxw_anim_prop { ufbxw_id id; } ufbxw_anim_prop;
@@ -180,6 +186,9 @@ typedef struct ufbxw_ktime_range {
 #define ufbxw_null_mesh ((ufbxw_mesh){0})
 #define ufbxw_null_skin_deformer ((ufbxw_skin_deformer){0})
 #define ufbxw_null_skin_cluster ((ufbxw_skin_cluster){0})
+#define ufbxw_null_blend_deformer ((ufbxw_blend_deformer){0})
+#define ufbxw_null_blend_channel ((ufbxw_blend_channel){0})
+#define ufbxw_null_blend_shape ((ufbxw_blend_shape){0})
 #define ufbxw_null_bind_pose ((ufbxw_bind_pose){0})
 #define ufbxw_null_material ((ufbxw_material){0})
 #define ufbxw_null_anim_prop ((ufbxw_anim_prop){0})
@@ -195,6 +204,8 @@ typedef enum ufbxw_connection_type {
 	UFBXW_CONNECTION_MESH_DEFORMER,     // DEFORMER -> MESH
 	UFBXW_CONNECTION_SKIN_CLUSTER,      // SKIN_CLUSTER -> SKIN_DEFORMER
 	UFBXW_CONNECTION_SKIN_CLUSTER_NODE, // NODE -> SKIN_CLUSTER
+	UFBXW_CONNECTION_BLEND_CHANNEL,     // BLEND_CHANNEL -> BLEND_DEFORMER
+	UFBXW_CONNECTION_BLEND_SHAPE,       // BLEND_SHAPE -> BLEND_CHANNEL
 	UFBXW_CONNECTION_ANIM_PROPERTY,     // ANIM_PROP* -> ANY(property)*
 	UFBXW_CONNECTION_ANIM_CURVE_PROP,   // ANIM_CURVE* -> ANIM_PROP
 	UFBXW_CONNECTION_ANIM_PROP_LAYER,   // ANIM_PROP* -> ANIM_LAYER
@@ -736,6 +747,32 @@ ufbxw_abi void ufbxw_skin_cluster_set_weights(ufbxw_scene *scene, ufbxw_skin_clu
 // TODO: Better naming?
 ufbxw_abi void ufbxw_skin_cluster_set_transform(ufbxw_scene *scene, ufbxw_skin_cluster cluster, ufbxw_matrix matrix);
 ufbxw_abi void ufbxw_skin_cluster_set_link_transform(ufbxw_scene *scene, ufbxw_skin_cluster cluster, ufbxw_matrix matrix);
+
+// -- Blend deformer
+
+ufbxw_abi ufbxw_blend_deformer ufbxw_create_blend_deformer(ufbxw_scene *scene, ufbxw_mesh mesh);
+
+ufbxw_abi void ufbxw_blend_deformer_add_mesh(ufbxw_scene *scene, ufbxw_blend_deformer deformer, ufbxw_mesh mesh);
+
+// -- Blend channel
+
+ufbxw_abi ufbxw_blend_channel ufbxw_create_blend_channel(ufbxw_scene *scene, ufbxw_blend_deformer deformer);
+
+ufbxw_abi void ufbxw_blend_channel_set_deformer(ufbxw_scene *scene, ufbxw_blend_channel channel, ufbxw_blend_deformer deformer);
+
+ufbxw_abi void ufbxw_blend_channel_set_shape(ufbxw_scene *scene, ufbxw_blend_channel channel, ufbxw_blend_shape shape);
+
+ufbxw_abi void ufbxw_blend_channel_add_shape(ufbxw_scene *scene, ufbxw_blend_channel channel, ufbxw_blend_shape shape, ufbxw_real target_weight);
+
+ufbxw_abi void ufbxw_blend_channel_set_weight(ufbxw_scene *scene, ufbxw_blend_channel channel, ufbxw_real weight);
+ufbxw_abi ufbxw_real ufbxw_blend_channel_get_weight(ufbxw_scene *scene, ufbxw_blend_channel channel);
+
+// -- Blend shape
+
+ufbxw_abi ufbxw_blend_shape ufbxw_create_blend_shape(ufbxw_scene *scene);
+
+ufbxw_abi void ufbxw_blend_shape_set_offsets(ufbxw_scene *scene, ufbxw_blend_shape shape, ufbxw_int_buffer indices, ufbxw_vec3_buffer offsets);
+ufbxw_abi void ufbxw_blend_shape_set_normals(ufbxw_scene *scene, ufbxw_blend_shape shape, ufbxw_vec3_buffer normals);
 
 // -- Bind pose
 
