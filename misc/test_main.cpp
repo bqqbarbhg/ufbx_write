@@ -7,6 +7,6 @@ void test()
 
 	node.set_translation({ 1.0f, 2.0f, 3.0f });
 
-	scene.delete_element(node);
+	node.delete_element();
 }
 
