@@ -1207,6 +1207,9 @@ static bool ufbxwi_intern_string_str_or_default(ufbxwi_string_pool *pool, ufbxw_
 typedef enum ufbxwi_token {
 	UFBXWI_TOKEN_NONE,
 	UFBXWI_TOKEN_EMPTY,
+	UFBXWI_2D_Magnifier_X,
+	UFBXWI_2D_Magnifier_Y,
+	UFBXWI_2D_Magnifier_Zoom,
 	UFBXWI_ActiveAnimStackName,
 	UFBXWI_AmbientColor,
 	UFBXWI_AmbientFactor,
@@ -1218,10 +1221,32 @@ typedef enum ufbxwi_token {
 	UFBXWI_AnimationCurveNode,
 	UFBXWI_AnimationLayer,
 	UFBXWI_AnimationStack,
+	UFBXWI_AntialiasingIntensity,
+	UFBXWI_AntialiasingMethod,
+	UFBXWI_ApertureMode,
 	UFBXWI_AreaLightShape,
+	UFBXWI_AspectHeight,
+	UFBXWI_AspectRatioMode,
+	UFBXWI_AspectWidth,
+	UFBXWI_AudioColor,
+	UFBXWI_AutoComputeClipPanes,
 	UFBXWI_AxisLen,
 	UFBXWI_BBoxMax,
 	UFBXWI_BBoxMin,
+	UFBXWI_BackPlaneDistance,
+	UFBXWI_BackPlaneDistanceMode,
+	UFBXWI_BackPlaneOffsetX,
+	UFBXWI_BackPlaneOffsetY,
+	UFBXWI_BackPlaneRotation,
+	UFBXWI_BackPlaneScaleX,
+	UFBXWI_BackPlaneScaleY,
+	UFBXWI_BackPlateCenter,
+	UFBXWI_BackPlateCrop,
+	UFBXWI_BackPlateFitImage,
+	UFBXWI_BackPlateKeepRatio,
+	UFBXWI_Background_Texture,
+	UFBXWI_BackgroundAlphaTreshold,
+	UFBXWI_BackgroundColor,
 	UFBXWI_BindPose,
 	UFBXWI_BlendMode,
 	UFBXWI_BlendModeBypass,
@@ -1230,6 +1255,9 @@ typedef enum ufbxwi_token {
 	UFBXWI_BottomBarnDoor,
 	UFBXWI_Bump,
 	UFBXWI_BumpFactor,
+	UFBXWI_Camera,
+	UFBXWI_CameraFormat,
+	UFBXWI_CameraProjectionType,
 	UFBXWI_CastLightOnObject,
 	UFBXWI_CastShadows,
 	UFBXWI_Casts_Shadows,
@@ -1252,6 +1280,9 @@ typedef enum ufbxwi_token {
 	UFBXWI_DiffuseFactor,
 	UFBXWI_DisplacementColor,
 	UFBXWI_DisplacementFactor,
+	UFBXWI_DisplaySafeArea,
+	UFBXWI_DisplaySafeAreaOnRender,
+	UFBXWI_DisplayTurnTableIcon,
 	UFBXWI_Document,
 	UFBXWI_DocumentUrl,
 	UFBXWI_DrawFrontFacingVolumetricLight,
@@ -1264,20 +1295,59 @@ typedef enum ufbxwi_token {
 	UFBXWI_EnableNearAttenuation,
 	UFBXWI_FarAttenuationEnd,
 	UFBXWI_FarAttenuationStart,
+	UFBXWI_FarPlane,
 	UFBXWI_FbxAnimCurveNode,
 	UFBXWI_FbxAnimLayer,
 	UFBXWI_FbxAnimStack,
+	UFBXWI_FbxCamera,
 	UFBXWI_FbxFileTexture,
 	UFBXWI_FbxLight,
 	UFBXWI_FbxMesh,
 	UFBXWI_FbxNode,
 	UFBXWI_FbxSkeleton,
 	UFBXWI_FbxSurfaceLambert,
+	UFBXWI_FieldOfView,
+	UFBXWI_FieldOfViewX,
+	UFBXWI_FieldOfViewY,
 	UFBXWI_FileName,
+	UFBXWI_FilmAspectRatio,
+	UFBXWI_FilmFormatIndex,
+	UFBXWI_FilmHeight,
+	UFBXWI_FilmOffsetX,
+	UFBXWI_FilmOffsetY,
+	UFBXWI_FilmRollOrder,
+	UFBXWI_FilmRollPivotX,
+	UFBXWI_FilmRollPivotY,
+	UFBXWI_FilmRollValue,
+	UFBXWI_FilmSqueezeRatio,
+	UFBXWI_FilmTranslateX,
+	UFBXWI_FilmTranslateY,
+	UFBXWI_FilmWidth,
+	UFBXWI_FocalLength,
+	UFBXWI_FocusAngle,
+	UFBXWI_FocusDistance,
+	UFBXWI_FocusSource,
 	UFBXWI_Fog,
+	UFBXWI_Foreground_Opacity,
+	UFBXWI_Foreground_Texture,
+	UFBXWI_FrameColor,
+	UFBXWI_FrameSamplingCount,
+	UFBXWI_FrameSamplingType,
 	UFBXWI_Freeze,
 	UFBXWI_FrontAxis,
 	UFBXWI_FrontAxisSign,
+	UFBXWI_FrontPlaneDistance,
+	UFBXWI_FrontPlaneDistanceMode,
+	UFBXWI_FrontPlaneOffsetX,
+	UFBXWI_FrontPlaneOffsetY,
+	UFBXWI_FrontPlaneRotation,
+	UFBXWI_FrontPlaneScaleX,
+	UFBXWI_FrontPlaneScaleY,
+	UFBXWI_FrontPlateCenter,
+	UFBXWI_FrontPlateCrop,
+	UFBXWI_FrontPlateFitImage,
+	UFBXWI_FrontPlateKeepRatio,
+	UFBXWI_GateFit,
 	UFBXWI_GeometricRotation,
 	UFBXWI_GeometricScaling,
 	UFBXWI_GeometricTranslation,
@@ -1286,6 +1356,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_InheritType,
 	UFBXWI_InnerAngle,
 	UFBXWI_Intensity,
+	UFBXWI_InterestPosition,
 	UFBXWI_LODBox,
 	UFBXWI_LastSaved,
 	UFBXWI_LastSaved_ApplicationName,
@@ -1303,6 +1374,8 @@ typedef enum ufbxwi_token {
 	UFBXWI_LocalStart,
 	UFBXWI_LocalStop,
 	UFBXWI_Lock,
+	UFBXWI_LockInterestNavigation,
+	UFBXWI_LockMode,
 	UFBXWI_LookAtProperty,
 	UFBXWI_Material,
 	UFBXWI_MaxDampRangeX,
@@ -1319,13 +1392,17 @@ typedef enum ufbxwi_token {
 	UFBXWI_MinDampStrengthY,
 	UFBXWI_MinDampStrengthZ,
 	UFBXWI_Model,
+	UFBXWI_Motion_Blur_Intensity,
 	UFBXWI_MultiLayer,
 	UFBXWI_Mute,
 	UFBXWI_NearAttenuationEnd,
 	UFBXWI_NearAttenuationStart,
+	UFBXWI_NearPlane,
 	UFBXWI_NegativePercentShapeSupport,
 	UFBXWI_NodeAttribute,
 	UFBXWI_NormalMap,
+	UFBXWI_OpticalCenterX,
+	UFBXWI_OpticalCenterY,
 	UFBXWI_Original,
 	UFBXWI_OriginalUnitScaleFactor,
 	UFBXWI_OriginalUpAxis,
@@ -1335,11 +1412,15 @@ typedef enum ufbxwi_token {
 	UFBXWI_Original_ApplicationVersion,
 	UFBXWI_Original_DateTime_GMT,
 	UFBXWI_Original_FileName,
+	UFBXWI_OrthoZoom,
 	UFBXWI_OuterAngle,
 	UFBXWI_Path,
+	UFBXWI_PixelAspectRatio,
 	UFBXWI_Pose,
+	UFBXWI_Position,
 	UFBXWI_PostRotation,
 	UFBXWI_PreRotation,
+	UFBXWI_PreScale,
 	UFBXWI_PreferedAngleX,
 	UFBXWI_PreferedAngleY,
 	UFBXWI_PreferedAngleZ,
@@ -1351,6 +1432,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_ReferenceStop,
 	UFBXWI_RelPath,
 	UFBXWI_RightBarnDoor,
+	UFBXWI_Roll,
 	UFBXWI_Rotation,
 	UFBXWI_RotationAccumulationMode,
 	UFBXWI_RotationActive,
@@ -1369,6 +1451,8 @@ typedef enum ufbxwi_token {
 	UFBXWI_RotationStiffnessX,
 	UFBXWI_RotationStiffnessY,
 	UFBXWI_RotationStiffnessZ,
+	UFBXWI_SafeAreaAspectRatio,
+	UFBXWI_SafeAreaDisplayStyle,
 	UFBXWI_ScaleAccumulationMode,
 	UFBXWI_Scaling,
 	UFBXWI_ScalingActive,
@@ -1387,6 +1471,15 @@ typedef enum ufbxwi_token {
 	UFBXWI_ShadowColor,
 	UFBXWI_Shape,
 	UFBXWI_Show,
+	UFBXWI_ShowAudio,
+	UFBXWI_ShowAzimut,
+	UFBXWI_ShowBackplate,
+	UFBXWI_ShowFrontplate,
+	UFBXWI_ShowGrid,
+	UFBXWI_ShowInfoOnMoving,
+	UFBXWI_ShowName,
+	UFBXWI_ShowOpticalCenter,
+	UFBXWI_ShowTimeCode,
 	UFBXWI_Size,
 	UFBXWI_Skin,
 	UFBXWI_SnapOnFrameMode,
@@ -1417,17 +1510,31 @@ typedef enum ufbxwi_token {
 	UFBXWI_TranslationMinZ,
 	UFBXWI_TransparencyFactor,
 	UFBXWI_TransparentColor,
+	UFBXWI_TurnTable,
 	UFBXWI_UVSet,
 	UFBXWI_UVSwap,
 	UFBXWI_UnitScaleFactor,
 	UFBXWI_UpAxis,
 	UFBXWI_UpAxisSign,
+	UFBXWI_UpVector,
 	UFBXWI_UpVectorProperty,
+	UFBXWI_Use2DMagnifierZoom,
+	UFBXWI_UseAccumulationBuffer,
+	UFBXWI_UseAntialiasing,
+	UFBXWI_UseDepthOfField,
+	UFBXWI_UseFrameColor,
 	UFBXWI_UseMaterial,
 	UFBXWI_UseMipMap,
+	UFBXWI_UseMotionBlur,
+	UFBXWI_UseRealTimeDOFAndAA,
+	UFBXWI_UseRealTimeMotionBlur,
 	UFBXWI_UserData,
 	UFBXWI_VectorDisplacementColor,
 	UFBXWI_VectorDisplacementFactor,
+	UFBXWI_ViewCameraToLookAt,
+	UFBXWI_ViewFrustumBackPlaneMode,
+	UFBXWI_ViewFrustumFrontPlaneMode,
+	UFBXWI_ViewFrustumNearFarPlane,
 	UFBXWI_Visibility,
 	UFBXWI_Visibility_Inheritance,
 	UFBXWI_Weight,
@@ -1444,6 +1551,9 @@ typedef enum ufbxwi_token {
 
 static const ufbxw_string ufbxwi_tokens[] = {
 	{ "", 0 },
+	{ "2D Magnifier X", 14 },
+	{ "2D Magnifier Y", 14 },
+	{ "2D Magnifier Zoom", 17 },
 	{ "ActiveAnimStackName", 19 },
 	{ "AmbientColor", 12 },
 	{ "AmbientFactor", 13 },
@@ -1455,10 +1565,32 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "AnimationCurveNode", 18 },
 	{ "AnimationLayer", 14 },
 	{ "AnimationStack", 14 },
+	{ "AntialiasingIntensity", 21 },
+	{ "AntialiasingMethod", 18 },
+	{ "ApertureMode", 12 },
 	{ "AreaLightShape", 14 },
+	{ "AspectHeight", 12 },
+	{ "AspectRatioMode", 15 },
+	{ "AspectWidth", 11 },
+	{ "AudioColor", 10 },
+	{ "AutoComputeClipPanes", 20 },
 	{ "AxisLen", 7 },
 	{ "BBoxMax", 7 },
 	{ "BBoxMin", 7 },
+	{ "BackPlaneDistance", 17 },
+	{ "BackPlaneDistanceMode", 21 },
+	{ "BackPlaneOffsetX", 16 },
+	{ "BackPlaneOffsetY", 16 },
+	{ "BackPlaneRotation", 17 },
+	{ "BackPlaneScaleX", 15 },
+	{ "BackPlaneScaleY", 15 },
+	{ "BackPlateCenter", 15 },
+	{ "BackPlateCrop", 13 },
+	{ "BackPlateFitImage", 17 },
+	{ "BackPlateKeepRatio", 18 },
+	{ "Background Texture", 18 },
+	{ "BackgroundAlphaTreshold", 23 },
+	{ "BackgroundColor", 15 },
 	{ "BindPose", 8 },
 	{ "BlendMode", 9 },
 	{ "BlendModeBypass", 15 },
@@ -1467,6 +1599,9 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "BottomBarnDoor", 14 },
 	{ "Bump", 4 },
 	{ "BumpFactor", 10 },
+	{ "Camera", 6 },
+	{ "CameraFormat", 12 },
+	{ "CameraProjectionType", 20 },
 	{ "CastLightOnObject", 17 },
 	{ "CastShadows", 11 },
 	{ "Casts Shadows", 13 },
@@ -1489,6 +1624,9 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "DiffuseFactor", 13 },
 	{ "DisplacementColor", 17 },
 	{ "DisplacementFactor", 18 },
+	{ "DisplaySafeArea", 15 },
+	{ "DisplaySafeAreaOnRender", 23 },
+	{ "DisplayTurnTableIcon", 20 },
 	{ "Document", 8 },
 	{ "DocumentUrl", 11 },
 	{ "DrawFrontFacingVolumetricLight", 30 },
@@ -1501,20 +1639,59 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "EnableNearAttenuation", 21 },
 	{ "FarAttenuationEnd", 17 },
 	{ "FarAttenuationStart", 19 },
+	{ "FarPlane", 8 },
 	{ "FbxAnimCurveNode", 16 },
 	{ "FbxAnimLayer", 12 },
 	{ "FbxAnimStack", 12 },
+	{ "FbxCamera", 9 },
 	{ "FbxFileTexture", 14 },
 	{ "FbxLight", 8 },
 	{ "FbxMesh", 7 },
 	{ "FbxNode", 7 },
 	{ "FbxSkeleton", 11 },
 	{ "FbxSurfaceLambert", 17 },
+	{ "FieldOfView", 11 },
+	{ "FieldOfViewX", 12 },
+	{ "FieldOfViewY", 12 },
 	{ "FileName", 8 },
+	{ "FilmAspectRatio", 15 },
+	{ "FilmFormatIndex", 15 },
+	{ "FilmHeight", 10 },
+	{ "FilmOffsetX", 11 },
+	{ "FilmOffsetY", 11 },
+	{ "FilmRollOrder", 13 },
+	{ "FilmRollPivotX", 14 },
+	{ "FilmRollPivotY", 14 },
+	{ "FilmRollValue", 13 },
+	{ "FilmSqueezeRatio", 16 },
+	{ "FilmTranslateX", 14 },
+	{ "FilmTranslateY", 14 },
+	{ "FilmWidth", 9 },
+	{ "FocalLength", 11 },
+	{ "FocusAngle", 10 },
+	{ "FocusDistance", 13 },
+	{ "FocusSource", 11 },
 	{ "Fog", 3 },
+	{ "Foreground Opacity", 18 },
+	{ "Foreground Texture", 18 },
+	{ "FrameColor", 10 },
+	{ "FrameSamplingCount", 18 },
+	{ "FrameSamplingType", 17 },
 	{ "Freeze", 6 },
 	{ "FrontAxis", 9 },
 	{ "FrontAxisSign", 13 },
+	{ "FrontPlaneDistance", 18 },
+	{ "FrontPlaneDistanceMode", 22 },
+	{ "FrontPlaneOffsetX", 17 },
+	{ "FrontPlaneOffsetY", 17 },
+	{ "FrontPlaneRotation", 18 },
+	{ "FrontPlaneScaleX", 16 },
+	{ "FrontPlaneScaleY", 16 },
+	{ "FrontPlateCenter", 16 },
+	{ "FrontPlateCrop", 14 },
+	{ "FrontPlateFitImage", 18 },
+	{ "FrontPlateKeepRatio", 19 },
+	{ "GateFit", 7 },
 	{ "GeometricRotation", 17 },
 	{ "GeometricScaling", 16 },
 	{ "GeometricTranslation", 20 },
@@ -1523,6 +1700,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "InheritType", 11 },
 	{ "InnerAngle", 10 },
 	{ "Intensity", 9 },
+	{ "InterestPosition", 16 },
 	{ "LODBox", 6 },
 	{ "LastSaved", 9 },
 	{ "LastSaved|ApplicationName", 25 },
@@ -1540,6 +1718,8 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "LocalStart", 10 },
 	{ "LocalStop", 9 },
 	{ "Lock", 4 },
+	{ "LockInterestNavigation", 22 },
+	{ "LockMode", 8 },
 	{ "LookAtProperty", 14 },
 	{ "Material", 8 },
 	{ "MaxDampRangeX", 13 },
@@ -1556,13 +1736,17 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "MinDampStrengthY", 16 },
 	{ "MinDampStrengthZ", 16 },
 	{ "Model", 5 },
+	{ "Motion Blur Intensity", 21 },
 	{ "MultiLayer", 10 },
 	{ "Mute", 4 },
 	{ "NearAttenuationEnd", 18 },
 	{ "NearAttenuationStart", 20 },
+	{ "NearPlane", 9 },
 	{ "NegativePercentShapeSupport", 27 },
 	{ "NodeAttribute", 13 },
 	{ "NormalMap", 9 },
+	{ "OpticalCenterX", 14 },
+	{ "OpticalCenterY", 14 },
 	{ "Original", 8 },
 	{ "OriginalUnitScaleFactor", 23 },
 	{ "OriginalUpAxis", 14 },
@@ -1572,11 +1756,15 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "Original|ApplicationVersion", 27 },
 	{ "Original|DateTime_GMT", 21 },
 	{ "Original|FileName", 17 },
+	{ "OrthoZoom", 9 },
 	{ "OuterAngle", 10 },
 	{ "Path", 4 },
+	{ "PixelAspectRatio", 16 },
 	{ "Pose", 4 },
+	{ "Position", 8 },
 	{ "PostRotation", 12 },
 	{ "PreRotation", 11 },
+	{ "PreScale", 8 },
 	{ "PreferedAngleX", 14 },
 	{ "PreferedAngleY", 14 },
 	{ "PreferedAngleZ", 14 },
@@ -1588,6 +1776,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "ReferenceStop", 13 },
 	{ "RelPath", 7 },
 	{ "RightBarnDoor", 13 },
+	{ "Roll", 4 },
 	{ "Rotation", 8 },
 	{ "RotationAccumulationMode", 24 },
 	{ "RotationActive", 14 },
@@ -1606,6 +1795,8 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "RotationStiffnessX", 18 },
 	{ "RotationStiffnessY", 18 },
 	{ "RotationStiffnessZ", 18 },
+	{ "SafeAreaAspectRatio", 19 },
+	{ "SafeAreaDisplayStyle", 20 },
 	{ "ScaleAccumulationMode", 21 },
 	{ "Scaling", 7 },
 	{ "ScalingActive", 13 },
@@ -1624,6 +1815,15 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "ShadowColor", 11 },
 	{ "Shape", 5 },
 	{ "Show", 4 },
+	{ "ShowAudio", 9 },
+	{ "ShowAzimut", 10 },
+	{ "ShowBackplate", 13 },
+	{ "ShowFrontplate", 14 },
+	{ "ShowGrid", 8 },
+	{ "ShowInfoOnMoving", 16 },
+	{ "ShowName", 8 },
+	{ "ShowOpticalCenter", 17 },
+	{ "ShowTimeCode", 12 },
 	{ "Size", 4 },
 	{ "Skin", 4 },
 	{ "SnapOnFrameMode", 15 },
@@ -1654,17 +1854,31 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "TranslationMinZ", 15 },
 	{ "TransparencyFactor", 18 },
 	{ "TransparentColor", 16 },
+	{ "TurnTable", 9 },
 	{ "UVSet", 5 },
 	{ "UVSwap", 6 },
 	{ "UnitScaleFactor", 15 },
 	{ "UpAxis", 6 },
 	{ "UpAxisSign", 10 },
+	{ "UpVector", 8 },
 	{ "UpVectorProperty", 16 },
+	{ "Use2DMagnifierZoom", 18 },
+	{ "UseAccumulationBuffer", 21 },
+	{ "UseAntialiasing", 15 },
+	{ "UseDepthOfField", 15 },
+	{ "UseFrameColor", 13 },
 	{ "UseMaterial", 11 },
 	{ "UseMipMap", 9 },
+	{ "UseMotionBlur", 13 },
+	{ "UseRealTimeDOFAndAA", 19 },
+	{ "UseRealTimeMotionBlur", 21 },
 	{ "UserData", 8 },
 	{ "VectorDisplacementColor", 23 },
 	{ "VectorDisplacementFactor", 24 },
+	{ "ViewCameraToLookAt", 18 },
+	{ "ViewFrustumBackPlaneMode", 24 },
+	{ "ViewFrustumFrontPlaneMode", 25 },
+	{ "ViewFrustumNearFarPlane", 23 },
 	{ "Visibility", 10 },
 	{ "Visibility Inheritance", 22 },
 	{ "Weight", 6 },
@@ -2583,6 +2797,9 @@ typedef struct {
 	ufbxwi_id_list clusters;
 	ufbxw_skinning_type skinning_type;
 
+	bool has_mesh_bind_transform;
+	ufbxw_matrix mesh_bind_transform;
+
 	// TODO: This is kind of cheesy..
 	ufbxw_bind_pose bind_pose;
 
@@ -2650,8 +2867,18 @@ typedef struct {
 		ufbxwi_node_attribute attrib;
 	};
 
-	// TODO: Light data
+	ufbxw_real intensity;
+	ufbxw_vec3 color;
 } ufbxwi_light;
+
+typedef struct {
+	union {
+		ufbxwi_element element;
+		ufbxwi_node_attribute attrib;
+	};
+
+	// TODO: Camera properties
+} ufbxwi_camera;
 
 typedef struct {
 	union {
@@ -2958,6 +3185,8 @@ typedef struct {
 	} zero;
 	bool bool_true;
 	int32_t int_1;
+	int32_t int_2;
+	int32_t int_7;
 	int32_t int_neg1;
 	ufbxw_real double_1;
 	ufbxw_real double_10;
@@ -2965,8 +3194,20 @@ typedef struct {
 	ufbxw_real double_45;
 	ufbxw_real double_50;
 	ufbxw_real double_100;
+	ufbxw_real double_200;
+	ufbxw_real double_320;
+	ufbxw_real double_4000;
+	ufbxw_real double_0_5;
+	ufbxw_real double_0_816;
+	ufbxw_real double_0_612;
+	ufbxw_real double_0_77777;
+	ufbxw_real double_1_333d;
+	ufbxw_real double_3_5;
 	ufbxw_vec3 vec3_1;
 	ufbxw_vec3 vec3_color;
+	ufbxw_vec3 vec3_color30;
+	ufbxw_vec3 vec3_color63;
+	ufbxw_vec3 vec3_y;
 	ufbxw_string string_empty;
 	ufbxw_string string_default;
 	ufbxw_string string_lambert;
@@ -2977,6 +3218,8 @@ static const ufbxwi_prop_defaults ufbxwi_prop_default_data = {
 	{ 0 }, // zero
 	true,
 	1,
+	2,
+	7,
 	-1,
 	(ufbxw_real)1.0,
 	(ufbxw_real)10.0,
@@ -2984,8 +3227,20 @@ static const ufbxwi_prop_defaults ufbxwi_prop_default_data = {
 	(ufbxw_real)45.0,
 	(ufbxw_real)50.0,
 	(ufbxw_real)100.0,
+	(ufbxw_real)200.0,
+	(ufbxw_real)320.0,
+	(ufbxw_real)4000.0,
+	(ufbxw_real)0.5,
+	(ufbxw_real)0.816,
+	(ufbxw_real)0.612,
+	(ufbxw_real)0.77777,
+	(ufbxw_real)1.33333333333333,
+	(ufbxw_real)3.5,
 	{ 1.0f, 1.0f, 1.0f },
 	{ (ufbxw_real)0.8, (ufbxw_real)0.8, (ufbxw_real)0.8 },
+	{ (ufbxw_real)0.3, (ufbxw_real)0.3, (ufbxw_real)0.3 },
+	{ (ufbxw_real)0.63, (ufbxw_real)0.63, (ufbxw_real)0.63 },
+	{ 0.0f, 1.0f, 0.0f },
 	{ ufbxwi_empty_char, 0 },
 	{ "default", 7 },
 	{ "lambert", 7 },
@@ -3096,13 +3351,13 @@ static const ufbxwi_prop_desc ufbxwi_blend_channel_props[] = {
 };
 
 static const ufbxwi_prop_desc ufbxwi_light_props[] = {
-	{ UFBXWI_Color, UFBXW_PROP_TYPE_COLOR, ufbxwi_default(vec3_1), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_Color, UFBXW_PROP_TYPE_COLOR, ufbxwi_field(ufbxwi_light, color), ufbxwi_default(vec3_1), UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_LightType, UFBXW_PROP_TYPE_ENUM, },
 	{ UFBXWI_CastLightOnObject, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 	{ UFBXWI_DrawVolumetricLight, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 	{ UFBXWI_DrawGroundProjection, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 	{ UFBXWI_DrawFrontFacingVolumetricLight, UFBXW_PROP_TYPE_BOOL, },
-	{ UFBXWI_Intensity, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_100), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_Intensity, UFBXW_PROP_TYPE_NUMBER, ufbxwi_field(ufbxwi_light, intensity), ufbxwi_default(double_100), UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_InnerAngle, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_OuterAngle, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_45), 0, UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_Fog, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_50), 0, UFBXW_PROP_FLAG_ANIMATABLE },
@@ -3123,6 +3378,115 @@ static const ufbxwi_prop_desc ufbxwi_light_props[] = {
 	{ UFBXWI_TopBarnDoor, UFBXW_PROP_TYPE_FLOAT, ufbxwi_default(double_20), 0, UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_BottomBarnDoor, UFBXW_PROP_TYPE_FLOAT, ufbxwi_default(double_20), 0, UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_EnableBarnDoor, UFBXW_PROP_TYPE_USER_BOOL, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+};
+
+static const ufbxwi_prop_desc ufbxwi_camera_props[] = {
+	{ UFBXWI_Color, UFBXW_PROP_TYPE_COLOR_RGB, ufbxwi_default(vec3_color) },
+	{ UFBXWI_Position, UFBXW_PROP_TYPE_VECTOR, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_UpVector, UFBXW_PROP_TYPE_VECTOR, ufbxwi_default(vec3_y), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_InterestPosition, UFBXW_PROP_TYPE_VECTOR, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE  },
+	{ UFBXWI_Roll, UFBXW_PROP_TYPE_ROLL, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE  },
+	{ UFBXWI_OpticalCenterX, UFBXW_PROP_TYPE_OPTICAL_CENTER_X, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE  },
+	{ UFBXWI_OpticalCenterY, UFBXW_PROP_TYPE_OPTICAL_CENTER_Y, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE  },
+	{ UFBXWI_BackgroundColor, UFBXW_PROP_TYPE_COLOR, ufbxwi_default(vec3_color63), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_TurnTable, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_DisplayTurnTableIcon, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_UseMotionBlur, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_UseRealTimeMotionBlur, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_Motion_Blur_Intensity, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_1), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_AspectRatioMode, UFBXW_PROP_TYPE_ENUM },
+	{ UFBXWI_AspectWidth, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_320) },
+	{ UFBXWI_AspectHeight, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_200) },
+	{ UFBXWI_PixelAspectRatio, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_1) },
+	{ UFBXWI_FilmOffsetX, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FilmOffsetY, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FilmWidth, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_0_816) },
+	{ UFBXWI_FilmHeight, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_0_612) },
+	{ UFBXWI_FilmAspectRatio, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_1_333d) },
+	{ UFBXWI_FilmSqueezeRatio, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_1) },
+	{ UFBXWI_FilmFormatIndex, UFBXW_PROP_TYPE_ENUM },
+	{ UFBXWI_PreScale, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_1), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FilmTranslateX, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FilmTranslateY, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FilmRollPivotX, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FilmRollPivotY, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FilmRollValue, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FilmRollOrder, UFBXW_PROP_TYPE_ENUM },
+	{ UFBXWI_ApertureMode, UFBXW_PROP_TYPE_ENUM, ufbxwi_default(int_2) },
+	{ UFBXWI_GateFit, UFBXW_PROP_TYPE_ENUM },
+	{ UFBXWI_FieldOfView, UFBXW_PROP_TYPE_FIELD_OF_VIEW, ufbxwi_default(double_45) },
+	{ UFBXWI_FieldOfViewX, UFBXW_PROP_TYPE_FIELD_OF_VIEW_X, ufbxwi_default(double_45) },
+	{ UFBXWI_FieldOfViewY, UFBXW_PROP_TYPE_FIELD_OF_VIEW_Y, ufbxwi_default(double_45) },
+	{ UFBXWI_FocalLength, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_45), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_CameraFormat, UFBXW_PROP_TYPE_ENUM },
+	{ UFBXWI_UseFrameColor, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_FrameColor, UFBXW_PROP_TYPE_COLOR_RGB, ufbxwi_default(vec3_color30) },
+	{ UFBXWI_ShowName, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_ShowInfoOnMoving, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_ShowGrid, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_ShowOpticalCenter, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_ShowAzimut, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_ShowTimeCode, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_ShowAudio, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_AudioColor, UFBXW_PROP_TYPE_VECTOR, ufbxwi_default(vec3_y) },
+	{ UFBXWI_NearPlane, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_10) },
+	{ UFBXWI_FarPlane, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_4000) },
+	{ UFBXWI_AutoComputeClipPanes, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_ViewCameraToLookAt, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_ViewFrustumNearFarPlane, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_ViewFrustumBackPlaneMode, UFBXW_PROP_TYPE_ENUM, ufbxwi_default(int_2) },
+	{ UFBXWI_BackPlaneDistance, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_4000), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_BackPlaneDistanceMode, UFBXW_PROP_TYPE_ENUM, ufbxwi_default(int_1) },
+	{ UFBXWI_ViewFrustumFrontPlaneMode, UFBXW_PROP_TYPE_ENUM, ufbxwi_default(int_2) },
+	{ UFBXWI_FrontPlaneDistance, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_10), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FrontPlaneDistanceMode, UFBXW_PROP_TYPE_ENUM, ufbxwi_default(int_1) },
+	{ UFBXWI_LockMode, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_LockInterestNavigation, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_BackPlateFitImage, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_BackPlateCrop, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_BackPlateCenter, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_BackPlateKeepRatio, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_BackgroundAlphaTreshold, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_0_5) },
+	{ UFBXWI_ShowBackplate, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_BackPlaneOffsetX, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_BackPlaneOffsetY, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_BackPlaneRotation, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_BackPlaneScaleX, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_1), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_BackPlaneScaleY, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_1), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_Background_Texture, UFBXW_PROP_TYPE_OBJECT },
+	{ UFBXWI_FrontPlateFitImage, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_FrontPlateCrop, UFBXW_PROP_TYPE_BOOL, },
+	{ UFBXWI_FrontPlateCenter, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_FrontPlateKeepRatio, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_Foreground_Opacity, UFBXW_PROP_TYPE_DOUBLE, },
+	{ UFBXWI_ShowFrontplate, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_FrontPlaneOffsetX, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FrontPlaneOffsetY, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FrontPlaneRotation, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FrontPlaneScaleX, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_1), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_FrontPlaneScaleY, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_1), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_Foreground_Texture, UFBXW_PROP_TYPE_OBJECT },
+	{ UFBXWI_DisplaySafeArea, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_DisplaySafeAreaOnRender, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_SafeAreaDisplayStyle, UFBXW_PROP_TYPE_ENUM, ufbxwi_default(int_1) },
+	{ UFBXWI_SafeAreaAspectRatio, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_1_333d) },
+	{ UFBXWI_Use2DMagnifierZoom, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_2D_Magnifier_Zoom, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_100), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_2D_Magnifier_X, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_50), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_2D_Magnifier_Y, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_50), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_CameraProjectionType, UFBXW_PROP_TYPE_ENUM },
+	{ UFBXWI_OrthoZoom, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_1) },
+	{ UFBXWI_UseRealTimeDOFAndAA, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_UseDepthOfField, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_FocusSource, UFBXW_PROP_TYPE_ENUM },
+	{ UFBXWI_FocusAngle, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_3_5) },
+	{ UFBXWI_FocusDistance, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_200) },
+	{ UFBXWI_UseAntialiasing, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_AntialiasingIntensity, UFBXW_PROP_TYPE_DOUBLE, ufbxwi_default(double_0_77777) },
+	{ UFBXWI_AntialiasingMethod, UFBXW_PROP_TYPE_ENUM },
+	{ UFBXWI_UseAccumulationBuffer, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_FrameSamplingCount, UFBXW_PROP_TYPE_INT, ufbxwi_default(int_7) },
+	{ UFBXWI_FrameSamplingType, UFBXW_PROP_TYPE_ENUM, ufbxwi_default(int_1) },
 };
 
 static const ufbxwi_prop_desc ufbxwi_skeleton_props[] = {
@@ -3296,6 +3660,7 @@ static const ufbxwi_element_type_info ufbxwi_element_type_infos[] = {
 	{ sizeof(ufbxwi_blend_channel), UFBXWI_CONN_BIT_TYPE_BLEND_CHANNEL },
 	{ sizeof(ufbxwi_blend_shape), UFBXWI_CONN_BIT_TYPE_BLEND_SHAPE },
 	{ sizeof(ufbxwi_light), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE },
+	{ sizeof(ufbxwi_camera), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE },
 	{ sizeof(ufbxwi_skeleton), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE },
 	{ sizeof(ufbxwi_bind_pose) },
 	{ sizeof(ufbxwi_material), UFBXWI_CONN_BIT_TYPE_MATERIAL },
@@ -3322,6 +3687,7 @@ static const char *ufbxwi_element_type_names[] = {
 	"blend_channel",
 	"blend_shape",
 	"light",
+	"camera",
 	"skeleton",
 	"bind_pose",
 	"material",
@@ -3705,6 +4071,20 @@ static bool ufbxwi_init_node(ufbxw_scene *scene, void *data)
 	return true;
 }
 
+static bool ufbxwi_init_light(ufbxw_scene *scene, void *data)
+{
+	ufbxwi_light *light = (ufbxwi_light*)data;
+	light->color = ufbxwi_one_vec3;
+	light->intensity = (ufbxw_real)100.0;
+	return true;
+}
+
+static bool ufbxwi_init_camera(ufbxw_scene *scene, void *data)
+{
+	ufbxwi_camera *camera = (ufbxwi_camera*)data;
+	return true;
+}
+
 static bool ufbxwi_init_skeleton(ufbxw_scene *scene, void *data)
 {
 	ufbxwi_skeleton *skeleton = (ufbxwi_skeleton*)data;
@@ -3851,7 +4231,12 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 	},
 	{
 		UFBXW_ELEMENT_LIGHT, UFBXWI_TOKEN_NONE, UFBXWI_Light, UFBXWI_NodeAttribute, UFBXWI_NodeAttribute, UFBXWI_FbxLight,
-		ufbxwi_light_props, ufbxwi_arraycount(ufbxwi_light_props), NULL,
+		ufbxwi_light_props, ufbxwi_arraycount(ufbxwi_light_props), &ufbxwi_init_light,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_CAMERA, UFBXWI_TOKEN_NONE, UFBXWI_Camera, UFBXWI_NodeAttribute, UFBXWI_NodeAttribute, UFBXWI_FbxCamera,
+		ufbxwi_camera_props, ufbxwi_arraycount(ufbxwi_camera_props), &ufbxwi_init_camera,
 		0,
 	},
 	{
@@ -4766,6 +5151,8 @@ static ufbxwi_forceinline ufbxwi_skin_cluster *ufbxwi_get_skin_cluster(ufbxw_sce
 static ufbxwi_forceinline ufbxwi_blend_deformer *ufbxwi_get_blend_deformer(ufbxw_scene *scene, ufbxw_blend_deformer id) { return (ufbxwi_blend_deformer*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BLEND_DEFORMER); }
 static ufbxwi_forceinline ufbxwi_blend_channel *ufbxwi_get_blend_channel(ufbxw_scene *scene, ufbxw_blend_channel id) { return (ufbxwi_blend_channel*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BLEND_CHANNEL); }
 static ufbxwi_forceinline ufbxwi_blend_shape *ufbxwi_get_blend_shape(ufbxw_scene *scene, ufbxw_blend_shape id) { return (ufbxwi_blend_shape*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BLEND_SHAPE); }
+static ufbxwi_forceinline ufbxwi_light *ufbxwi_get_light(ufbxw_scene *scene, ufbxw_light id) { return (ufbxwi_light*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_LIGHT); }
+static ufbxwi_forceinline ufbxwi_camera *ufbxwi_get_camera(ufbxw_scene *scene, ufbxw_camera id) { return (ufbxwi_camera*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_CAMERA); }
 static ufbxwi_forceinline ufbxwi_bind_pose *ufbxwi_get_bind_pose(ufbxw_scene *scene, ufbxw_bind_pose id) { return (ufbxwi_bind_pose*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BIND_POSE); }
 static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve(ufbxw_scene *scene, ufbxw_anim_curve id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_CURVE); }
 static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop(ufbxw_scene *scene, ufbxw_anim_prop id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_PROP); }
@@ -4779,6 +5166,8 @@ static ufbxwi_forceinline ufbxwi_skin_cluster *ufbxwi_get_skin_cluster_by_id(ufb
 static ufbxwi_forceinline ufbxwi_blend_deformer *ufbxwi_get_blend_deformer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_blend_deformer*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BLEND_DEFORMER); }
 static ufbxwi_forceinline ufbxwi_blend_channel *ufbxwi_get_blend_channel_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_blend_channel*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BLEND_CHANNEL); }
 static ufbxwi_forceinline ufbxwi_blend_shape *ufbxwi_get_blend_shape_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_blend_shape*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BLEND_SHAPE); }
+static ufbxwi_forceinline ufbxwi_light *ufbxwi_get_light_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_light*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_LIGHT); }
+static ufbxwi_forceinline ufbxwi_camera *ufbxwi_get_camera_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_camera*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_CAMERA); }
 static ufbxwi_forceinline ufbxwi_bind_pose *ufbxwi_get_bind_pose_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_bind_pose*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BIND_POSE); }
 static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_CURVE); }
 static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_PROP); }
@@ -5561,7 +5950,12 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 			}
 
 			if (mesh_node.id) {
-				ufbxw_matrix bind_matrix = ufbxw_node_get_global_transform(scene, mesh_node);
+				ufbxw_matrix bind_matrix;
+				if (skin->has_mesh_bind_transform) {
+					bind_matrix = skin->mesh_bind_transform;
+				} else {
+					bind_matrix = ufbxw_node_get_global_transform(scene, mesh_node);
+				}
 				ufbxw_bind_pose_add_node(scene, pose, mesh_node, bind_matrix);
 			}
 
@@ -7945,6 +8339,11 @@ ufbxw_abi ufbxw_matrix ufbxw_node_get_global_transform(ufbxw_scene *scene, ufbxw
 	return result;
 }
 
+ufbxw_abi void ufbxw_node_set_attribute(ufbxw_scene *scene, ufbxw_node node, ufbxw_id attrib)
+{
+	ufbxwi_connect(scene, UFBXW_CONNECTION_NODE_ATTRIBUTE, attrib, node.id, UFBXWI_CONNECT_FLAG_DISCONNECT_DST);
+}
+
 ufbxw_abi void ufbxw_node_set_parent(ufbxw_scene *scene, ufbxw_node node, ufbxw_node parent)
 {
 	if (parent.id == ufbxw_null_id) {
@@ -8024,6 +8423,38 @@ ufbxw_abi void ufbxw_mesh_set_normals(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw
 	desc.values = normals.id;
 	desc.mapping = mapping;
 	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_NORMAL, 0, &desc);
+}
+
+ufbxw_abi ufbxw_light ufbxw_create_light(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxw_light light = { ufbxw_create_element(scene, UFBXW_ELEMENT_LIGHT) };
+	if (node.id) {
+		ufbxwi_connect(scene, UFBXW_CONNECTION_NODE_ATTRIBUTE, light.id, node.id, 0);
+	}
+	return light;
+}
+
+ufbxw_abi void ufbxw_light_set_color(ufbxw_scene *scene, ufbxw_light light, ufbxw_vec3 color)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld);
+	ld->color = color;
+}
+
+ufbxw_abi void ufbxw_light_set_intensity(ufbxw_scene *scene, ufbxw_light light, ufbxw_real intensity)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld);
+	ld->intensity = intensity;
+}
+
+ufbxw_abi ufbxw_camera ufbxw_create_camera(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxw_camera camera = { ufbxw_create_element(scene, UFBXW_ELEMENT_CAMERA) };
+	if (node.id) {
+		ufbxwi_connect(scene, UFBXW_CONNECTION_NODE_ATTRIBUTE, camera.id, node.id, 0);
+	}
+	return camera;
 }
 
 ufbxw_abi void ufbxw_mesh_set_uvs(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec2_buffer uvs, ufbxw_attribute_mapping mapping)
@@ -8178,6 +8609,15 @@ ufbxw_abi ufbxw_skinning_type ufbxw_skin_deformer_get_skinning_type(ufbxw_scene 
 	ufbxwi_skin_deformer *sd = ufbxwi_get_skin_deformer(scene, skin);
 	ufbxwi_check_element(scene, skin.id, sd, UFBXW_SKINNING_TYPE_RIGID);
 	return sd->skinning_type;
+}
+
+ufbxw_abi void ufbxw_skin_deformer_set_mesh_bind_transform(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_matrix matrix)
+{
+	ufbxwi_skin_deformer *sd = ufbxwi_get_skin_deformer(scene, skin);
+	ufbxwi_check_element(scene, skin.id, sd);
+
+	sd->has_mesh_bind_transform = true;
+	sd->mesh_bind_transform = matrix;
 }
 
 ufbxw_abi void ufbxw_skin_deformer_set_bind_pose(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_bind_pose pose)

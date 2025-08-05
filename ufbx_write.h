@@ -138,6 +138,7 @@ typedef enum ufbxw_element_type {
 	UFBXW_ELEMENT_BLEND_CHANNEL,
 	UFBXW_ELEMENT_BLEND_SHAPE,
 	UFBXW_ELEMENT_LIGHT,
+	UFBXW_ELEMENT_CAMERA,
 	UFBXW_ELEMENT_SKELETON,
 	UFBXW_ELEMENT_BIND_POSE,
 
@@ -166,6 +167,8 @@ typedef struct ufbxw_skin_cluster { ufbxw_id id; } ufbxw_skin_cluster;
 typedef struct ufbxw_blend_deformer { ufbxw_id id; } ufbxw_blend_deformer;
 typedef struct ufbxw_blend_channel { ufbxw_id id; } ufbxw_blend_channel;
 typedef struct ufbxw_blend_shape { ufbxw_id id; } ufbxw_blend_shape;
+typedef struct ufbxw_light { ufbxw_id id; } ufbxw_light;
+typedef struct ufbxw_camera { ufbxw_id id; } ufbxw_camera;
 typedef struct ufbxw_bind_pose { ufbxw_id id; } ufbxw_bind_pose;
 typedef struct ufbxw_material { ufbxw_id id; } ufbxw_material;
 typedef struct ufbxw_anim_prop { ufbxw_id id; } ufbxw_anim_prop;
@@ -209,6 +212,8 @@ typedef struct ufbxw_ktime_range {
 #define ufbxw_null_blend_deformer (ufbxw_new(ufbxw_blend_deformer){0})
 #define ufbxw_null_blend_channel (ufbxw_new(ufbxw_blend_channel){0})
 #define ufbxw_null_blend_shape (ufbxw_new(ufbxw_blend_shape){0})
+#define ufbxw_null_light (ufbxw_new(ufbxw_light){0})
+#define ufbxw_null_camera (ufbxw_new(ufbxw_camera){0})
 #define ufbxw_null_bind_pose (ufbxw_new(ufbxw_bind_pose){0})
 #define ufbxw_null_material (ufbxw_new(ufbxw_material){0})
 #define ufbxw_null_anim_prop (ufbxw_new(ufbxw_anim_prop){0})
@@ -401,7 +406,7 @@ typedef enum ufbxw_prop_type {
 	UFBXW_PROP_TYPE_OPTICAL_CENTER_Y,       // < "OpticalCenterY", "", `UFBXW_PROP_DATA_REAL`
 	UFBXW_PROP_TYPE_FIELD_OF_VIEW,          // < "FieldOfView", "", `UFBXW_PROP_DATA_REAL`
 	UFBXW_PROP_TYPE_FIELD_OF_VIEW_X,        // < "FieldOfViewX", "", `UFBXW_PROP_DATA_REAL`
-	UFBYW_PROP_TYPE_FIELD_OF_VIEW_Y,        // < "FieldOfViewY", "", `UFBXW_PROP_DATA_REAL`
+	UFBXW_PROP_TYPE_FIELD_OF_VIEW_Y,        // < "FieldOfViewY", "", `UFBXW_PROP_DATA_REAL`
 	UFBXW_PROP_TYPE_LCL_TRANSLATION,        // < "Lcl Translation", "", `UFBXW_PROP_DATA_VEC3`
 	UFBXW_PROP_TYPE_LCL_ROTATION,           // < "Lcl Rotation", "", `UFBXW_PROP_DATA_VEC3`
 	UFBXW_PROP_TYPE_LCL_SCALING,            // < "Lcl Scaling", "", `UFBXW_PROP_DATA_VEC3`
@@ -718,6 +723,8 @@ ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_scaling(ufbxw_scene *scene, ufbxw_n
 ufbxw_abi ufbxw_transform ufbxw_node_get_local_transform(ufbxw_scene *scene, ufbxw_node node);
 ufbxw_abi ufbxw_matrix ufbxw_node_get_global_transform(ufbxw_scene *scene, ufbxw_node node);
 
+ufbxw_abi void ufbxw_node_set_attribute(ufbxw_scene *scene, ufbxw_node node, ufbxw_id attrib);
+
 // -- Mesh
 
 ufbxw_abi ufbxw_mesh ufbxw_create_mesh(ufbxw_scene *scene);
@@ -761,6 +768,8 @@ ufbxw_abi void ufbxw_skin_deformer_add_mesh(ufbxw_scene *scene, ufbxw_skin_defor
 ufbxw_abi void ufbxw_skin_deformer_set_skinning_type(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_skinning_type type);
 ufbxw_abi ufbxw_skinning_type ufbxw_skin_deformer_get_skinning_type(ufbxw_scene *scene, ufbxw_skin_deformer skin);
 
+ufbxw_abi void ufbxw_skin_deformer_set_mesh_bind_transform(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_matrix matrix);
+
 ufbxw_abi void ufbxw_skin_deformer_set_bind_pose(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_bind_pose pose);
 
 // -- Skin cluster
@@ -801,6 +810,34 @@ ufbxw_abi ufbxw_blend_shape ufbxw_create_blend_shape(ufbxw_scene *scene);
 
 ufbxw_abi void ufbxw_blend_shape_set_offsets(ufbxw_scene *scene, ufbxw_blend_shape shape, ufbxw_int_buffer indices, ufbxw_vec3_buffer offsets);
 ufbxw_abi void ufbxw_blend_shape_set_normals(ufbxw_scene *scene, ufbxw_blend_shape shape, ufbxw_vec3_buffer normals);
+
+// -- Light
+
+typedef enum ufbxw_light_type {
+	UFBXW_LIGHT_POINT,
+	UFBXW_LIGHT_DIRECTIONAL,
+	UFBXW_LIGHT_SPOT,
+	UFBXW_LIGHT_AREA,
+	UFBXW_LIGHT_VOLUME,
+} ufbxw_light_type;
+
+typedef enum ufbxw_light_decay {
+	UFBXW_LIGHT_DECAY_NONE,      // < 1 (no decay)
+	UFBXW_LIGHT_DECAY_LINEAR,    // < 1 / d
+	UFBXW_LIGHT_DECAY_QUADRATIC, // < 1 / d^2 (physically accurate)
+	UFBXW_LIGHT_DECAY_CUBIC,     // < 1 / d^3
+} ufbxw_light_decay;
+
+ufbxw_abi ufbxw_light ufbxw_create_light(ufbxw_scene *scene, ufbxw_node node);
+
+ufbxw_abi void ufbxw_light_set_color(ufbxw_scene *scene, ufbxw_light light, ufbxw_vec3 color);
+ufbxw_abi void ufbxw_light_set_intensity(ufbxw_scene *scene, ufbxw_light light, ufbxw_real intensity);
+
+// TODO: Spot lights etc.
+
+// -- Camera
+
+ufbxw_abi ufbxw_camera ufbxw_create_camera(ufbxw_scene *scene, ufbxw_node node);
 
 // -- Bind pose
 
