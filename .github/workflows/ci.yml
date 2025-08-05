@@ -25,3 +25,16 @@ jobs:
         run: clang -Werror -g -lm -DUFBX_DEV -DUFBXW_DEV ufbx_write.c test/runner.c test/ufbx.c -o build/test-runner
       - name: Run tests
         run: build/test-runner --fuzz --verbose
+  ci_cpp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Create temporary directories
+        run: mkdir -p build
+      - name: Compile as C++
+        run: clang -Werror -g -lm -DUFBX_DEV -DUFBXW_DEV ufbx_write.c misc/test_cpp.cpp -o build/test-cpp
+      - name: Run tests
+        run: build/test-cpp
+

@@ -47,7 +47,7 @@
 
 #if defined(__cplusplus)
 	#define UFBXW_LIST_TYPE(p_name, p_type) struct p_name { p_type *data; size_t count; \
-		p_type &operator[](size_t index) const { ufbx_assert(index < count); return data[index]; } \
+		p_type &operator[](size_t index) const { ufbxw_assert(index < count); return data[index]; } \
 		p_type *begin() const { return data; } \
 		p_type *end() const { return data + count; } \
 	}
@@ -195,20 +195,26 @@ typedef struct ufbxw_ktime_range {
 	ufbxw_ktime end;
 } ufbxw_ktime_range;
 
+#if defined(__cplusplus)
+	#define ufbxw_new(m_type) m_type
+#else
+	#define ufbxw_new(m_type) (m_type)
+#endif
+
 #define ufbxw_null_id ((ufbxw_id)0)
-#define ufbxw_null_node ((ufbxw_node){0})
-#define ufbxw_null_mesh ((ufbxw_mesh){0})
-#define ufbxw_null_skin_deformer ((ufbxw_skin_deformer){0})
-#define ufbxw_null_skin_cluster ((ufbxw_skin_cluster){0})
-#define ufbxw_null_blend_deformer ((ufbxw_blend_deformer){0})
-#define ufbxw_null_blend_channel ((ufbxw_blend_channel){0})
-#define ufbxw_null_blend_shape ((ufbxw_blend_shape){0})
-#define ufbxw_null_bind_pose ((ufbxw_bind_pose){0})
-#define ufbxw_null_material ((ufbxw_material){0})
-#define ufbxw_null_anim_prop ((ufbxw_anim_prop){0})
-#define ufbxw_null_anim_curve ((ufbxw_anim_curve){0})
-#define ufbxw_null_anim_layer ((ufbxw_anim_layer){0})
-#define ufbxw_null_anim_stack ((ufbxw_anim_stack){0})
+#define ufbxw_null_node (ufbxw_new(ufbxw_node){0})
+#define ufbxw_null_mesh (ufbxw_new(ufbxw_mesh){0})
+#define ufbxw_null_skin_deformer (ufbxw_new(ufbxw_skin_deformer){0})
+#define ufbxw_null_skin_cluster (ufbxw_new(ufbxw_skin_cluster){0})
+#define ufbxw_null_blend_deformer (ufbxw_new(ufbxw_blend_deformer){0})
+#define ufbxw_null_blend_channel (ufbxw_new(ufbxw_blend_channel){0})
+#define ufbxw_null_blend_shape (ufbxw_new(ufbxw_blend_shape){0})
+#define ufbxw_null_bind_pose (ufbxw_new(ufbxw_bind_pose){0})
+#define ufbxw_null_material (ufbxw_new(ufbxw_material){0})
+#define ufbxw_null_anim_prop (ufbxw_new(ufbxw_anim_prop){0})
+#define ufbxw_null_anim_curve (ufbxw_new(ufbxw_anim_curve){0})
+#define ufbxw_null_anim_layer (ufbxw_new(ufbxw_anim_layer){0})
+#define ufbxw_null_anim_stack (ufbxw_new(ufbxw_anim_stack){0})
 
 typedef enum ufbxw_connection_type {
 	UFBXW_CONNECTION_NODE_PARENT = 1,   // NODE* -> NODE
@@ -576,7 +582,11 @@ typedef enum ufbxw_skinning_type {
 
 typedef void ufbxw_error_fn(void *user, const ufbxw_error *error);
 
-// --
+// -- API
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef size_t ufbxw_int_stream_fn(void *user, int32_t *dst, size_t dst_size, size_t offset);
 typedef size_t ufbxw_long_stream_fn(void *user, int64_t *dst, size_t dst_size, size_t offset);
@@ -963,6 +973,10 @@ ufbxw_abi ufbxw_vec3 ufbxw_quat_to_euler(ufbxw_quat q, ufbxw_rotation_order orde
 ufbxw_abi ufbxw_quat ufbxw_euler_to_quat(ufbxw_vec3 v, ufbxw_rotation_order order);
 
 ufbxw_abi ufbxw_string ufbxw_str(const char *str);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

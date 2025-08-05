@@ -7232,6 +7232,10 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc)
 
 // -- API
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 ufbxw_abi_data_def const ufbxw_string ufbxw_empty_string = { ufbxwi_empty_char, 0 };
 ufbxw_abi_data_def const ufbxw_vec2 ufbxw_zero_vec2 = { 0.0f, 0.0f };
 ufbxw_abi_data_def const ufbxw_vec3 ufbxw_zero_vec3 = { 0.0f, 0.0f, 0.0f };
@@ -8703,6 +8707,7 @@ ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *pat
 	memcpy(copy, path, path_len);
 	copy[path_len] = '\0';
 
+	// TODO: fopen_s() etc
 	FILE *f = fopen(copy, "wb");
 	if (!f) return false;
 
@@ -8959,5 +8964,9 @@ ufbxw_abi ufbxw_string ufbxw_str(const char *str)
 {
 	return ufbxwi_c_str(str);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
