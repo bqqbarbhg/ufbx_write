@@ -91,8 +91,22 @@ typedef struct ufbxw_quat {
 } ufbxw_quat;
 
 typedef struct ufbxw_matrix {
-	ufbxw_real m[16];
+	union {
+		ufbxw_real m[16];
+		struct {
+			ufbxw_real m00, m10, m20, m30;
+			ufbxw_real m01, m11, m21, m31;
+			ufbxw_real m02, m12, m22, m32;
+			ufbxw_real m03, m13, m23, m33;
+		};
+	};
 } ufbxw_matrix;
+
+typedef struct ufbxw_transform {
+	ufbxw_vec3 translation;
+	ufbxw_quat rotation;
+	ufbxw_vec3 scale;
+} ufbxw_transform;
 
 ufbxw_abi_data const ufbxw_string ufbxw_empty_string;
 ufbxw_abi_data const ufbxw_vec2 ufbxw_zero_vec2;
@@ -240,6 +254,7 @@ typedef enum ufbxw_error_type {
 	UFBXW_ERROR_PROP_NOT_FOUND,
 	UFBXW_ERROR_WRONG_DATA_TYPE,
 	UFBXW_ERROR_INDEX_OUT_OF_BOUNDS,
+	UFBXW_ERROR_CYCLICAL_PARENT,
 
 	// Fatal errors
 	UFBXW_ERROR_FATAL,
@@ -690,6 +705,9 @@ ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_translation(ufbxw_scene *scene, ufb
 ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer);
 ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer);
 
+ufbxw_abi ufbxw_transform ufbxw_node_get_local_transform(ufbxw_scene *scene, ufbxw_node node);
+ufbxw_abi ufbxw_matrix ufbxw_node_get_global_transform(ufbxw_scene *scene, ufbxw_node node);
+
 // -- Mesh
 
 ufbxw_abi ufbxw_mesh ufbxw_create_mesh(ufbxw_scene *scene);
@@ -937,6 +955,12 @@ ufbxw_abi bool ufbxw_save_file_len(ufbxw_scene *scene, const char *path, size_t 
 ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error);
 
 // -- Utility
+
+ufbxw_abi ufbxw_matrix ufbxw_transform_to_matrix(const ufbxw_transform *t);
+
+ufbxw_abi ufbxw_vec3 ufbxw_quat_rotate_vec3(ufbxw_quat q, ufbxw_vec3 v);
+ufbxw_abi ufbxw_vec3 ufbxw_quat_to_euler(ufbxw_quat q, ufbxw_rotation_order order);
+ufbxw_abi ufbxw_quat ufbxw_euler_to_quat(ufbxw_vec3 v, ufbxw_rotation_order order);
 
 ufbxw_abi ufbxw_string ufbxw_str(const char *str);
 

@@ -262,6 +262,55 @@
 	}
 #endif
 
+#define UFBXWI_PI ((ufbxw_real)3.14159265358979323846)
+#define UFBXWI_DPI (3.14159265358979323846)
+#define UFBXWI_DEG_TO_RAD_DOUBLE (UFBXWI_DPI / 180.0)
+#define UFBXWI_RAD_TO_DEG_DOUBLE (180.0 / UFBXWI_DPI)
+
+// -- Math
+
+#if !defined(UFBXW_EXTERNAL_MATH)
+	#if !defined(UFBXW_MATH_PREFIX)
+		#define UFBXW_MATH_PREFIX
+	#endif
+#endif
+
+#define ufbxwi_pre_cat2(a, b) a##b
+#define ufbxwi_pre_cat(a, b) ufbxwi_pre_cat2(a, b)
+
+// -- External functions
+
+#ifndef ufbxw_extern_abi
+	#if defined(UFBXW_STATIC)
+		#define ufbxw_extern_abi static
+	#else
+		#define ufbxw_extern_abi
+	#endif
+#endif
+
+#if defined(UFBXW_MATH_PREFIX)
+	#define ufbxwi_math_fn(name) ufbxwi_pre_cat(UFBXW_MATH_PREFIX, name)
+	#define ufbxw_sqrt ufbxwi_math_fn(sqrt)
+	#define ufbxw_fabs ufbxwi_math_fn(fabs)
+	#define ufbxw_pow ufbxwi_math_fn(pow)
+	#define ufbxw_sin ufbxwi_math_fn(sin)
+	#define ufbxw_cos ufbxwi_math_fn(cos)
+	#define ufbxw_tan ufbxwi_math_fn(tan)
+	#define ufbxw_asin ufbxwi_math_fn(asin)
+	#define ufbxw_acos ufbxwi_math_fn(acos)
+	#define ufbxw_atan ufbxwi_math_fn(atan)
+	#define ufbxw_atan2 ufbxwi_math_fn(atan2)
+	#define ufbxw_copysign ufbxwi_math_fn(copysign)
+	#define ufbxw_fmin ufbxwi_math_fn(fmin)
+	#define ufbxw_fmax ufbxwi_math_fn(fmax)
+	#define ufbxw_nextafter ufbxwi_math_fn(nextafter)
+	#define ufbxw_rint ufbxwi_math_fn(rint)
+	#define ufbxw_floor ufbxwi_math_fn(floor)
+	#define ufbxw_ceil ufbxwi_math_fn(ceil)
+#endif
+
+// TODO: External
+
 // -- Error
 
 static const char ufbxwi_empty_char[] = "";
@@ -4987,6 +5036,130 @@ static void ufbxwi_init_scene(ufbxw_scene *scene)
 	ufbxwi_create_defaults(scene);
 }
 
+// -- Node
+
+static ufbxwi_forceinline bool ufbxwi_is_vec3_zero(ufbxw_vec3 v)
+{
+	return (v.x == 0.0) & (v.y == 0.0) & (v.z == 0.0);
+}
+
+static ufbxwi_forceinline bool ufbxwi_is_quat_identity(ufbxw_quat v)
+{
+	return (v.x == 0.0) & (v.y == 0.0) & (v.z == 0.0) & (v.w == 1.0);
+}
+
+static ufbxwi_forceinline void ufbxwi_add_translate(ufbxw_transform *t, ufbxw_vec3 v)
+{
+	t->translation.x += v.x;
+	t->translation.y += v.y;
+	t->translation.z += v.z;
+}
+
+static ufbxwi_forceinline void ufbxwi_sub_translate(ufbxw_transform *t, ufbxw_vec3 v)
+{
+	t->translation.x -= v.x;
+	t->translation.y -= v.y;
+	t->translation.z -= v.z;
+}
+
+static ufbxwi_forceinline void ufbxwi_mul_scale(ufbxw_transform *t, ufbxw_vec3 v)
+{
+	t->translation.x *= v.x;
+	t->translation.y *= v.y;
+	t->translation.z *= v.z;
+	t->scale.x *= v.x;
+	t->scale.y *= v.y;
+	t->scale.z *= v.z;
+}
+
+static ufbxwi_noinline ufbxw_quat ufbxwi_mul_quat(ufbxw_quat a, ufbxw_quat b)
+{
+	ufbxw_quat r;
+	r.x = a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y;
+	r.y = a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x;
+	r.z = a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w;
+	r.w = a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z;
+	return r;
+}
+
+static void ufbxwi_mul_rotate(ufbxw_transform *t, ufbxw_vec3 v, ufbxw_rotation_order order)
+{
+	if (ufbxwi_is_vec3_zero(v)) return;
+
+	ufbxw_quat q = ufbxw_euler_to_quat(v, order);
+	if (t->rotation.w != 1.0) {
+		t->rotation = ufbxwi_mul_quat(q, t->rotation);
+	} else {
+		t->rotation = q;
+	}
+
+	if (!ufbxwi_is_vec3_zero(t->translation)) {
+		t->translation = ufbxw_quat_rotate_vec3(q, t->translation);
+	}
+}
+
+static void ufbxwi_mul_rotate_quat(ufbxw_transform *t, ufbxw_quat q)
+{
+	if (ufbxwi_is_quat_identity(q)) return;
+
+	if (t->rotation.w != 1.0) {
+		t->rotation = ufbxwi_mul_quat(q, t->rotation);
+	} else {
+		t->rotation = q;
+	}
+
+	if (!ufbxwi_is_vec3_zero(t->translation)) {
+		t->translation = ufbxw_quat_rotate_vec3(q, t->translation);
+	}
+}
+
+static void ufbxwi_mul_inv_rotate(ufbxw_transform *t, ufbxw_vec3 v, ufbxw_rotation_order order)
+{
+	if (ufbxwi_is_vec3_zero(v)) return;
+
+	ufbxw_quat q = ufbxw_euler_to_quat(v, order);
+	q.x = -q.x; q.y = -q.y; q.z = -q.z;
+	if (t->rotation.w != 1.0) {
+		t->rotation = ufbxwi_mul_quat(q, t->rotation);
+	} else {
+		t->rotation = q;
+	}
+
+	if (!ufbxwi_is_vec3_zero(t->translation)) {
+		t->translation = ufbxw_quat_rotate_vec3(q, t->translation);
+	}
+}
+
+static ufbxwi_noinline ufbxw_matrix ufbxwi_matrix_mul_affine(const ufbxw_matrix *a, const ufbxw_matrix *b)
+{
+	ufbxw_assert(a && b);
+	if (!a || !b) return ufbxw_identity_matrix;
+
+	ufbxw_matrix dst;
+
+	dst.m00 = a->m00*b->m00 + a->m01*b->m10 + a->m02*b->m20;
+	dst.m10 = a->m10*b->m00 + a->m11*b->m10 + a->m12*b->m20;
+	dst.m20 = a->m20*b->m00 + a->m21*b->m10 + a->m22*b->m20;
+	dst.m30 = 0.0f;
+
+	dst.m01 = a->m00*b->m01 + a->m01*b->m11 + a->m02*b->m21;
+	dst.m11 = a->m10*b->m01 + a->m11*b->m11 + a->m12*b->m21;
+	dst.m21 = a->m20*b->m01 + a->m21*b->m11 + a->m22*b->m21;
+	dst.m31 = 0.0f;
+
+	dst.m02 = a->m00*b->m02 + a->m01*b->m12 + a->m02*b->m22;
+	dst.m12 = a->m10*b->m02 + a->m11*b->m12 + a->m12*b->m22;
+	dst.m22 = a->m20*b->m02 + a->m21*b->m12 + a->m22*b->m22;
+	dst.m32 = 0.0f;
+
+	dst.m03 = a->m00*b->m03 + a->m01*b->m13 + a->m02*b->m23 + a->m03;
+	dst.m13 = a->m10*b->m03 + a->m11*b->m13 + a->m12*b->m23 + a->m13;
+	dst.m23 = a->m20*b->m03 + a->m21*b->m13 + a->m22*b->m23 + a->m23;
+	dst.m33 = 1.0f;
+
+	return dst;
+}
+
 // -- Mesh
 
 typedef enum {
@@ -5387,10 +5560,9 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 				}
 			}
 
-			// Use current position for bind pose?
 			if (mesh_node.id) {
-				// TODO: Actually calculate this
-				ufbxw_bind_pose_add_node(scene, pose, mesh_node, ufbxw_identity_matrix);
+				ufbxw_matrix bind_matrix = ufbxw_node_get_global_transform(scene, mesh_node);
+				ufbxw_bind_pose_add_node(scene, pose, mesh_node, bind_matrix);
 			}
 
 			ufbxwi_for_id_list(ufbxw_id, cluster_id, skin->clusters) {
@@ -7714,6 +7886,61 @@ ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_scaling(ufbxw_scene *scene, ufbxw_n
 	return ufbxwi_animate_prop(scene, node.id, UFBXWI_Lcl_Scaling, layer);
 }
 
+ufbxw_abi ufbxw_transform ufbxw_node_get_local_transform(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxw_transform t = { { 0,0,0 }, { 0,0,0,1 }, { 1,1,1 }};
+	ufbxwi_node *nd = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, nd, t);
+
+	// WorldTransform = ParentWorldTransform * T * Roff * Rp * Rpre * R * Rpost * Rp-1 * Soff * Sp * S * Sp-1
+	// NOTE: Rpost is inverted (!) after converting from PostRotation Euler angles
+
+	ufbxwi_sub_translate(&t, nd->scaling_pivot);
+	ufbxwi_mul_scale(&t, nd->lcl_scaling);
+	ufbxwi_add_translate(&t, nd->scaling_pivot);
+
+	ufbxwi_add_translate(&t, nd->scaling_offset);
+
+	ufbxwi_sub_translate(&t, nd->rotation_pivot);
+	ufbxwi_mul_inv_rotate(&t, nd->post_rotation, UFBXW_ROTATION_ORDER_XYZ);
+	ufbxwi_mul_rotate(&t, nd->lcl_rotation, (ufbxw_rotation_order)nd->rotation_order);
+	ufbxwi_mul_rotate(&t, nd->pre_rotation, UFBXW_ROTATION_ORDER_XYZ);
+	ufbxwi_add_translate(&t, nd->rotation_pivot);
+
+	ufbxwi_add_translate(&t, nd->rotation_offset);
+
+	ufbxwi_add_translate(&t, nd->lcl_translation);
+
+	return t;
+}
+
+ufbxw_abi ufbxw_matrix ufbxw_node_get_global_transform(ufbxw_scene *scene, ufbxw_node node)
+{
+	size_t max_depth = scene->num_elements + 1;
+
+	ufbxw_transform local_transform = ufbxw_node_get_local_transform(scene, node);
+	ufbxw_matrix result = ufbxw_transform_to_matrix(&local_transform);
+
+	// TODO: Handle inheritance modes
+	size_t depth = 0;
+	for (; depth < max_depth; depth++) {
+		ufbxw_node parent = ufbxw_node_get_parent(scene, node);
+		if (parent.id == 0) break;
+
+		ufbxw_transform parent_transform = ufbxw_node_get_local_transform(scene, parent);
+		ufbxw_matrix parent_matrix = ufbxw_transform_to_matrix(&parent_transform);
+		result = ufbxwi_matrix_mul_affine(&parent_matrix, &result);
+
+		node = parent;
+	}
+	if (depth == max_depth) {
+		ufbxwi_fail(&scene->error, UFBXW_ERROR_CYCLICAL_PARENT, "cyclical parent hierarchy");
+		return ufbxw_identity_matrix;
+	}
+
+	return result;
+}
+
 ufbxw_abi void ufbxw_node_set_parent(ufbxw_scene *scene, ufbxw_node node, ufbxw_node parent)
 {
 	if (parent.id == ufbxw_null_id) {
@@ -8531,6 +8758,201 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 	}
 
 	return true;
+}
+
+ufbxw_abi ufbxwi_noinline ufbxw_matrix ufbxw_transform_to_matrix(const ufbxw_transform *t)
+{
+	ufbxw_assert(t);
+	if (!t) return ufbxw_identity_matrix;
+
+	ufbxw_quat q = t->rotation;
+	ufbxw_real sx = 2.0f * t->scale.x, sy = 2.0f * t->scale.y, sz = 2.0f * t->scale.z;
+	ufbxw_real xx = q.x*q.x, xy = q.x*q.y, xz = q.x*q.z, xw = q.x*q.w;
+	ufbxw_real yy = q.y*q.y, yz = q.y*q.z, yw = q.y*q.w;
+	ufbxw_real zz = q.z*q.z, zw = q.z*q.w;
+	ufbxw_matrix m;
+	m.m00 = sx * (- yy - zz + 0.5f);
+	m.m10 = sx * (+ xy + zw);
+	m.m20 = sx * (- yw + xz);
+	m.m01 = sy * (- zw + xy);
+	m.m11 = sy * (- xx - zz + 0.5f);
+	m.m21 = sy * (+ xw + yz);
+	m.m02 = sz * (+ xz + yw);
+	m.m12 = sz * (- xw + yz);
+	m.m22 = sz * (- xx - yy + 0.5f);
+	m.m03 = t->translation.x;
+	m.m13 = t->translation.y;
+	m.m23 = t->translation.z;
+	return m;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_quat_rotate_vec3(ufbxw_quat q, ufbxw_vec3 v)
+{
+	ufbxw_real xy = q.x*v.y - q.y*v.x;
+	ufbxw_real xz = q.x*v.z - q.z*v.x;
+	ufbxw_real yz = q.y*v.z - q.z*v.y;
+	ufbxw_vec3 r;
+	r.x = 2.0f * (+ q.w*yz + q.y*xy + q.z*xz) + v.x;
+	r.y = 2.0f * (- q.x*xy - q.w*xz + q.z*yz) + v.y;
+	r.z = 2.0f * (- q.x*xz - q.y*yz + q.w*xy) + v.z;
+	return r;
+}
+
+ufbxw_abi ufbxwi_noinline ufbxw_quat ufbxw_euler_to_quat(ufbxw_vec3 v, ufbxw_rotation_order order)
+{
+	double vx = v.x * (UFBXWI_DEG_TO_RAD_DOUBLE * 0.5);
+	double vy = v.y * (UFBXWI_DEG_TO_RAD_DOUBLE * 0.5);
+	double vz = v.z * (UFBXWI_DEG_TO_RAD_DOUBLE * 0.5);
+	double cx = ufbxw_cos(vx), sx = ufbxw_sin(vx);
+	double cy = ufbxw_cos(vy), sy = ufbxw_sin(vy);
+	double cz = ufbxw_cos(vz), sz = ufbxw_sin(vz);
+	ufbxw_quat q;
+
+	// Generated by `misc/gen_rotation_order.py`
+	switch (order) {
+	case UFBXW_ROTATION_ORDER_XYZ:
+		q.x = (ufbxw_real)(-cx*sy*sz + cy*cz*sx);
+		q.y = (ufbxw_real)(cx*cz*sy + cy*sx*sz);
+		q.z = (ufbxw_real)(cx*cy*sz - cz*sx*sy);
+		q.w = (ufbxw_real)(cx*cy*cz + sx*sy*sz);
+		break;
+	case UFBXW_ROTATION_ORDER_XZY:
+		q.x = (ufbxw_real)(cx*sy*sz + cy*cz*sx);
+		q.y = (ufbxw_real)(cx*cz*sy + cy*sx*sz);
+		q.z = (ufbxw_real)(cx*cy*sz - cz*sx*sy);
+		q.w = (ufbxw_real)(cx*cy*cz - sx*sy*sz);
+		break;
+	case UFBXW_ROTATION_ORDER_YZX:
+		q.x = (ufbxw_real)(-cx*sy*sz + cy*cz*sx);
+		q.y = (ufbxw_real)(cx*cz*sy - cy*sx*sz);
+		q.z = (ufbxw_real)(cx*cy*sz + cz*sx*sy);
+		q.w = (ufbxw_real)(cx*cy*cz + sx*sy*sz);
+		break;
+	case UFBXW_ROTATION_ORDER_YXZ:
+		q.x = (ufbxw_real)(-cx*sy*sz + cy*cz*sx);
+		q.y = (ufbxw_real)(cx*cz*sy + cy*sx*sz);
+		q.z = (ufbxw_real)(cx*cy*sz + cz*sx*sy);
+		q.w = (ufbxw_real)(cx*cy*cz - sx*sy*sz);
+		break;
+	case UFBXW_ROTATION_ORDER_ZXY:
+		q.x = (ufbxw_real)(cx*sy*sz + cy*cz*sx);
+		q.y = (ufbxw_real)(cx*cz*sy - cy*sx*sz);
+		q.z = (ufbxw_real)(cx*cy*sz - cz*sx*sy);
+		q.w = (ufbxw_real)(cx*cy*cz + sx*sy*sz);
+		break;
+	case UFBXW_ROTATION_ORDER_ZYX:
+		q.x = (ufbxw_real)(cx*sy*sz + cy*cz*sx);
+		q.y = (ufbxw_real)(cx*cz*sy - cy*sx*sz);
+		q.z = (ufbxw_real)(cx*cy*sz + cz*sx*sy);
+		q.w = (ufbxw_real)(cx*cy*cz - sx*sy*sz);
+		break;
+	default:
+		q.x = q.y = q.z = 0.0f; q.w = 1.0f;
+		break;
+	}
+
+	return q;
+}
+
+ufbxw_abi ufbxwi_noinline ufbxw_vec3 ufbxw_quat_to_euler(ufbxw_quat q, ufbxw_rotation_order order)
+{
+	// TODO: Derive these rigorously
+	#if defined(UFBXW_REAL_IS_FLOAT)
+		const double eps = 0.9999999;
+	#else
+		const double eps = 0.999999999;
+	#endif
+
+	double vx, vy, vz;
+	double t;
+
+	double qx = q.x, qy = q.y, qz = q.z, qw = q.w;
+
+	// Generated by `misc/gen_quat_to_euler.py`
+	switch (order) {
+	case UFBXW_ROTATION_ORDER_XYZ:
+		t = 2.0f*(qw*qy - qx*qz);
+		if (ufbxw_fabs(t) < eps) {
+			vy = ufbxw_asin(t);
+			vz = ufbxw_atan2(2.0f*(qw*qz + qx*qy), 2.0f*(qw*qw + qx*qx) - 1.0f);
+			vx = -ufbxw_atan2(-2.0f*(qw*qx + qy*qz), 2.0f*(qw*qw + qz*qz) - 1.0f);
+		} else {
+			vy = ufbxw_copysign(UFBXWI_DPI*0.5, t);
+			vz = ufbxw_atan2(-2.0f*t*(qw*qx - qy*qz), t*(2.0f*qw*qy + 2.0f*qx*qz));
+			vx = 0.0f;
+		}
+		break;
+	case UFBXW_ROTATION_ORDER_XZY:
+		t = 2.0f*(qw*qz + qx*qy);
+		if (ufbxw_fabs(t) < eps) {
+			vz = ufbxw_asin(t);
+			vy = ufbxw_atan2(2.0f*(qw*qy - qx*qz), 2.0f*(qw*qw + qx*qx) - 1.0f);
+			vx = -ufbxw_atan2(-2.0f*(qw*qx - qy*qz), 2.0f*(qw*qw + qy*qy) - 1.0f);
+		} else {
+			vz = ufbxw_copysign(UFBXWI_DPI*0.5, t);
+			vy = ufbxw_atan2(2.0f*t*(qw*qx + qy*qz), -t*(2.0f*qx*qy - 2.0f*qw*qz));
+			vx = 0.0f;
+		}
+		break;
+	case UFBXW_ROTATION_ORDER_YZX:
+		t = 2.0f*(qw*qz - qx*qy);
+		if (ufbxw_fabs(t) < eps) {
+			vz = ufbxw_asin(t);
+			vx = ufbxw_atan2(2.0f*(qw*qx + qy*qz), 2.0f*(qw*qw + qy*qy) - 1.0f);
+			vy = -ufbxw_atan2(-2.0f*(qw*qy + qx*qz), 2.0f*(qw*qw + qx*qx) - 1.0f);
+		} else {
+			vz = ufbxw_copysign(UFBXWI_DPI*0.5, t);
+			vx = ufbxw_atan2(-2.0f*t*(qw*qy - qx*qz), t*(2.0f*qw*qz + 2.0f*qx*qy));
+			vy = 0.0f;
+		}
+		break;
+	case UFBXW_ROTATION_ORDER_YXZ:
+		t = 2.0f*(qw*qx + qy*qz);
+		if (ufbxw_fabs(t) < eps) {
+			vx = ufbxw_asin(t);
+			vz = ufbxw_atan2(2.0f*(qw*qz - qx*qy), 2.0f*(qw*qw + qy*qy) - 1.0f);
+			vy = -ufbxw_atan2(-2.0f*(qw*qy - qx*qz), 2.0f*(qw*qw + qz*qz) - 1.0f);
+		} else {
+			vx = ufbxw_copysign(UFBXWI_DPI*0.5, t);
+			vz = ufbxw_atan2(2.0f*t*(qw*qy + qx*qz), -t*(2.0f*qy*qz - 2.0f*qw*qx));
+			vy = 0.0f;
+		}
+		break;
+	case UFBXW_ROTATION_ORDER_ZXY:
+		t = 2.0f*(qw*qx - qy*qz);
+		if (ufbxw_fabs(t) < eps) {
+			vx = ufbxw_asin(t);
+			vy = ufbxw_atan2(2.0f*(qw*qy + qx*qz), 2.0f*(qw*qw + qz*qz) - 1.0f);
+			vz = -ufbxw_atan2(-2.0f*(qw*qz + qx*qy), 2.0f*(qw*qw + qy*qy) - 1.0f);
+		} else {
+			vx = ufbxw_copysign(UFBXWI_DPI*0.5, t);
+			vy = ufbxw_atan2(-2.0f*t*(qw*qz - qx*qy), t*(2.0f*qw*qx + 2.0f*qy*qz));
+			vz = 0.0f;
+		}
+		break;
+	case UFBXW_ROTATION_ORDER_ZYX:
+		t = 2.0f*(qw*qy + qx*qz);
+		if (ufbxw_fabs(t) < eps) {
+			vy = ufbxw_asin(t);
+			vx = ufbxw_atan2(2.0f*(qw*qx - qy*qz), 2.0f*(qw*qw + qz*qz) - 1.0f);
+			vz = -ufbxw_atan2(-2.0f*(qw*qz - qx*qy), 2.0f*(qw*qw + qx*qx) - 1.0f);
+		} else {
+			vy = ufbxw_copysign(UFBXWI_DPI*0.5, t);
+			vx = ufbxw_atan2(2.0f*t*(qw*qz + qx*qy), -t*(2.0f*qx*qz - 2.0f*qw*qy));
+			vz = 0.0f;
+		}
+		break;
+	default:
+		vx = vy = vz = 0.0;
+		break;
+	}
+
+	vx *= UFBXWI_RAD_TO_DEG_DOUBLE;
+	vy *= UFBXWI_RAD_TO_DEG_DOUBLE;
+	vz *= UFBXWI_RAD_TO_DEG_DOUBLE;
+
+	ufbxw_vec3 v = { (ufbxw_real)vx, (ufbxw_real)vy, (ufbxw_real)vz };
+	return v;
 }
 
 ufbxw_abi ufbxw_string ufbxw_str(const char *str)
