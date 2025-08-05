@@ -15,7 +15,7 @@ UFBXWT_SCENE_CHECK(camera_defaults)
 	ufbx_node *node = ufbx_find_node(scene, "Node");
 	ufbxwt_assert(node);
 
-	ufbxw_camera *camera = node->camera;
+	ufbx_camera *camera = node->camera;
 	ufbxwt_assert(camera);
 }
 #endif
