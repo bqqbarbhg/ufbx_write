@@ -61,6 +61,16 @@
 	#define ufbxwi_unlikely(cond) (cond)
 #endif
 
+#if !defined(UFBXW_STANDARD_C) && defined(__clang__)
+	#define ufbxwi_nounroll _Pragma("clang loop unroll(disable)") _Pragma("clang loop vectorize(disable)")
+#elif !defined(UFBXW_STANDARD_C) && UFBXWI_GNUC >= 8
+	#define ufbxwi_nounroll _Pragma("GCC unroll 0")
+#elif !defined(UFBXW_STANDARD_C) && defined(_MSC_VER)
+	#define ufbxwi_nounroll __pragma(loop(no_vector))
+#else
+	#define ufbxwi_nounroll
+#endif
+
 // Should be standard in C99 and C++11
 #define ufbxwi_func __func__
 
@@ -1946,7 +1956,7 @@ static const ufbxwi_buffer_type_info ufbxwi_buffer_type_infos[] = {
 	{ sizeof(ufbxw_vec3), 3, UFBXWI_BUFFER_TYPE_REAL },
 	{ sizeof(ufbxw_vec4), 4, UFBXWI_BUFFER_TYPE_REAL },
 	{ sizeof(float), 1, UFBXWI_BUFFER_TYPE_FLOAT },
-	{ sizeof(float), 4, UFBXWI_BUFFER_TYPE_FLOAT, UFBXWI_BUFFER_TYPE_FLAG_ASCII_INT },
+	{ sizeof(float) * 4, 4, UFBXWI_BUFFER_TYPE_FLOAT, UFBXWI_BUFFER_TYPE_FLAG_ASCII_INT },
 };
 
 static ufbxwi_forceinline ufbxw_id ufbxwi_make_buffer_id(ufbxwi_buffer_type type, uint32_t generation, size_t index)
@@ -2735,7 +2745,7 @@ typedef struct {
 
 	int32_t rotation_order;
 	int32_t inherit_type;
-	bool visibility;
+	ufbxw_real visibility;
 	bool visibility_inheritance;
 
 	int32_t default_attribute_index;
@@ -3132,7 +3142,7 @@ static const ufbxwi_prop_type_desc ufbxwi_prop_types[] = {
 	{ "Number", "", UFBXW_PROP_DATA_USER_REAL },
 	{ "KString", "", UFBXW_PROP_DATA_STRING },
 	{ "Enum", "", UFBXW_PROP_DATA_USER_ENUM },
-	{ "Visibility", "", UFBXW_PROP_DATA_BOOL },
+	{ "Visibility", "", UFBXW_PROP_DATA_REAL },
 	{ "Visibility Inheritance", "", UFBXW_PROP_DATA_BOOL },
 	{ "Roll", "", UFBXW_PROP_DATA_REAL },
 	{ "OpticalCenterX", "", UFBXW_PROP_DATA_REAL },
@@ -3333,7 +3343,7 @@ static const ufbxwi_prop_desc ufbxwi_node_props[] = {
 	{ UFBXWI_Lcl_Translation, UFBXW_PROP_TYPE_LCL_TRANSLATION, ufbxwi_field(ufbxwi_node, lcl_translation), 0, UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_Lcl_Rotation, UFBXW_PROP_TYPE_LCL_ROTATION, ufbxwi_field(ufbxwi_node, lcl_rotation), 0, UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_Lcl_Scaling, UFBXW_PROP_TYPE_LCL_SCALING, ufbxwi_field(ufbxwi_node, lcl_scaling), ufbxwi_default(vec3_1), UFBXW_PROP_FLAG_ANIMATABLE },
-	{ UFBXWI_Visibility, UFBXW_PROP_TYPE_VISIBILITY, ufbxwi_field(ufbxwi_node, visibility), ufbxwi_default(bool_true), UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_Visibility, UFBXW_PROP_TYPE_VISIBILITY, ufbxwi_field(ufbxwi_node, visibility), ufbxwi_default(double_1), UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_Visibility_Inheritance, UFBXW_PROP_TYPE_VISIBILITY_INHERITANCE, ufbxwi_field(ufbxwi_node, visibility_inheritance), ufbxwi_default(bool_true) },
 };
 
@@ -4066,7 +4076,7 @@ static bool ufbxwi_init_node(ufbxw_scene *scene, void *data)
 	ufbxwi_node *node = (ufbxwi_node*)data;
 	node->lcl_scaling = ufbxwi_one_vec3;
 	node->geometric_scaling = ufbxwi_one_vec3;
-	node->visibility = true;
+	node->visibility = 1.0;
 	node->visibility_inheritance = true;
 	return true;
 }
@@ -5798,17 +5808,6 @@ ufbxw_abi void ufbxw_set_save_info(ufbxw_scene *scene, const ufbxw_save_info *in
 	ufbxwi_intern_string_str(&scene->string_pool, &scene_info->original_date_time, original_time);
 }
 
-ufbxw_abi void ufbxw_override_creator(ufbxw_scene *scene, const char *creator)
-{
-	ufbxw_override_creator_len(scene, creator, strlen(creator));
-}
-
-ufbxw_abi void ufbxw_override_creator_len(ufbxw_scene *scene, const char *creator, size_t creator_len)
-{
-	scene->override_creator = true;
-	ufbxwi_intern_string(&scene->string_pool, &scene->creator, creator, creator_len);
-}
-
 static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *opts)
 {
 	size_t element_count = scene->num_elements;
@@ -5987,9 +5986,19 @@ UFBXWI_LIST_TYPE(ufbxwi_save_object_type_list, ufbxwi_save_object_type);
 UFBXWI_LIST_TYPE(ufbxwi_mesh_attribute_ptr_list, ufbxwi_mesh_attribute*);
 
 typedef struct {
+	uint64_t file_offset;
+	uint64_t end_offset;
+	uint64_t num_values;
+	uint64_t values_len;
+} ufbxwi_binary_node_header;
+
+UFBXWI_LIST_TYPE(ufbxwi_binary_node_header_list, ufbxwi_binary_node_header);
+
+typedef struct {
 	ufbxwi_allocator ator;
 
 	ufbxwi_error error;
+	bool ascii;
 	ufbxw_save_opts opts;
 
 	ufbxw_scene *scene;
@@ -6005,6 +6014,9 @@ typedef struct {
 	char *buffer_end;
 	size_t direct_write_size;
 
+	char *stream_buffer;
+	size_t stream_buffer_size;
+
 	uint64_t file_pos;
 
 	ufbxwi_prop_list tmp_prop_list;
@@ -6012,6 +6024,7 @@ typedef struct {
 	ufbxwi_conn_list tmp_conns;
 
 	ufbxwi_mesh_attribute_ptr_list tmp_attributes;
+	ufbxwi_binary_node_header_list binary_headers;
 
 } ufbxwi_save_context;
 
@@ -6041,17 +6054,24 @@ static ufbxwi_noinline void ufbxwi_write_slow(ufbxwi_save_context *sc, const voi
 	char *dst = sc->buffer_pos;
 	size_t left = ufbxwi_to_size(sc->buffer_end - dst);
 	if (left >= length) {
-		memcpy(dst, data, length);
+		if (data) {
+			memcpy(dst, data, length);
+		}
 		sc->buffer_pos = dst + length;
 	} else {
-		memcpy(dst, data, left);
+		if (data) {
+			memcpy(dst, data, left);
+			data = (const char*)data + left;
+		}
 
-		data = (const char*)data + left;
 		length -= left;
-
 		ufbxwi_write_flush(sc);
 
 		if (length >= sc->direct_write_size) {
+
+			// We should only skip at most 32 bytes or so.
+			ufbxw_assert(data);
+
 			bool write_ok = sc->stream.write_fn(sc->stream.user, sc->file_pos, data, length);
 			if (!write_ok) {
 				ufbxwi_fail(&sc->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
@@ -6061,9 +6081,27 @@ static ufbxwi_noinline void ufbxwi_write_slow(ufbxwi_save_context *sc, const voi
 			sc->file_pos += (uint64_t)length;
 			sc->buffer_pos = sc->buffer;
 		} else {
-			memcpy(sc->buffer_pos, data, length);
+			if (data) {
+				memcpy(sc->buffer_pos, data, length);
+			}
 			sc->buffer_pos += length;
 		}
+	}
+}
+
+static ufbxwi_noinline void ufbxwi_write_at_slow(ufbxwi_save_context *sc, uint64_t pos, const void *data, size_t length)
+{
+	// Straddling the buffered area, just flush for now
+	if (pos + length >= sc->file_pos) {
+		ufbxwi_write_flush(sc);
+	}
+
+	if (ufbxwi_is_fatal(&sc->error)) return;
+
+	bool write_ok = sc->stream.write_fn(sc->stream.user, pos, sc->buffer, length);
+	if (!write_ok) {
+		ufbxwi_fail(&sc->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
+		return;
 	}
 }
 
@@ -6076,6 +6114,37 @@ static ufbxwi_forceinline void ufbxwi_write(ufbxwi_save_context *sc, const void 
 		sc->buffer_pos = dst + length;
 	} else {
 		ufbxwi_write_slow(sc, data, length);
+	}
+}
+
+static ufbxwi_forceinline void ufbxwi_write_at(ufbxwi_save_context *sc, uint64_t pos, const void *data, size_t length)
+{
+	int64_t relative_pos = pos - sc->file_pos;
+
+	if (relative_pos >= 0) {
+		// Must be within the buffer, ufbxwi_write_at() is only called backwards
+		char *dst = sc->buffer + relative_pos;
+		ufbxwi_dev_assert(dst + length <= sc->buffer_end);
+		memcpy(dst, data, length);
+	} else {
+		ufbxwi_write_at_slow(sc, pos, data, length);
+	}
+}
+
+static ufbxwi_forceinline uint64_t ufbxwi_get_file_position(ufbxwi_save_context *sc)
+{
+	size_t buffer_pos = ufbxwi_to_size(sc->buffer_pos - sc->buffer);
+	return sc->file_pos + buffer_pos;
+}
+
+static void ufbxwi_write_skip(ufbxwi_save_context *sc, size_t length)
+{
+	char *dst = sc->buffer_pos;
+	size_t left = ufbxwi_to_size(sc->buffer_end - dst);
+	if (left >= length) {
+		sc->buffer_pos = dst + length;
+	} else {
+		ufbxwi_write_slow(sc, NULL, length);
 	}
 }
 
@@ -6132,6 +6201,7 @@ static void ufbxwi_ascii_dom_string(ufbxwi_save_context *sc, const char *str, si
 
 	const char *end = str + length;
 	for (;;) {
+		// TODO: Line break escaping, other special characters
 		const char *quote = memchr(str, '"', ufbxwi_to_size(end - str));
 		if (!quote) {
 			ufbxwi_write(sc, str, ufbxwi_to_size(end - str));
@@ -6205,6 +6275,8 @@ static void ufbxwi_ascii_dom_write(ufbxwi_save_context *sc, const char *tag, con
 			ufbxw_string str = sc->scene->string_pool.tokens.data[token];
 			ufbxwi_ascii_dom_string(sc, str.data, str.length);
 		} break;
+		default:
+			ufbxwi_unreachable("bad format specifier");
 		}
 	}
 
@@ -6470,13 +6542,304 @@ static void ufbxwi_ascii_dom_close(ufbxwi_save_context *sc)
 	ufbxwi_write(sc, "}\n", 2);
 }
 
+// -- Binary
+
+static void ufbxwi_binary_finish_node(ufbxwi_save_context *sc)
+{
+	if (sc->binary_headers.count == 0) return;
+	ufbxwi_binary_node_header header = sc->binary_headers.data[--sc->binary_headers.count];
+
+	uint64_t pos = ufbxwi_get_file_position(sc);
+	header.end_offset = pos;
+
+	// TODO: Endian
+	if (sc->opts.version >= 7500) {
+		uint64_t header_data[] = { header.end_offset, header.num_values, header.values_len };
+		ufbxwi_write_at(sc, header.file_offset, header_data, sizeof(header_data));
+	} else {
+		uint32_t header_data[] = { (uint32_t)header.end_offset, (uint32_t)header.num_values, (uint32_t)header.values_len };
+		ufbxwi_write_at(sc, header.file_offset, header_data, sizeof(header_data));
+	}
+}
+
+static void ufbxwi_binary_dom_write(ufbxwi_save_context *sc, const char *tag, const char *fmt, va_list args, bool open)
+{
+	ufbxwi_binary_node_header *header = ufbxwi_list_push_zero(&sc->ator, &sc->binary_headers, ufbxwi_binary_node_header);
+	ufbxwi_check(header);
+
+	header->file_offset = ufbxwi_get_file_position(sc);
+
+	// Skip header, written later
+	size_t header_size = sc->opts.version >= 7500 ? 24 : 12;
+	ufbxwi_write_skip(sc, header_size);
+
+	size_t tag_len = strlen(tag);
+	ufbxw_assert(tag_len <= 255);
+	uint8_t tag_len8[] = { (uint8_t)tag_len };
+
+	ufbxwi_write(sc, tag_len8, 1);
+	ufbxwi_write(sc, tag, tag_len);
+
+	size_t num_values = 0;
+
+	uint64_t values_begin = ufbxwi_get_file_position(sc);
+
+	for (const char *pf = fmt; *pf; ++pf) {
+		char f = *pf;
+
+		// TODO: Endianness
+		switch (f) {
+		case 'I': {
+			int32_t value = va_arg(args, int32_t);
+			ufbxwi_write(sc, "I", 1);
+			ufbxwi_write(sc, &value, 4);
+		} break;
+		case 'L': {
+			int64_t value = va_arg(args, int64_t);
+			ufbxwi_write(sc, "L", 1);
+			ufbxwi_write(sc, &value, 8);
+		} break;
+		case 'F': {
+			float value = (float)va_arg(args, double);
+			ufbxwi_write(sc, "F", 1);
+			ufbxwi_write(sc, &value, 4);
+		} break;
+		case 'D': {
+			double value = va_arg(args, double);
+			ufbxwi_write(sc, "D", 1);
+			ufbxwi_write(sc, &value, 8);
+		} break;
+		case 'C': {
+			const char *value = va_arg(args, const char*);
+			size_t len = strlen(value);
+			uint32_t len_u32 = (uint32_t)len;
+			ufbxwi_write(sc, "S", 1);
+			ufbxwi_write(sc, &len_u32, 4);
+			ufbxwi_write(sc, value, len);
+		} break;
+		case 'c': {
+			char value = (char)va_arg(args, int);
+			ufbxwi_write(sc, "C", 1);
+			ufbxwi_write(sc, &value, 1);
+		} break;
+		case 'S': {
+			ufbxw_string value = va_arg(args, ufbxw_string);
+			uint32_t len_u32 = (uint32_t)value.length;
+			ufbxwi_write(sc, "S", 1);
+			ufbxwi_write(sc, &len_u32, 4);
+			ufbxwi_write(sc, value.data, value.length);
+		} break;
+		case 'T': {
+			ufbxwi_token token = va_arg(args, ufbxwi_token);
+			ufbxw_string value = sc->scene->string_pool.tokens.data[token];
+			uint32_t len_u32 = (uint32_t)value.length;
+			ufbxwi_write(sc, "S", 1);
+			ufbxwi_write(sc, &len_u32, 4);
+			ufbxwi_write(sc, value.data, value.length);
+		} break;
+		case 'R': {
+			ufbxw_blob value = va_arg(args, ufbxw_blob);
+			uint32_t len_u32 = (uint32_t)value.size;
+			ufbxwi_write(sc, "R", 1);
+			ufbxwi_write(sc, &len_u32, 4);
+			ufbxwi_write(sc, value.data, value.size);
+		} break;
+		default:
+			ufbxwi_unreachable("bad format specifier");
+		}
+
+		num_values++;
+	}
+
+	uint64_t values_end = ufbxwi_get_file_position(sc);
+
+	header->values_len = values_end - values_begin;
+	header->num_values = (uint64_t)num_values;
+
+	if (!open) {
+		ufbxwi_binary_finish_node(sc);
+	}
+}
+
+static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *tag, ufbxw_buffer_id buffer_id)
+{
+	ufbxwi_buffer *buffer = ufbxwi_get_buffer(&sc->buffers, buffer_id);
+	if (!buffer) return;
+
+	ufbxwi_binary_node_header *header = ufbxwi_list_push_zero(&sc->ator, &sc->binary_headers, ufbxwi_binary_node_header);
+	ufbxwi_check(header);
+
+	header->file_offset = ufbxwi_get_file_position(sc);
+
+	// Skip header, written later
+	size_t header_size = sc->opts.version >= 7500 ? 24 : 12;
+	ufbxwi_write_skip(sc, header_size);
+
+	size_t tag_len = strlen(tag);
+	ufbxw_assert(tag_len <= 255);
+	uint8_t tag_len8[] = { (uint8_t)tag_len };
+
+	ufbxwi_write(sc, tag_len8, 1);
+	ufbxwi_write(sc, tag, tag_len);
+
+	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer_id);
+	ufbxwi_buffer_type_info type_info = ufbxwi_buffer_type_infos[type];
+
+	size_t buffer_count = buffer->count;
+	size_t scalar_count = buffer_count * type_info.components;
+	size_t data_size = buffer_count * type_info.size;
+
+	uint64_t values_begin = ufbxwi_get_file_position(sc);
+
+	char type_char = ' ';
+	switch (type_info.scalar_type) {
+	case UFBXWI_BUFFER_TYPE_INT: type_char = 'i'; break;
+	case UFBXWI_BUFFER_TYPE_LONG: type_char = 'l'; break;
+	case UFBXWI_BUFFER_TYPE_REAL: type_char = 'd'; break; // TODO: real=float case?
+	case UFBXWI_BUFFER_TYPE_FLOAT: type_char = 'f'; break;
+	default:
+		ufbxwi_unreachable("bad scalar type");
+	}
+
+	ufbxwi_write(sc, &type_char, 1);
+
+	// TODO: Compression (encoding=1)
+	uint32_t encoding = 0;
+	uint32_t array_header[] = { (uint32_t)scalar_count, encoding, (uint32_t)data_size };
+	ufbxwi_write(sc, array_header, sizeof(array_header));
+
+	switch (buffer->state) {
+	case UFBXWI_BUFFER_STATE_NONE:
+		break;
+	case UFBXWI_BUFFER_STATE_OWNED:
+		ufbxwi_write(sc, buffer->data.owned.data, data_size);
+		break;
+	case UFBXWI_BUFFER_STATE_EXTERNAL:
+		ufbxwi_write(sc, buffer->data.external.data, data_size);
+		break;
+	case UFBXWI_BUFFER_STATE_STREAM: {
+		size_t offset = 0;
+		if (data_size >= sc->direct_write_size) {
+			size_t buffer_size = sc->buffer_end - sc->buffer;
+			size_t max_elements = buffer_size / type_info.size;
+
+			while (!ufbxwi_is_fatal(&sc->error) && offset < buffer_count) {
+				ufbxwi_write_flush(sc);
+
+				size_t to_read = ufbxwi_min_sz(max_elements, buffer_count - offset);
+				size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, sc->buffer, to_read, offset);
+				ufbxwi_check(num_read == to_read);
+
+				offset += num_read;
+			}
+		} else {
+			// Read through a temporary buffer so that we can stream to aligned memory
+			if (!sc->stream_buffer) {
+				size_t stream_buffer_size = 4096;
+				sc->stream_buffer = ufbxwi_alloc(&sc->ator, char, stream_buffer_size);
+				ufbxwi_check(sc->stream_buffer);
+				sc->stream_buffer_size = stream_buffer_size;
+			}
+
+			size_t max_elements = sc->stream_buffer_size / type_info.size;
+			while (!ufbxwi_is_fatal(&sc->error) && offset < buffer_count) {
+				size_t to_read = ufbxwi_min_sz(max_elements, buffer_count - offset);
+				size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, sc->stream_buffer, to_read, offset);
+				ufbxwi_check(num_read == to_read);
+				ufbxwi_write(sc, sc->stream_buffer, num_read * type_info.size);
+
+				offset += num_read;
+			}
+		}
+
+	} break;
+	}
+
+	uint64_t values_end = ufbxwi_get_file_position(sc);
+
+	header->num_values = 1;
+	header->values_len = values_end - values_begin;
+
+	ufbxwi_binary_finish_node(sc);
+}
+
+// TODO: Allocate this dynamically?
+static const char ufbxwi_binary_zero_buf[32] = { 0 };
+
+static void ufbxwi_binary_dom_close(ufbxwi_save_context *sc)
+{
+	size_t null_size = sc->opts.version >= 7500 ? 25 : 13;
+	ufbxwi_write(sc, ufbxwi_binary_zero_buf, null_size);
+
+	ufbxwi_binary_finish_node(sc);
+}
+
+static void ufbxwi_binary_write_header(ufbxwi_save_context *sc)
+{
+	// TODO: Big endian??
+	ufbxwi_write(sc, "Kaydara FBX Binary  \x00\x1a\x00", 23);
+
+	uint32_t version = sc->opts.version;
+	ufbxwi_write(sc, &version, 4);
+}
+
+// Derived from actual file hashes. See `misc/fbx_hash_solver.c` for details.
+// The hash structure is based on work by @hamish-milne: https://github.com/hamish-milne/FbxWriter
+static const char ufbxwi_binary_magic_order[] = "\x11\x12\x05\x06\x0b\x0c\x08\x09\x14\x15\x00\x01\x02\x03\x0e\x0f";
+static const char ufbxwi_binary_fileid_key[] = "\x18\xb3\x1a\xea\x86\x24\xfc\xc3\x8e\xc9\x80\x23\x97\x25\xc2\xff";
+static const char ufbxwi_binary_footer_key[] = "\xfa\xbc\x9b\x09\xd0\xc9\xe4\x67\xb1\x76\xca\x82\x1d\xff\x19\x78";
+static const char ufbxwi_binary_footer_data[] = "\xf8\x5a\x8c\x6a\xde\xf5\xd9\x7e\xec\xe9\x0c\xe3\x75\x8f\x29\x0b";
+
+static void ufbxwi_binary_fileid_magic(char magic[16], const char *creation_time)
+{
+	ufbxwi_nounroll for (size_t i = 0; i < 16; i++) magic[i] = creation_time[ufbxwi_binary_magic_order[i]];
+	ufbxwi_nounroll for (size_t i = 1; i < 16; i++) magic[i] ^= magic[i - 1];
+	ufbxwi_nounroll for (size_t i = 0; i < 16; i++) magic[i] ^= ufbxwi_binary_fileid_key[i];
+}
+
+static void ufbxwi_binary_footer_magic(char magic[16], const char *creation_time)
+{
+	ufbxwi_nounroll for (size_t i = 0; i < 16; i++) magic[i] = creation_time[ufbxwi_binary_magic_order[i]];
+	ufbxwi_nounroll for (size_t i = 2; i < 16; i++) magic[i] ^= magic[i - 2];
+	ufbxwi_nounroll for (size_t i = 0; i < 16; i++) magic[i] ^= creation_time[ufbxwi_binary_magic_order[i]];
+	ufbxwi_nounroll for (size_t i = 1; i < 16; i++) magic[i] ^= magic[i - 1];
+	ufbxwi_nounroll for (size_t i = 0; i < 16; i++) magic[i] ^= ufbxwi_binary_footer_key[i];
+}
+
+static void ufbxwi_binary_write_footer(ufbxwi_save_context *sc, const char *creation_time)
+{
+	// One more null record
+	size_t null_size = sc->opts.version >= 7500 ? 25 : 13;
+	ufbxwi_write(sc, ufbxwi_binary_zero_buf, null_size);
+
+	char footer_magic[16];
+	ufbxwi_binary_footer_magic(footer_magic, creation_time);
+	ufbxwi_write(sc, footer_magic, sizeof(footer_magic));
+
+	// Align to 16 bytes, always insert at least a single zero
+	uint64_t file_pos = ufbxwi_get_file_position(sc);
+	size_t align = (size_t)(16 - (file_pos % 16));
+
+	ufbxwi_write(sc, ufbxwi_binary_zero_buf, align);
+
+	uint32_t footer[36];
+	memset(footer, 0, sizeof(footer));
+	footer[0] = 0; // TODO: This has some unknown value in <7000 files
+	footer[1] = sc->opts.version;
+
+	ufbxwi_write(sc, footer, sizeof(footer));
+
+	// Fixed footer
+	ufbxwi_write(sc, ufbxwi_binary_footer_data, 16);
+}
+
 // -- DOM
 
 static const char *ufbxwi_dom_section_str = "------------------------------------------------------------------";
 
 static ufbxwi_forceinline void ufbxwi_dom_comment(ufbxwi_save_context *sc, const char *fmt, ...)
 {
-	if (sc->opts.ascii) {
+	if (sc->ascii) {
 		va_list args;
 		va_start(args, fmt);
 		ufbxwi_ascii_comment(sc, fmt, args);
@@ -6486,7 +6849,7 @@ static ufbxwi_forceinline void ufbxwi_dom_comment(ufbxwi_save_context *sc, const
 
 static void ufbxwi_dom_section(ufbxwi_save_context *sc, const char *name)
 {
-	if (sc->opts.ascii) {
+	if (sc->ascii) {
 		ufbxwi_dom_comment(sc, "\n; %s\n;%.66s\n\n", name, ufbxwi_dom_section_str);
 	}
 }
@@ -6496,10 +6859,10 @@ static void ufbxwi_dom_open(ufbxwi_save_context *sc, const char *tag, const char
 	va_list args;
 	va_start(args, fmt);
 
-	if (sc->opts.ascii) {
+	if (sc->ascii) {
 		ufbxwi_ascii_dom_write(sc, tag, fmt, args, true);
 	} else {
-		// TODO
+		ufbxwi_binary_dom_write(sc, tag, fmt, args, true);
 	}
 
 	sc->depth++;
@@ -6511,10 +6874,10 @@ static void ufbxwi_dom_close(ufbxwi_save_context *sc)
 {
 	sc->depth--;
 
-	if (sc->opts.ascii) {
+	if (sc->ascii) {
 		ufbxwi_ascii_dom_close(sc);
 	} else {
-		// TODO
+		ufbxwi_binary_dom_close(sc);
 	}
 }
 
@@ -6523,10 +6886,10 @@ static void ufbxwi_dom_value(ufbxwi_save_context *sc, const char *tag, const cha
 	va_list args;
 	va_start(args, fmt);
 
-	if (sc->opts.ascii) {
+	if (sc->ascii) {
 		ufbxwi_ascii_dom_write(sc, tag, fmt, args, false);
 	} else {
-		// TODO
+		ufbxwi_binary_dom_write(sc, tag, fmt, args, false);
 	}
 
 	va_end(args);
@@ -6534,10 +6897,10 @@ static void ufbxwi_dom_value(ufbxwi_save_context *sc, const char *tag, const cha
 
 static void ufbxwi_dom_array(ufbxwi_save_context *sc, const char *tag, ufbxw_buffer_id buffer)
 {
-	if (sc->opts.ascii) {
+	if (sc->ascii) {
 		ufbxwi_ascii_dom_write_array(sc, tag, buffer);
 	} else {
-		// TODO
+		ufbxwi_binary_dom_write_array(sc, tag, buffer);
 	}
 
 	ufbxwi_free_buffer(&sc->buffers, buffer);
@@ -7130,17 +7493,25 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 	ufbxw_string fbx_type_str = scene->string_pool.tokens.data[fbx_type];
 
 	if ((flags & UFBXWI_SAVE_ELEMENT_MANUAL_OPEN) == 0) {
-		// TODO: Dynamic buffer
-		char name[256];
-		if (sc->opts.ascii) {
-			snprintf(name, sizeof(name), "%s::%s", fbx_type_str.data, element->name.data);
+		// TODO: Dynamic buffer, do not use printf here
+		char name_buf[256];
+		ufbxw_string name;
+		if (sc->ascii) {
+			name.data = name_buf;
+			name.length = (size_t)snprintf(name_buf, sizeof(name_buf), "%s::%s", fbx_type_str.data, element->name.data);
 		} else {
+			name.data = name_buf;
+			memcpy(name_buf, element->name.data, element->name.length);
+			memcpy(name_buf + element->name.length, "\x00\x01", 2);
+			memcpy(name_buf + element->name.length + 2, fbx_type_str.data, fbx_type_str.length);
+			name_buf[element->name.length + 2 + fbx_type_str.length] = '\0';
+			name.length = element->name.length + 2 + fbx_type_str.length;
 		}
 
 		if ((flags & UFBXWI_SAVE_ELEMENT_NO_ID) != 0) {
-			ufbxwi_dom_open(sc, obj_type_str.data, "CT", name, sub_type);
+			ufbxwi_dom_open(sc, obj_type_str.data, "ST", name, sub_type);
 		} else {
-			ufbxwi_dom_open(sc, obj_type_str.data, "LCT", (int64_t)id, name, sub_type);
+			ufbxwi_dom_open(sc, obj_type_str.data, "LST", (int64_t)id, name, sub_type);
 		}
 	}
 
@@ -7243,6 +7614,8 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 		ufbxwi_save_blend_shape(sc, (ufbxwi_blend_shape*)element);
 	}
 
+	// TODO: Light, camera
+
 	if (type == UFBXW_ELEMENT_SKELETON) {
 		ufbxwi_dom_value(sc, "TypeFlags", "C", "Skeleton");
 	}
@@ -7272,13 +7645,8 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 	ufbxwi_dom_close(sc);
 }
 
-static void ufbxwi_save_timestamp(ufbxwi_save_context *sc)
+static void ufbxwi_save_timestamp(ufbxwi_save_context *sc, ufbxw_datetime timestamp)
 {
-	ufbxw_datetime timestamp = sc->opts.local_timestamp;
-	if (ufbxwi_is_zero_date(&timestamp) && !sc->opts.no_default_timestamp) {
-		ufbxwi_get_local_date(&timestamp);
-	}
-
 	ufbxwi_dom_open(sc, "CreationTimeStamp", "");
 	ufbxwi_dom_value(sc, "Version", "I", 1000);
 	ufbxwi_dom_value(sc, "Year", "I", timestamp.year);
@@ -7361,6 +7729,8 @@ static void ufbxwi_save_objects(ufbxwi_save_context *sc)
 	ufbxwi_dom_open(sc, "Objects", "");
 
 	ufbxwi_for_list(ufbxwi_element_slot, slot, scene->elements) {
+		if (ufbxwi_is_fatal(&sc->error)) break;
+
 		ufbxw_element_type type = ufbxwi_id_type(slot->id);
 		if (type == UFBXWI_ELEMENT_TYPE_NONE) continue;
 
@@ -7393,13 +7763,15 @@ static void ufbxwi_save_connections(ufbxwi_save_context *sc)
 	// Connect root nodes to root
 
 	ufbxwi_for_list(ufbxwi_element_slot, src_slot, scene->elements) {
+		if (ufbxwi_is_fatal(&sc->error)) break;
+
 		ufbxw_id src_id = src_slot->id;
 		ufbxw_element_type src_type = ufbxwi_id_type(src_id);
 		if (src_type != UFBXW_ELEMENT_NODE) continue;
 
 		ufbxwi_node *node = (ufbxwi_node*)src_slot->element;
 		if (node->parent.id == 0) {
-			if (sc->opts.ascii) {
+			if (sc->ascii) {
 				if (sc->opts.debug_comments) {
 					ufbxwi_dom_comment(sc, "\n\t;Model::%s, Model::RootNode (Root Node)\n", node->element.name.data);
 				} else {
@@ -7413,6 +7785,8 @@ static void ufbxwi_save_connections(ufbxwi_save_context *sc)
 	// TODO: This could be accelerated with a bit-mask of active connection types
 
 	ufbxwi_for_list(ufbxwi_element_slot, dst_slot, scene->elements) {
+		if (ufbxwi_is_fatal(&sc->error)) break;
+
 		ufbxw_id dst_id = dst_slot->id;
 		if (ufbxwi_id_type(dst_id) == UFBXWI_ELEMENT_TYPE_NONE) continue;
 		ufbxwi_element *dst_element = dst_slot->element;
@@ -7430,7 +7804,7 @@ static void ufbxwi_save_connections(ufbxwi_save_context *sc)
 				ufbxwi_element *src_element = ufbxwi_get_element(scene, conn.id);
 				ufbxw_assert(src_element);
 
-				if (sc->opts.ascii) {
+				if (sc->ascii) {
 					const ufbxwi_element_type *src_et = &scene->element_types.data[src_element->type_id];
 					const ufbxwi_element_type *dst_et = &scene->element_types.data[dst_element->type_id];
 					const char *src_type = scene->string_pool.tokens.data[src_et->fbx_type].data;
@@ -7493,34 +7867,62 @@ static void ufbxwi_save_root(ufbxwi_save_context *sc)
 {
 	ufbxw_scene *scene = sc->scene;
 
-	if (sc->opts.ascii) {
+	ufbxw_string creator;
+	if (sc->opts.enable_override_creator) {
+		creator = sc->opts.override_creator;
+	} else {
+		creator = ufbxwi_c_str("ufbx_write (version format TBD)");
+	}
+
+	ufbxw_datetime timestamp = sc->opts.local_timestamp;
+	if (ufbxwi_is_zero_date(&timestamp) && !sc->opts.no_default_timestamp) {
+		ufbxwi_get_local_date(&timestamp);
+	}
+
+	if (sc->ascii) {
 		uint32_t major = sc->opts.version / 1000 % 10;
 		uint32_t minor = sc->opts.version / 100 % 10;
 		uint32_t patch = sc->opts.version % 100;
 		ufbxwi_dom_comment(sc, "; FBX %u.%u.%u project file\n; %.52s\n\n", major, minor, patch, ufbxwi_dom_section_str);
-	}
-
-	ufbxwi_dom_open(sc, "FBXHeaderExtension", "");
-	ufbxwi_dom_value(sc, "FBXHeaderVersion", "I", 1003);
-	ufbxwi_dom_value(sc, "FBXVersion", "I", sc->opts.version);
-
-	ufbxwi_save_timestamp(sc);
-
-	if (sc->scene->override_creator) {
-		ufbxwi_dom_value(sc, "Creator", "S", sc->scene->creator);
 	} else {
-		ufbxwi_dom_value(sc, "Creator", "C", "ufbx_write (version format TBD)");
+		ufbxwi_binary_write_header(sc);
 	}
 
+	// Header extension
 	{
-		ufbxw_id scene_info_id = ufbxw_get_scene_info_id(scene);
-		ufbxwi_element *scene_info = ufbxwi_get_element(scene, scene_info_id);
-		if (scene_info) {
-			ufbxwi_save_element(sc, scene_info, UFBXWI_SAVE_ELEMENT_NO_ID);
+		ufbxwi_dom_open(sc, "FBXHeaderExtension", "");
+		ufbxwi_dom_value(sc, "FBXHeaderVersion", "I", 1003);
+		ufbxwi_dom_value(sc, "FBXVersion", "I", sc->opts.version);
+		ufbxwi_save_timestamp(sc, timestamp);
+		ufbxwi_dom_value(sc, "Creator", "S", creator);
+
+		{
+			ufbxw_id scene_info_id = ufbxw_get_scene_info_id(scene);
+			ufbxwi_element *scene_info = ufbxwi_get_element(scene, scene_info_id);
+			if (scene_info) {
+				ufbxwi_save_element(sc, scene_info, UFBXWI_SAVE_ELEMENT_NO_ID);
+			}
 		}
+
+		ufbxwi_dom_close(sc);
 	}
 
-	ufbxwi_dom_close(sc);
+	// Creation time in another format used by binary checksums
+	char creation_time[32];
+	snprintf(creation_time, sizeof(creation_time), "%04d-%02d-%02d %02d:%02d:%02d:%03d",
+		timestamp.year, timestamp.month, timestamp.day,
+		timestamp.hour, timestamp.minute, timestamp.second, timestamp.millisecond);
+
+	// Weird binary-only section with some redundant data?
+	if (!sc->ascii) {
+		char file_id_magic[16];
+		ufbxwi_binary_fileid_magic(file_id_magic, creation_time);
+
+		ufbxw_blob file_id_blob = { file_id_magic, 16 };
+		ufbxwi_dom_value(sc, "FileId", "R", file_id_blob);
+		ufbxwi_dom_value(sc, "CreationTime", "C", creation_time);
+		ufbxwi_dom_value(sc, "Creator", "S", creator);
+	}
 
 	{
 		ufbxw_id global_settings_id = ufbxw_get_global_settings_id(scene);
@@ -7551,6 +7953,11 @@ static void ufbxwi_save_root(ufbxwi_save_context *sc)
 	ufbxwi_dom_comment(sc, ";Takes section\n;%.52s\n\n", ufbxwi_dom_section_str);
 
 	ufbxwi_save_takes(sc);
+
+	// Binary footer
+	if (!sc->ascii) {
+		ufbxwi_binary_write_footer(sc, creation_time);
+	}
 }
 
 static void ufbxwi_save_init(ufbxwi_save_context *sc)
@@ -7583,6 +7990,9 @@ static void ufbxwi_save_init(ufbxwi_save_context *sc)
 static void ufbxwi_mark_save_context_failed(ufbxwi_save_context *sc)
 {
 	ufbxwi_mark_buffers_failed(&sc->buffers);
+	sc->buffer = NULL;
+	sc->buffer_pos = NULL;
+	sc->buffer_end = NULL;
 }
 
 static void ufbxwi_save_fatal(void *user, ufbxwi_error *error)
@@ -7596,6 +8006,8 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc)
 	ufbxw_assert(sc->opts._begin_zero == 0 && sc->opts._end_zero == 0);
 
 	if (sc->opts.version == 0) sc->opts.version = 7500;
+
+	sc->ascii = sc->opts.format == UFBXW_SAVE_FORMAT_ASCII;
 
 	sc->error.fatal_fn = &ufbxwi_save_fatal;
 	sc->error.fatal_user = sc;
@@ -7612,6 +8024,9 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc)
 	if (ufbxwi_is_fatal(&sc->error)) return;
 
 	size_t buffer_size = 0x10000;
+
+	// TODO: Make sure buffer fits at least binary header
+
 	sc->buffer = ufbxwi_alloc(&sc->ator, char, buffer_size);
 	ufbxwi_check(sc->buffer);
 

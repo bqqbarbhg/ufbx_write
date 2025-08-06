@@ -65,7 +65,7 @@ typedef struct ufbxw_string {
 
 typedef struct ufbxw_blob {
 	const void *data;
-	size_t length;
+	size_t size;
 } ufbxw_blob;
 
 typedef double ufbxw_real;
@@ -936,12 +936,6 @@ typedef struct ufbxw_save_info {
 // Sets a bunch of SceneInfo properties conveniently
 ufbxw_abi void ufbxw_set_save_info(ufbxw_scene *scene, const ufbxw_save_info *info);
 
-// Creator is meant to identify the exporter, ufbxw_write in this case.
-// You should prefer writing the application information to `ufbxw_save_info.application_name` etc.
-// but if you really want to override the Creator field you can.
-ufbxw_abi void ufbxw_override_creator(ufbxw_scene *scene, const char *creator);
-ufbxw_abi void ufbxw_override_creator_len(ufbxw_scene *scene, const char *creator, size_t creator_len);
-
 typedef struct ufbxw_prepare_opts {
 	bool finish_keyframes;
 	bool patch_anim_stack_times;
@@ -977,10 +971,15 @@ ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *pat
 
 // -- Writing API
 
+typedef enum ufbxw_save_format {
+	UFBXW_SAVE_FORMAT_BINARY,
+	UFBXW_SAVE_FORMAT_ASCII,
+} ufbxw_save_format;
+
 typedef struct ufbxw_save_opts {
 	uint32_t _begin_zero;
 
-	bool ascii;
+	ufbxw_save_format format;
 	uint32_t version;
 
 	// TODO: Do not save animation
@@ -992,6 +991,12 @@ typedef struct ufbxw_save_opts {
 
 	// Local date time when the file was saved.
 	ufbxw_datetime local_timestamp;
+
+	// Override the ufbx_write creator.
+	// Generally, you should prefer using `ufbxw_save_info.application_name` to indicate your application,
+	// as Creator is used for the actual file writer (in most cases, FBX SDK).
+	bool enable_override_creator;
+	ufbxw_string override_creator;
 
 	uint32_t _end_zero;
 } ufbxw_save_opts;

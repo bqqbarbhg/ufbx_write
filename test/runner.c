@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -251,6 +252,8 @@ void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr)
 
 bool g_fuzz = false;
 bool g_allow_scene_error = false;
+uint32_t g_file_version;
+const char *g_file_format;
 
 bool ufbxwt_check_scene_error_imp(ufbxw_scene *scene, const char *file, int line)
 {
@@ -304,38 +307,50 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 		memory_stats.block_allocation_count
 	);
 
-	ufbxw_save_opts save_opts = { 0 };
-	save_opts.version = 7500;
-	save_opts.ascii = true;
+	static const uint32_t versions[] = { 7400, 7500 };
+	static const ufbxw_save_format formats[] = { UFBXW_SAVE_FORMAT_BINARY, UFBXW_SAVE_FORMAT_ASCII };
 
-	uint32_t version = save_opts.version;
-	const char *format = save_opts.ascii ? "ascii" : "binary";
+	for (int version_ix = 0; version_ix < ufbxwt_arraycount(versions); version_ix++) {
+		for (int format_ix = 0; format_ix < ufbxwt_arraycount(formats); format_ix++) {
+			ufbxw_save_opts save_opts = { 0 };
+			save_opts.version = versions[version_ix];
+			save_opts.format = formats[format_ix];
 
-	char output_path[256];
-	snprintf(output_path, sizeof(output_path), "%s/%s_%u_%s.fbx", output_root, name, version, format);
+			uint32_t version = save_opts.version;
+			const char *format = save_opts.format == UFBXW_SAVE_FORMAT_ASCII ? "ascii" : "binary";
 
-	ufbxw_error save_error;
-	ufbxw_save_file(scene, output_path, &save_opts, &save_error);
-	if (save_error.type != UFBXW_ERROR_NONE) {
-		ufbxwt_log_error(&save_error);
+			if (g_file_version && version != g_file_version) continue;
+			if (g_file_format && strcmp(format, g_file_format) != 0) continue;
+
+			ufbxwt_logf(".. saving %u %s", version, format);
+
+			char output_path[256];
+			snprintf(output_path, sizeof(output_path), "%s/%s_%u_%s.fbx", output_root, name, version, format);
+
+			ufbxw_error save_error;
+			ufbxw_save_file(scene, output_path, &save_opts, &save_error);
+			if (save_error.type != UFBXW_ERROR_NONE) {
+				ufbxwt_log_error(&save_error);
+			}
+
+			if (check_fn) {
+				ufbx_load_opts load_opts = { 0 };
+				ufbx_error load_error;
+
+				ufbx_scene *loaded_scene = ufbx_load_file(output_path, &load_opts, &load_error);
+				if (!loaded_scene) {
+					ufbxwt_log_uerror(&load_error);
+				}
+				ufbxwt_assert(loaded_scene);
+
+				check_fn(loaded_scene, &err);
+
+				ufbx_free_scene(loaded_scene);
+			}
+		}
 	}
 
 	ufbxw_free_scene(scene);
-
-	if (check_fn) {
-		ufbx_load_opts load_opts = { 0 };
-		ufbx_error load_error;
-
-		ufbx_scene *loaded_scene = ufbx_load_file(output_path, &load_opts, &load_error);
-		if (!loaded_scene) {
-			ufbxwt_log_uerror(&load_error);
-		}
-		ufbxwt_assert(loaded_scene);
-
-		check_fn(loaded_scene, &err);
-
-		ufbx_free_scene(loaded_scene);
-	}
 
 	if (g_fuzz) {
 		for (size_t max_allocs = 1; max_allocs < memory_stats.allocation_count; max_allocs++) {
@@ -410,6 +425,10 @@ int main(int argc, char **argv)
 			if (++i < argc) {
 				test_filter = argv[i];
 			}
+		}
+		if (!strcmp(argv[i], "-f") || !strcmp(argv[i], "--format")) {
+			if (++i < argc) g_file_version = (uint32_t)atoi(argv[i]);
+			if (++i < argc) g_file_format = argv[i];
 		}
 		if (!strcmp(argv[i], "-d") || !strcmp(argv[i], "--data")) {
 			if (++i < argc) {
