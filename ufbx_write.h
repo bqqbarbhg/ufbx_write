@@ -293,6 +293,8 @@ typedef enum ufbxw_error_type {
 	UFBXW_ERROR_WRITE_FAILED,
 	UFBXW_ERROR_DEFLATE_FAILED,
 	UFBXW_ERROR_ARRAY_TOO_BIG,
+	UFBXW_ERROR_PATH_TOO_LONG,
+	UFBXW_ERROR_FILE_OPEN_FAILED,
 
 } ufbxw_error_type;
 
@@ -985,7 +987,7 @@ typedef struct ufbxw_write_stream {
 	void *user;
 } ufbxw_write_stream;
 
-ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *path, size_t path_len);
+ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *path, size_t path_len, ufbxw_error *error);
 
 // -- Deflate
 
@@ -994,13 +996,18 @@ typedef struct ufbxw_deflate_result {
 	size_t bytes_read;
 } ufbxw_deflate_result;
 
+typedef enum ufbxw_deflate_advance_flag {
+	UFBXW_DEFLATE_ADVANCE_FLUSH = 0x1,
+	UFBXW_DEFLATE_ADVANCE_FINISH = 0x2,
+} ufbxw_deflate_advance_flag;
+
 // Begin DEFLATE compressing a new stream.
 // You must return the buffer size you require for decompression.
 // Returning `0` is allowed to indicate that the decompressor supports streaming.
 typedef size_t ufbxw_deflate_begin_fn(void *user, size_t input_size);
 
 // Advance the compression stream.
-typedef bool ufbxw_deflate_advance_fn(void *user, ufbxw_deflate_result *result, void *dst, size_t dst_size, const void *src, size_t src_size);
+typedef bool ufbxw_deflate_advance_fn(void *user, ufbxw_deflate_result *result, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags);
 
 // Finish compressing one stream.
 typedef void ufbxw_deflate_end_fn(void *user);

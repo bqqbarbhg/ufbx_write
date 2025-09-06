@@ -8046,6 +8046,49 @@ static void ufbxwi_save_init(ufbxwi_save_context *sc)
 
 }
 
+// -- File IO
+
+static bool ufbxwi_stdio_write(void *user, uint64_t offset, const void *data, size_t size)
+{
+	// TODO: Do not seek all the time, support >4GB files
+	FILE *f = (FILE*)user;
+	if (fseek(f, (int)offset, SEEK_SET)) return false;
+	if (fwrite(data, 1, size, f) != size) return false;
+	return true;
+}
+
+static void ufbxwi_stdio_close(void *user)
+{
+	FILE *f = (FILE*)user;
+	fclose(f);
+}
+
+static bool ufbxwi_open_file_write(ufbxw_write_stream *stream, const char *path, size_t path_len, ufbxwi_error *error)
+{
+	if (path_len >= 1023) {
+		ufbxwi_failf(error, UFBXW_ERROR_PATH_TOO_LONG, "Path too long (%zu bytes, max 1023)", path_len);
+		return false;
+	}
+
+	// TODO: Do this properly
+	char copy[1024];
+	memcpy(copy, path, path_len);
+	copy[path_len] = '\0';
+
+	// TODO: fopen_s() etc
+	FILE *f = fopen(copy, "wb");
+	if (!f) {
+		ufbxwi_failf(error, UFBXW_ERROR_FILE_OPEN_FAILED, "Failed to open file: %.*s", (int)path_len, path);
+		return false;
+	}
+
+	stream->write_fn = ufbxwi_stdio_write;
+	stream->close_fn = ufbxwi_stdio_close;
+	stream->user = f;
+
+	return true;
+}
+
 // -- Save root
 
 static void ufbxwi_mark_save_context_failed(ufbxwi_save_context *sc)
@@ -9599,37 +9642,19 @@ ufbxw_abi void ufbxw_validate_scene(const ufbxw_scene *scene)
 
 // -- Streams
 
-static bool ufbxwi_stdio_write(void *user, uint64_t offset, const void *data, size_t size)
+ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *path, size_t path_len, ufbxw_error *error)
 {
-	// TODO: Do not seek all the time, support >4GB files
-	FILE *f = (FILE*)user;
-	if (fseek(f, (int)offset, SEEK_SET)) return false;
-	if (fwrite(data, 1, size, f) != size) return false;
-	return true;
-}
+	ufbxwi_error err = { 0 };
+	if (!ufbxwi_open_file_write(stream, path, path_len, &err)) {
+		if (error) {
+			*error = err.error;
+		}
+		return false;
+	}
 
-static void ufbxwi_stdio_close(void *user)
-{
-	FILE *f = (FILE*)user;
-	fclose(f);
-}
-
-ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *path, size_t path_len)
-{
-	if (path_len >= 1023) return false;
-
-	// TODO: Do this properly
-	char copy[1024];
-	memcpy(copy, path, path_len);
-	copy[path_len] = '\0';
-
-	// TODO: fopen_s() etc
-	FILE *f = fopen(copy, "wb");
-	if (!f) return false;
-
-	stream->write_fn = ufbxwi_stdio_write;
-	stream->close_fn = ufbxwi_stdio_close;
-	stream->user = f;
+	if (error) {
+		error->type = UFBXW_ERROR_NONE;
+	}
 
 	return true;
 }
@@ -9644,7 +9669,7 @@ ufbxw_abi bool ufbxw_save_file(ufbxw_scene *scene, const char *path, const ufbxw
 ufbxw_abi bool ufbxw_save_file_len(ufbxw_scene *scene, const char *path, size_t path_len, const ufbxw_save_opts *opts, ufbxw_error *error)
 {
 	ufbxw_write_stream stream;
-	if (!ufbxw_open_file_write(&stream, path, path_len)) {
+	if (!ufbxw_open_file_write(&stream, path, path_len, error)) {
 		return false;
 	}
 
