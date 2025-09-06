@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.15)
 
 project(ufbxw_tests)
 
@@ -72,6 +72,15 @@ source_group("ufbx_write" FILES ${SRC_UFBX_WRITE})
 source_group("ufbx" FILES ${SRC_UFBX})
 source_group("test" FILES ${SRC_TEST})
 source_group("extra" FILES ${SRC_EXTRA})
+
+if (MSVC)
+    add_compile_options(/W4 /WX)
+else()
+    add_compile_options(-Wall -Wextra -Werror -Wno-format-truncation)
+    target_link_libraries(ufbxw_test PRIVATE m)
+endif()
+
+target_compile_definitions(ufbxw_test PRIVATE UFBXW_DEV=1 UFBX_DEV=1)
 
 get_filename_component(ROOT_PATH
                        "${CMAKE_CURRENT_LIST_DIR}/.."

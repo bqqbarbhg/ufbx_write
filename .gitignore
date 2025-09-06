@@ -4,6 +4,7 @@ proj/
 
 # Build output
 build/
+build-*/
 
 # Test output
 output/
