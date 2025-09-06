@@ -1048,6 +1048,10 @@ typedef struct ufbxw_save_opts {
 
 	ufbxw_deflate_compressor_cb deflate_compressor_cb;
 
+	// Comrpession level.
+	// Defaults to `6`.
+	int32_t compression_level;
+
 	// TODO: Do not save animation
 	bool ignore_animation;
 
