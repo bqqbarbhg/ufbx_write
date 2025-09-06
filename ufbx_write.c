@@ -6898,7 +6898,7 @@ static void ufbxwi_binary_write_footer(ufbxwi_save_context *sc, const char *crea
 
 static const char *ufbxwi_dom_section_str = "------------------------------------------------------------------";
 
-static ufbxwi_forceinline void ufbxwi_dom_comment(ufbxwi_save_context *sc, const char *fmt, ...)
+static void ufbxwi_dom_comment(ufbxwi_save_context *sc, const char *fmt, ...)
 {
 	if (sc->ascii) {
 		va_list args;
