@@ -1,12 +1,43 @@
 #ifndef UFBXW_LIBDEFLATE_H_INCLUDED
 #define UFBXW_LIBDEFLATE_H_INCLUDED
 
+#include <stddef.h>
+
+#if !defined(ufbxw_libdeflate_abi)
+	#if defined(UFBXW_LIBDEFLATE_STATIC)
+		#define ufbxw_libdeflate_abi static
+	#else
+		#define ufbxw_libdeflate_abi
+	#endif
+#endif
+
+typedef void *ufbxw_libdeflate_alloc_fn(size_t size);
+typedef void ufbxw_libdeflate_free_fn(void *address);
+
+typedef struct ufbxw_libdeflate_allocator {
+	ufbxw_libdeflate_alloc_fn *alloc_fn;
+	ufbxw_libdeflate_free_fn *free_fn;
+	void *user;
+} ufbxw_libdeflate_allocator;
+
+typedef struct ufbxw_libdeflate_opts {
+	ufbxw_libdeflate_allocator allocator;
+} ufbxw_libdeflate_opts;
+
+ufbxw_libdeflate_abi void ufbxw_libdeflate_setup(struct ufbxw_deflate_compressor_cb *cb, const ufbxw_libdeflate_opts *opts);
+
+#endif
+
+#ifdef UFBXW_LIBDEFLATE_IMPLEMENTATION
+#ifndef UFBXW_LIBDEFLATE_H_IMPLEMENTED
+#define UFBXW_LIBDEFLATE_H_IMPLEMENTED
+
 #if !defined(UFBXW_VERSION)
-	#error "Please include ufbx_write.h before including ufbxw_libdeflate.h"
+	#error "Please include ufbx_write.h before implementing ufbxw_libdeflate.h"
 #endif
 
 #if !defined(LIBDEFLATE_VERSION_MAJOR)
-	#error "Please include libdeflate.h before including ufbxw_libdeflate.h"
+	#error "Please include libdeflate.h before implementing ufbxw_libdeflate.h"
 #endif
 
 static size_t ufbxw_libdeflate_begin(void *user, size_t input_size)
@@ -15,7 +46,7 @@ static size_t ufbxw_libdeflate_begin(void *user, size_t input_size)
 	return libdeflate_zlib_compress_bound(c, input_size);
 }
 
-static bool ufbxw_libdeflate_advance(void *user, ufbxw_deflate_result *result, void *dst, size_t dst_size, const void *src, size_t src_size)
+static bool ufbxw_libdeflate_advance(void *user, ufbxw_deflate_result *result, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags)
 {
 	struct libdeflate_compressor *c = (struct libdeflate_compressor*)user;
 	size_t dst_written = libdeflate_zlib_compress(c, src, src_size, dst, dst_size);
@@ -34,11 +65,14 @@ static void ufbxw_libdeflate_free(void *user)
 
 static bool ufbxw_libdeflate_init(void *user, ufbxw_deflate_compressor *compressor, int32_t compression_level)
 {
-	const struct libdeflate_options *opts = (const struct libdeflate_options*)user;
+	const ufbxw_libdeflate_opts *opts = (const ufbxw_libdeflate_opts*)user;
 
 	struct libdeflate_compressor *c = NULL;
 	if (opts) {
-		c = libdeflate_alloc_compressor_ex(compression_level, opts);
+		struct libdeflate_options options = { sizeof(struct libdeflate_options) };
+		options.malloc_func = opts->allocator.alloc_fn;
+		options.free_func = opts->allocator.free_fn;
+		c = libdeflate_alloc_compressor_ex(compression_level, &options);
 	} else {
 		c = libdeflate_alloc_compressor(compression_level);
 	}
@@ -52,10 +86,12 @@ static bool ufbxw_libdeflate_init(void *user, ufbxw_deflate_compressor *compress
 	return true;
 }
 
-static void ufbxw_libdeflate_setup(ufbxw_deflate_compressor_cb *cb, const struct libdeflate_options *opts)
+ufbxw_libdeflate_abi void ufbxw_libdeflate_setup(ufbxw_deflate_compressor_cb *cb, const ufbxw_libdeflate_opts *opts)
 {
 	cb->fn = &ufbxw_libdeflate_init;
 	cb->user = (void*)opts;
 }
 
 #endif
+#endif
+
