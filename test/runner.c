@@ -13,7 +13,17 @@ static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr
 }
 
 #include "../ufbx_write.h"
-#include "ufbx.h"
+#include "ufbx/ufbx.h"
+
+#ifdef UFBXWT_HAS_LIBDEFLATE
+	#include "libdeflate.h"
+	#include "../extra/ufbxw_libdeflate.h"
+#endif
+
+#ifdef UFBXWT_HAS_ZLIB
+	#include "zlib.h"
+	#include "../extra/ufbxw_zlib.h"
+#endif
 
 #define ufbxwt_arraycount(arr) (sizeof(arr) / sizeof(*(arr)))
 
@@ -315,6 +325,10 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 			ufbxw_save_opts save_opts = { 0 };
 			save_opts.version = versions[version_ix];
 			save_opts.format = formats[format_ix];
+
+			// TODO: Proper setup
+			ufbxw_libdeflate_setup(&save_opts.deflate_compressor_cb, NULL);
+			ufbxw_zlib_setup(&save_opts.deflate_compressor_cb);
 
 			uint32_t version = save_opts.version;
 			const char *format = save_opts.format == UFBXW_SAVE_FORMAT_ASCII ? "ascii" : "binary";

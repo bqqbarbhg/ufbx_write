@@ -57,6 +57,22 @@
 
 #define UFBXW_ERROR_DESCRIPTION_LENGTH 256
 
+// -- Version
+
+// Packing/unpacking for `UFBX_HEADER_VERSION` and `ufbx_source_version`.
+#define ufbxw_pack_version(major, minor, patch) ((major)*1000000u + (minor)*1000u + (patch))
+#define ufbxw_version_major(version) ((uint32_t)(version)/1000000u%1000u)
+#define ufbxw_version_minor(version) ((uint32_t)(version)/1000u%1000u)
+#define ufbxw_version_patch(version) ((uint32_t)(version)%1000u)
+
+// Version of the ufbx_write header.
+// `UFBXW_VERSION` is simply an alias of `UFBXW_HEADER_VERSION`.
+// `ufbxw_source_version` contains the version of the corresponding source file.
+// HINT: The version can be compared numerically to the result of `ufbxw_pack_version()`,
+// for example `#if UFBXW_VERSION >= ufbxw_pack_version(0, 12, 0)`.
+#define UFBXW_HEADER_VERSION ufbxw_pack_version(0, 1, 0)
+#define UFBXW_VERSION UFBXW_HEADER_VERSION
+
 // UTF-8
 typedef struct ufbxw_string {
 	const char *data;
@@ -275,6 +291,8 @@ typedef enum ufbxw_error_type {
 	UFBXW_ERROR_ALLOCATION_FAILURE,
 	UFBXW_ERROR_BUFFER_STREAM,
 	UFBXW_ERROR_WRITE_FAILED,
+	UFBXW_ERROR_DEFLATE_FAILED,
+	UFBXW_ERROR_ARRAY_TOO_BIG,
 
 } ufbxw_error_type;
 
@@ -969,6 +987,45 @@ typedef struct ufbxw_write_stream {
 
 ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *path, size_t path_len);
 
+// -- Deflate
+
+typedef struct ufbxw_deflate_result {
+	size_t bytes_written;
+	size_t bytes_read;
+} ufbxw_deflate_result;
+
+// Begin DEFLATE compressing a new stream.
+// You must return the buffer size you require for decompression.
+// Returning `0` is allowed to indicate that the decompressor supports streaming.
+typedef size_t ufbxw_deflate_begin_fn(void *user, size_t input_size);
+
+// Advance the compression stream.
+typedef bool ufbxw_deflate_advance_fn(void *user, ufbxw_deflate_result *result, void *dst, size_t dst_size, const void *src, size_t src_size);
+
+// Finish compressing one stream.
+typedef void ufbxw_deflate_end_fn(void *user);
+
+// Free the deflate compressor.
+typedef void ufbxw_deflate_free_fn(void *user);
+
+// DEFLATE compressor interface.
+typedef struct ufbxw_deflate_compressor {
+	ufbxw_deflate_begin_fn *begin_fn;
+	ufbxw_deflate_advance_fn *advance_fn;
+	ufbxw_deflate_end_fn *end_fn;
+	ufbxw_deflate_free_fn *free_fn;
+	void *user;
+} ufbxw_deflate_compressor;
+
+// Function for instantiating deflate compressors
+
+typedef bool ufbxw_deflate_compressor_fn(void *user, ufbxw_deflate_compressor *compressor, int32_t compression_level);
+
+typedef struct ufbxw_deflate_compressor_cb {
+	ufbxw_deflate_compressor_fn *fn;
+	void *user;
+} ufbxw_deflate_compressor_cb;
+
 // -- Writing API
 
 typedef enum ufbxw_save_format {
@@ -981,6 +1038,8 @@ typedef struct ufbxw_save_opts {
 
 	ufbxw_save_format format;
 	uint32_t version;
+
+	ufbxw_deflate_compressor_cb deflate_compressor_cb;
 
 	// TODO: Do not save animation
 	bool ignore_animation;

@@ -321,6 +321,13 @@
 
 // TODO: External
 
+// -- Version
+
+#define UFBXW_SOURCE_VERSION ufbxw_pack_version(0, 1, 0)
+ufbxw_abi_data_def const uint32_t ufbxw_source_version = UFBXW_SOURCE_VERSION;
+
+ufbxw_static_assert(source_header_version, UFBXW_SOURCE_VERSION/1000U == UFBXW_HEADER_VERSION/1000U);
+
 // -- Error
 
 static const char ufbxwi_empty_char[] = "";
@@ -6026,6 +6033,10 @@ typedef struct {
 	ufbxwi_mesh_attribute_ptr_list tmp_attributes;
 	ufbxwi_binary_node_header_list binary_headers;
 
+	// TODO: Threaded versions of these
+	ufbxwi_byte_list tmp_input_buffer;
+	ufbxwi_byte_list tmp_compress_buffer;
+
 } ufbxwi_save_context;
 
 // -- Writing IO
@@ -6703,56 +6714,106 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 
 	ufbxwi_write(sc, &type_char, 1);
 
-	// TODO: Compression (encoding=1)
-	uint32_t encoding = 0;
-	uint32_t array_header[] = { (uint32_t)scalar_count, encoding, (uint32_t)data_size };
-	ufbxwi_write(sc, array_header, sizeof(array_header));
+	if (sc->opts.deflate_compressor_cb.fn) {
 
-	switch (buffer->state) {
-	case UFBXWI_BUFFER_STATE_NONE:
-		break;
-	case UFBXWI_BUFFER_STATE_OWNED:
-		ufbxwi_write(sc, buffer->data.owned.data, data_size);
-		break;
-	case UFBXWI_BUFFER_STATE_EXTERNAL:
-		ufbxwi_write(sc, buffer->data.external.data, data_size);
-		break;
-	case UFBXWI_BUFFER_STATE_STREAM: {
-		size_t offset = 0;
-		if (data_size >= sc->direct_write_size) {
-			size_t buffer_size = sc->buffer_end - sc->buffer;
-			size_t max_elements = buffer_size / type_info.size;
+#if 0
+		// TODO: Proper bound, maybe a callback?
+		size_t deflate_bound = 64 + data_size + (data_size >> 2);
 
-			while (!ufbxwi_is_fatal(&sc->error) && offset < buffer_count) {
-				ufbxwi_write_flush(sc);
+		ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_compress_buffer, char, deflate_bound));
 
-				size_t to_read = ufbxwi_min_sz(max_elements, buffer_count - offset);
-				size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, sc->buffer, to_read, offset);
-				ufbxwi_check(num_read == to_read);
-
-				offset += num_read;
-			}
-		} else {
-			// Read through a temporary buffer so that we can stream to aligned memory
-			if (!sc->stream_buffer) {
-				size_t stream_buffer_size = 4096;
-				sc->stream_buffer = ufbxwi_alloc(&sc->ator, char, stream_buffer_size);
-				ufbxwi_check(sc->stream_buffer);
-				sc->stream_buffer_size = stream_buffer_size;
-			}
-
-			size_t max_elements = sc->stream_buffer_size / type_info.size;
-			while (!ufbxwi_is_fatal(&sc->error) && offset < buffer_count) {
-				size_t to_read = ufbxwi_min_sz(max_elements, buffer_count - offset);
-				size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, sc->stream_buffer, to_read, offset);
-				ufbxwi_check(num_read == to_read);
-				ufbxwi_write(sc, sc->stream_buffer, num_read * type_info.size);
-
-				offset += num_read;
-			}
+		const void *deflate_input = NULL;
+		switch (buffer->state) {
+		case UFBXWI_BUFFER_STATE_NONE:
+			ufbxwi_unreachable("bad buffer");
+			break;
+		case UFBXWI_BUFFER_STATE_OWNED:
+			deflate_input = buffer->data.owned.data;
+			break;
+		case UFBXWI_BUFFER_STATE_EXTERNAL:
+			deflate_input = buffer->data.external.data;
+			break;
+		case UFBXWI_BUFFER_STATE_STREAM: {
+			ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_input_buffer, char, data_size));
+			size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, sc->tmp_input_buffer.data, data_size, 0);
+			ufbxwi_check(num_read == data_size);
+			deflate_input = sc->tmp_input_buffer.data;
+		} break;
 		}
 
-	} break;
+		void *dst_buffer = sc->tmp_compress_buffer.data;
+		size_t deflate_size = sc->opts.deflate_cb.fn(sc->opts.deflate_cb.user, dst_buffer, deflate_bound, deflate_input, data_size);
+		if (deflate_size == 0 || deflate_size == SIZE_MAX) {
+			ufbxwi_fail(&sc->error, UFBXW_ERROR_DEFLATE_FAILED, "failed to deflate compress buffer");
+		}
+		if (deflate_size > UINT32_MAX) {
+			ufbxwi_failf(&sc->error, UFBXW_ERROR_ARRAY_TOO_BIG, "compressed array is too big for FBX (%zu bytes, max 2^32 bytes)", deflate_size);
+		}
+		ufbxw_assert(deflate_size <= deflate_bound);
+
+		const uint32_t encoding = 1;
+		const uint32_t array_header[] = { (uint32_t)scalar_count, encoding, (uint32_t)deflate_size };
+		ufbxwi_write(sc, array_header, sizeof(array_header));
+		ufbxwi_write(sc, dst_buffer, deflate_size);
+#endif
+
+	} else {
+		if (data_size > UINT32_MAX) {
+			ufbxwi_failf(&sc->error, UFBXW_ERROR_ARRAY_TOO_BIG, "array is too big for FBX (%zu bytes, max 2^32 bytes)", data_size);
+		}
+
+		// TODO: Compression (encoding=1)
+		const uint32_t encoding = 0;
+		const uint32_t array_header[] = { (uint32_t)scalar_count, encoding, (uint32_t)data_size };
+		ufbxwi_write(sc, array_header, sizeof(array_header));
+
+		switch (buffer->state) {
+		case UFBXWI_BUFFER_STATE_NONE:
+			ufbxwi_unreachable("bad buffer");
+			break;
+		case UFBXWI_BUFFER_STATE_OWNED:
+			ufbxwi_write(sc, buffer->data.owned.data, data_size);
+			break;
+		case UFBXWI_BUFFER_STATE_EXTERNAL:
+			ufbxwi_write(sc, buffer->data.external.data, data_size);
+			break;
+		case UFBXWI_BUFFER_STATE_STREAM: {
+			size_t offset = 0;
+			if (data_size >= sc->direct_write_size) {
+				size_t buffer_size = sc->buffer_end - sc->buffer;
+				size_t max_elements = buffer_size / type_info.size;
+
+				while (!ufbxwi_is_fatal(&sc->error) && offset < buffer_count) {
+					ufbxwi_write_flush(sc);
+
+					size_t to_read = ufbxwi_min_sz(max_elements, buffer_count - offset);
+					size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, sc->buffer, to_read, offset);
+					ufbxwi_check(num_read == to_read);
+
+					offset += num_read;
+				}
+			} else {
+				// Read through a temporary buffer so that we can stream to aligned memory
+				if (!sc->stream_buffer) {
+					size_t stream_buffer_size = 4096;
+					sc->stream_buffer = ufbxwi_alloc(&sc->ator, char, stream_buffer_size);
+					ufbxwi_check(sc->stream_buffer);
+					sc->stream_buffer_size = stream_buffer_size;
+				}
+
+				size_t max_elements = sc->stream_buffer_size / type_info.size;
+				while (!ufbxwi_is_fatal(&sc->error) && offset < buffer_count) {
+					size_t to_read = ufbxwi_min_sz(max_elements, buffer_count - offset);
+					size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, sc->stream_buffer, to_read, offset);
+					ufbxwi_check(num_read == to_read);
+					ufbxwi_write(sc, sc->stream_buffer, num_read * type_info.size);
+
+					offset += num_read;
+				}
+			}
+
+		} break;
+		}
 	}
 
 	uint64_t values_end = ufbxwi_get_file_position(sc);
