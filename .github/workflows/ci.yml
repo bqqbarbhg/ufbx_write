@@ -19,12 +19,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      - name: Configure tesdt CMake
+      - name: Configure test CMake
         run: cmake -S test -B build-test
       - name: Compile tests
         run: cmake --build build-test
       - name: Run tests
-        run: build-test/ufbxw_test
+        run: build-test/ufbxw_test --verbose
   ci_cpp:
     runs-on: ubuntu-latest
     steps:
