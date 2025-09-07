@@ -2420,6 +2420,45 @@ static bool ufbxwi_make_buffer_owned(ufbxwi_buffer_pool *pool, ufbxw_buffer_id i
 	return true;
 }
 
+static const void *ufbxwi_buffer_get_data(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
+{
+	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(id);
+	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
+	if (!buffer) return NULL;
+
+	switch (buffer->state) {
+	case UFBXWI_BUFFER_STATE_NONE:
+		return NULL;
+	case UFBXWI_BUFFER_STATE_OWNED:
+		return buffer->data.owned.data;
+	case UFBXWI_BUFFER_STATE_EXTERNAL:
+		return buffer->data.external.data;
+	case UFBXWI_BUFFER_STATE_STREAM:
+		return NULL;
+	}
+	return NULL;
+}
+
+ufbxwi_nodiscard static bool ufbxwi_buffer_materialize(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
+{
+	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(id);
+	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
+	if (!buffer) return false;
+
+	switch (buffer->state) {
+	case UFBXWI_BUFFER_STATE_NONE:
+		return false;
+	case UFBXWI_BUFFER_STATE_OWNED:
+	case UFBXWI_BUFFER_STATE_EXTERNAL:
+		return true;
+		return buffer->data.external.data;
+	case UFBXWI_BUFFER_STATE_STREAM:
+		ufbxwi_check(ufbxwi_make_buffer_owned(pool, id));
+		return true;
+	}
+	return false;
+}
+
 static void ufbxwi_set_buffer_from_user(ufbxwi_buffer_pool *pool, ufbxw_buffer_id *p_dst, ufbxw_buffer_id src)
 {
 	if (ufbxwi_is_fatal(pool->error)) return;
@@ -2495,7 +2534,7 @@ static ufbxwi_forceinline ufbxw_vec4_buffer ufbxwi_to_user_vec4_buffer(ufbxwi_bu
 
 typedef struct {
 	const void *pos, *end;
-} ufbxwi_void_interator;
+} ufbxwi_void_iterator;
 
 typedef struct {
 	const int32_t *pos, *end;
@@ -2541,10 +2580,10 @@ static ufbxwi_noinline bool ufbxwi_start_stream(ufbxwi_buffer_pool *pool, ufbxw_
 	return true;
 }
 
-static ufbxwi_noinline ufbxwi_void_interator ufbxwi_advance_stream_imp(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id, const void *pos)
+static ufbxwi_noinline ufbxwi_void_iterator ufbxwi_advance_stream_imp(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id, const void *pos)
 {
 	ufbxwi_buffer *buf = ufbxwi_get_buffer(pool, id);
-	ufbxwi_void_interator it = { NULL, 0 };
+	ufbxwi_void_iterator it = { NULL, 0 };
 	if (!buf) return it;
 
 	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(id);
@@ -2572,7 +2611,7 @@ static ufbxwi_noinline ufbxwi_void_interator ufbxwi_advance_stream_imp(ufbxwi_bu
 }
 
 #define ufbxwi_advance_stream(m_pool, m_id, m_iterator) do { \
-		ufbxwi_void_interator mi_it = ufbxwi_advance_stream_imp((m_pool), (m_id), (m_iterator).pos); \
+		ufbxwi_void_iterator mi_it = ufbxwi_advance_stream_imp((m_pool), (m_id), (m_iterator).pos); \
 		(m_iterator).pos = mi_it.pos; \
 		(m_iterator).end = mi_it.end; \
 	} while(0)
@@ -6036,6 +6075,9 @@ typedef struct {
 	// TODO: Threaded versions of these
 	ufbxwi_byte_list tmp_input_buffer;
 	ufbxwi_byte_list tmp_compress_buffer;
+	ufbxw_deflate_compressor deflate;
+	bool has_deflate_compressor;
+	bool tried_deflate_compressor;
 
 } ufbxwi_save_context;
 
@@ -6714,7 +6756,93 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 
 	ufbxwi_write(sc, &type_char, 1);
 
-	if (sc->opts.deflate_compressor_cb.fn) {
+	if (!sc->tried_deflate_compressor && sc->opts.deflate.create_cb.fn) {
+		sc->tried_deflate_compressor = true;
+
+		if (sc->opts.deflate.create_cb.fn(sc->opts.deflate.create_cb.user, &sc->deflate, sc->opts.compression_level)) {
+			sc->has_deflate_compressor = true;
+		}
+	}
+
+	if (sc->has_deflate_compressor) {
+
+		size_t bound_size = sc->deflate.begin_fn(&sc->deflate.user, data_size);
+
+		if (!sc->opts.deflate.streaming_input) {
+			ufbxwi_check(ufbxwi_buffer_materialize(&sc->buffers, buffer_id));
+		}
+
+		size_t input_offset = 0, input_size = 0;
+		const void *input = ufbxwi_buffer_get_data(&sc->buffer, buffer_id);
+		if (input) {
+			input_size = data_size;
+		} else {
+			size_t buffer_size = 64 * 1024;
+			ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_input_buffer, char, buffer_size));
+			input = sc->tmp_input_buffer.data;
+			input_size = buffer_size;
+			input_offset = input_size;
+		}
+
+		void *output = NULL;
+		size_t output_offset = 0, output_size = 0;
+
+		size_t buffer_left = ufbxwi_to_size(sc->buffer_end - sc->buffer_pos);
+		if (bound_size <= buffer_left || sc->opts.deflate.streaming_output) {
+			output = sc->buffer;
+			output_offset = ufbxwi_to_size(sc->buffer_pos - sc->buffer);
+			output_size = ufbxwi_to_size(sc->buffer_end - sc->buffer);
+		} else {
+			ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_compress_buffer, char, bound_size));
+			output = sc->tmp_compress_buffer.data;
+			output_size = bound_size;
+		}
+
+		bool require_flush = false;
+		size_t total_bytes_read = 0;
+		size_t stream_offset = 0;
+		for (;;) {
+			ufbxw_deflate_advance_status status = { 0, 0 };
+
+			// TODO: Use a bigger buffer, rewrite the whole header including the length
+			// TODO: Flush a subset of the buffer if not writing arrays
+
+			const void *src = (const char*)input + input_offset;
+			size_t src_size = input_size - input_offset;
+			void *dst = (char*)output + output_offset;
+			size_t dst_size = output_size - output_offset;
+
+			size_t input_left = data_size - total_bytes_read;
+
+			uint32_t flags = 0;
+			if (src_size == input_left) {
+				flags |= UFBXW_DEFLATE_ADVANCE_FINISH;
+			}
+
+			if (src_size > 0 && dst_size > 0) {
+				if (!sc->deflate.advance_fn(sc->deflate.user, &status, dst, dst_size, src, src_size, flags)) {
+					ufbxwi_fail(&sc->error, UFBXW_ERROR_DEFLATE_FAILED, "deflate failed");
+					return;
+				}
+			}
+
+			total_bytes_read += status.bytes_read;
+
+			if (src_size < 256 && src_size != input_left) {
+				if (src_size > 0) {
+					memmove(input, (const char*)input + input_offset, src_size);
+				}
+				input_offset = src_size;
+
+				char *read_dst = (char*)input + input_offset;
+				size_t read_count = ufbxwi_min_sz(input_left, input_size - input_offset) / type_info.size;
+				size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, read_dst, read_count, stream_offset);
+				ufbxwi_check(num_read > 0);
+
+				stream_offset += num_read;
+				input_offset += num_read * type_info.size;
+			}
+		}
 
 #if 0
 		// TODO: Proper bound, maybe a callback?
@@ -8126,6 +8254,8 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc)
 	sc->buffers.error = &sc->error;
 	ufbxwi_refer_buffers(&sc->buffers, &sc->scene->buffers);
 	if (ufbxwi_is_fatal(&sc->error)) return;
+
+	if (sc->opts.compression_level == 0) sc->opts.compression_level = 6;
 
 	size_t buffer_size = 0x10000;
 
@@ -9688,6 +9818,11 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 	ufbxwi_save_imp(&sc);
 	if (sc.stream.close_fn) {
 		sc.stream.close_fn(sc.stream.user);
+	}
+	if (sc.has_deflate_compressor) {
+		if (sc.deflate.free_fn) {
+			sc.deflate.free_fn(sc.deflate.user);
+		}
 	}
 
 	ufbxwi_free_allocator(&sc.ator);

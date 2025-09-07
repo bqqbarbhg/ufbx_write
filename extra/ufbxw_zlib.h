@@ -22,7 +22,7 @@ typedef struct ufbxw_zlib_opts {
 	ufbxw_zlib_allocator allocator;
 } ufbxw_zlib_opts;
 
-ufbxw_zlib_abi void ufbxw_zlib_setup(struct ufbxw_deflate_compressor_cb *cb, const ufbxw_zlib_opts *opts);
+ufbxw_zlib_abi void ufbxw_zlib_setup(struct ufbxw_deflate *deflate, const ufbxw_zlib_opts *opts);
 
 #endif
 
@@ -47,7 +47,7 @@ static size_t ufbxw_zlib_begin(void *user, size_t input_size)
 	return 0;
 }
 
-static bool ufbxw_zlib_advance(void *user, ufbxw_deflate_result *result, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags)
+static bool ufbxw_zlib_advance(void *user, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags)
 {
 	if (src_size > UINT_MAX) src_size = UINT_MAX;
 	if (dst_size > UINT_MAX) dst_size = UINT_MAX;
@@ -67,12 +67,12 @@ static bool ufbxw_zlib_advance(void *user, ufbxw_deflate_result *result, void *d
 		flush = Z_FINISH;
 	}
 	int res = deflate(zs, flush);
-	if (res < 0) {
+	if (res < 0 && res != Z_BUF_ERROR) {
 		return false;
 	}
 
-	result->bytes_read += (size_t)(zs->next_in - (z_const Bytef*)src);
-	result->bytes_written += (size_t)(zs->next_out - (Bytef*)dst);
+	status->bytes_read += (size_t)(zs->next_in - (z_const Bytef*)src);
+	status->bytes_written += (size_t)(zs->next_out - (Bytef*)dst);
 	return true;
 }
 
@@ -106,10 +106,12 @@ static bool ufbxw_zlib_init(void *user, ufbxw_deflate_compressor *compressor, in
 	return true;
 }
 
-ufbxw_zlib_abi void ufbxw_zlib_setup(ufbxw_deflate_compressor_cb *cb, const ufbxw_zlib_opts *opts)
+ufbxw_zlib_abi void ufbxw_zlib_setup(struct ufbxw_deflate *deflate, const ufbxw_zlib_opts *opts)
 {
-	cb->fn = &ufbxw_zlib_init;
-	cb->user = (void*)opts;
+	deflate->create_cb.fn = &ufbxw_zlib_init;
+	deflate->create_cb.user = (void*)opts;
+	deflate->streaming_input = true;
+	deflate->streaming_output = true;
 }
 
 #endif

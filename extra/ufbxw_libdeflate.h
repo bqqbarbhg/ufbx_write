@@ -24,7 +24,7 @@ typedef struct ufbxw_libdeflate_opts {
 	ufbxw_libdeflate_allocator allocator;
 } ufbxw_libdeflate_opts;
 
-ufbxw_libdeflate_abi void ufbxw_libdeflate_setup(struct ufbxw_deflate_compressor_cb *cb, const ufbxw_libdeflate_opts *opts);
+ufbxw_libdeflate_abi void ufbxw_libdeflate_setup(struct ufbxw_deflate *deflate, const ufbxw_libdeflate_opts *opts);
 
 #endif
 
@@ -46,14 +46,14 @@ static size_t ufbxw_libdeflate_begin(void *user, size_t input_size)
 	return libdeflate_zlib_compress_bound(c, input_size);
 }
 
-static bool ufbxw_libdeflate_advance(void *user, ufbxw_deflate_result *result, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags)
+static bool ufbxw_libdeflate_advance(void *user, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags)
 {
 	struct libdeflate_compressor *c = (struct libdeflate_compressor*)user;
 	size_t dst_written = libdeflate_zlib_compress(c, src, src_size, dst, dst_size);
 	if (dst_written == 0) return false;
 
-	result->bytes_read = src_size;
-	result->bytes_written = dst_written;
+	status->bytes_read = src_size;
+	status->bytes_written = dst_written;
 	return true;
 }
 
@@ -86,10 +86,12 @@ static bool ufbxw_libdeflate_init(void *user, ufbxw_deflate_compressor *compress
 	return true;
 }
 
-ufbxw_libdeflate_abi void ufbxw_libdeflate_setup(ufbxw_deflate_compressor_cb *cb, const ufbxw_libdeflate_opts *opts)
+ufbxw_libdeflate_abi void ufbxw_libdeflate_setup(struct ufbxw_deflate *deflate, const ufbxw_libdeflate_opts *opts)
 {
-	cb->fn = &ufbxw_libdeflate_init;
-	cb->user = (void*)opts;
+	deflate->create_cb.fn = &ufbxw_libdeflate_init;
+	deflate->create_cb.user = (void*)opts;
+	deflate->streaming_input = false;
+	deflate->streaming_output = false;
 }
 
 #endif
