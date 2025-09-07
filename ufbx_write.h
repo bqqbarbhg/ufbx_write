@@ -1108,7 +1108,7 @@ typedef struct ufbxw_save_opts {
 
 	ufbxw_allocator allocator;
 
-	// Comrpession level.
+	// Compression level.
 	// Defaults to `6`.
 	int32_t compression_level;
 
