@@ -1089,6 +1089,7 @@ typedef struct ufbxw_deflate {
 	ufbxw_deflate_create_cb create_cb;
 	bool streaming_input;
 	bool streaming_output;
+	size_t window_size;
 } ufbxw_deflate;
 
 // -- Writing API

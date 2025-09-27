@@ -123,6 +123,12 @@
 	#endif
 #endif
 
+#if defined(UFBXW_REGRESSION)
+	#define UFBXWI_DEFLATE_WINDOW_SIZE 128
+#else
+	#define UFBXWI_DEFLATE_WINDOW_SIZE 65536
+#endif
+
 // -- Pointer alignment
 
 #if !defined(UFBXW_STANDARD_C) && defined(__GNUC__) && defined(__has_builtin)
@@ -2453,7 +2459,7 @@ ufbxwi_nodiscard static bool ufbxwi_buffer_materialize(ufbxwi_buffer_pool *pool,
 		return true;
 		return buffer->data.external.data;
 	case UFBXWI_BUFFER_STATE_STREAM:
-		ufbxwi_check(ufbxwi_make_buffer_owned(pool, id));
+		ufbxwi_check(ufbxwi_make_buffer_owned(pool, id), false);
 		return true;
 	}
 	return false;
@@ -2568,7 +2574,8 @@ static ufbxwi_noinline bool ufbxwi_start_stream(ufbxwi_buffer_pool *pool, ufbxw_
 
 	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(id);
 	size_t type_size = ufbxwi_buffer_type_infos[type].size;
-	uint32_t capacity = (uint32_t)(16 * 1024 / type_size);
+	size_t buffer_size = 16 * 1024;
+	uint32_t capacity = (uint32_t)(buffer_size / type_size);
 
 	// TODO: Pool these
 	void *data = ufbxwi_alloc_size(pool->ator, type_size, capacity, NULL);
@@ -2591,7 +2598,9 @@ static ufbxwi_noinline ufbxwi_void_iterator ufbxwi_advance_stream_imp(ufbxwi_buf
 	char *stream_data = (char*)buf->stream_data;
 
 	if (pos) {
-		size_t read_count = ufbxwi_to_size((char*)pos - stream_data) / type_size;
+		size_t read_offset = ufbxwi_to_size((char*)pos - stream_data);
+		ufbxw_assert(read_offset % type_size == 0);
+		size_t read_count = read_offset / type_size;
 		ufbxw_assert(read_count >= buf->stream_read_count && read_count <= buf->stream_count);
 		buf->stream_read_count = (uint32_t)read_count;
 	}
@@ -6055,7 +6064,7 @@ typedef struct {
 
 	uint32_t depth;
 
-	char *buffer;
+	char *buffer_begin;
 	char *buffer_pos;
 	char *buffer_end;
 	size_t direct_write_size;
@@ -6087,17 +6096,17 @@ static ufbxwi_noinline void ufbxwi_write_flush(ufbxwi_save_context *sc)
 {
 	if (ufbxwi_is_fatal(&sc->error)) return;
 
-	size_t size = ufbxwi_to_size(sc->buffer_pos - sc->buffer);
+	size_t size = ufbxwi_to_size(sc->buffer_pos - sc->buffer_begin);
 	if (size == 0) return;
 
-	bool write_ok = sc->stream.write_fn(sc->stream.user, sc->file_pos, sc->buffer, size);
+	bool write_ok = sc->stream.write_fn(sc->stream.user, sc->file_pos, sc->buffer_begin, size);
 	if (!write_ok) {
 		ufbxwi_fail(&sc->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
 		return;
 	}
 
 	sc->file_pos += (uint64_t)size;
-	sc->buffer_pos = sc->buffer;
+	sc->buffer_pos = sc->buffer_begin;
 }
 
 static ufbxwi_noinline void ufbxwi_write_slow(ufbxwi_save_context *sc, const void *data, size_t length)
@@ -6132,7 +6141,7 @@ static ufbxwi_noinline void ufbxwi_write_slow(ufbxwi_save_context *sc, const voi
 			}
 
 			sc->file_pos += (uint64_t)length;
-			sc->buffer_pos = sc->buffer;
+			sc->buffer_pos = sc->buffer_begin;
 		} else {
 			if (data) {
 				memcpy(sc->buffer_pos, data, length);
@@ -6151,7 +6160,7 @@ static ufbxwi_noinline void ufbxwi_write_at_slow(ufbxwi_save_context *sc, uint64
 
 	if (ufbxwi_is_fatal(&sc->error)) return;
 
-	bool write_ok = sc->stream.write_fn(sc->stream.user, pos, sc->buffer, length);
+	bool write_ok = sc->stream.write_fn(sc->stream.user, pos, sc->buffer_begin, length);
 	if (!write_ok) {
 		ufbxwi_fail(&sc->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
 		return;
@@ -6176,7 +6185,7 @@ static ufbxwi_forceinline void ufbxwi_write_at(ufbxwi_save_context *sc, uint64_t
 
 	if (relative_pos >= 0) {
 		// Must be within the buffer, ufbxwi_write_at() is only called backwards
-		char *dst = sc->buffer + relative_pos;
+		char *dst = sc->buffer_begin + relative_pos;
 		ufbxwi_dev_assert(dst + length <= sc->buffer_end);
 		memcpy(dst, data, length);
 	} else {
@@ -6186,7 +6195,7 @@ static ufbxwi_forceinline void ufbxwi_write_at(ufbxwi_save_context *sc, uint64_t
 
 static ufbxwi_forceinline uint64_t ufbxwi_get_file_position(ufbxwi_save_context *sc)
 {
-	size_t buffer_pos = ufbxwi_to_size(sc->buffer_pos - sc->buffer);
+	size_t buffer_pos = ufbxwi_to_size(sc->buffer_pos - sc->buffer_begin);
 	return sc->file_pos + buffer_pos;
 }
 
@@ -6203,13 +6212,31 @@ static void ufbxwi_write_skip(ufbxwi_save_context *sc, size_t length)
 
 static ufbxwi_noinline char *ufbxwi_write_reserve_slow(ufbxwi_save_context *sc, size_t length)
 {
-	ufbxwi_write_flush(sc);
-	ufbxw_assert(length < ufbxwi_to_size(sc->buffer_end - sc->buffer_pos));
+	if (sc->buffer_pos - sc->buffer_begin >= sc->direct_write_size) {
+		ufbxwi_write_flush(sc);
+	}
+
+	size_t buffer_used = ufbxwi_to_size(sc->buffer_end - sc->buffer_pos);
+	size_t buffer_size = ufbxwi_to_size(sc->buffer_end - sc->buffer_begin);
+	if (buffer_size < length) {
+		size_t new_size = ufbxwi_max_sz(buffer_size * 2, buffer_used + length);
+		char *new_buffer = ufbxwi_alloc(&sc->ator, char, new_size);
+		ufbxwi_check(new_buffer, NULL);
+		memcpy(new_buffer, sc->buffer_begin, buffer_used);
+
+		ufbxwi_free(&sc->ator, sc->buffer_begin);
+		sc->buffer_begin = new_buffer;
+		sc->buffer_pos = new_buffer + buffer_used;
+		sc->buffer_end = new_buffer + new_size;
+	}
+
 	return sc->buffer_pos;
 }
 
-static ufbxwi_forceinline char *ufbxwi_write_reserve(ufbxwi_save_context *sc, size_t length)
+static ufbxwi_forceinline char *ufbxwi_write_reserve_small(ufbxwi_save_context *sc, size_t length)
 {
+	ufbxwi_dev_assert(length <= 256);
+
 	char *dst = sc->buffer_pos;
 	size_t left = ufbxwi_to_size(sc->buffer_end - dst);
 	if (left >= length) {
@@ -6217,6 +6244,21 @@ static ufbxwi_forceinline char *ufbxwi_write_reserve(ufbxwi_save_context *sc, si
 	} else {
 		return ufbxwi_write_reserve_slow(sc, length);
 	}
+}
+
+static ufbxwi_mutable_void_span ufbxwi_write_reserve_at_least(ufbxwi_save_context *sc, size_t length)
+{
+	char *dst = sc->buffer_pos;
+	size_t left = ufbxwi_to_size(sc->buffer_end - dst);
+	ufbxwi_mutable_void_span span;
+	if (left >= length) {
+		span.data = sc->buffer_pos;
+		span.count = left;
+	} else {
+		span.data = ufbxwi_write_reserve_slow(sc, length);
+		span.count = ufbxwi_to_size(sc->buffer_end - (char*)span.data);
+	}
+	return span;
 }
 
 static ufbxwi_forceinline void ufbxwi_write_commit(ufbxwi_save_context *sc, size_t length)
@@ -6230,7 +6272,7 @@ static ufbxwi_forceinline void ufbxwi_write_commit(ufbxwi_save_context *sc, size
 static void ufbxwi_ascii_indent(ufbxwi_save_context *sc)
 {
 	size_t indent = ufbxwi_min_sz(sc->depth, 64);
-	char *dst = ufbxwi_write_reserve(sc, indent);
+	char *dst = ufbxwi_write_reserve_small(sc, indent);
 	for (size_t i = 0; i < indent; i++) {
 		dst[i] = '\t';
 	}
@@ -6241,8 +6283,9 @@ static void ufbxwi_ascii_comment(ufbxwi_save_context *sc, const char *fmt, va_li
 {
 	// TODO: More rigorous
 	// TODO: Sanitize \n's and other special characters
-	size_t max_length = 512;
-	char *dst = ufbxwi_write_reserve(sc, max_length);
+	size_t max_length = 256;
+	char *dst = ufbxwi_write_reserve_small(sc, max_length);
+
 	int len = vsnprintf(dst, max_length, fmt, args);
 	ufbxw_assert(len >= 0);
 	ufbxwi_write_commit(sc, (size_t)len);
@@ -6288,25 +6331,25 @@ static void ufbxwi_ascii_dom_write(ufbxwi_save_context *sc, const char *tag, con
 
 		switch (f) {
 		case 'I': {
-			char *dst = ufbxwi_write_reserve(sc, 32);
+			char *dst = ufbxwi_write_reserve_small(sc, 32);
 			int len = snprintf(dst, 32, "%d", va_arg(args, int32_t));
 			ufbxw_assert(len >= 0);
 			ufbxwi_write_commit(sc, (size_t)len);
 		} break;
 		case 'L': {
-			char *dst = ufbxwi_write_reserve(sc, 32);
+			char *dst = ufbxwi_write_reserve_small(sc, 32);
 			int len = snprintf(dst, 32, "%lld", (long long)va_arg(args, int64_t));
 			ufbxw_assert(len >= 0);
 			ufbxwi_write_commit(sc, (size_t)len);
 		} break;
 		case 'F': {
-			char *dst = ufbxwi_write_reserve(sc, 32);
+			char *dst = ufbxwi_write_reserve_small(sc, 32);
 			int len = snprintf(dst, 32, "%.8g", (float)va_arg(args, double));
 			ufbxw_assert(len >= 0);
 			ufbxwi_write_commit(sc, (size_t)len);
 		} break;
 		case 'D': {
-			char *dst = ufbxwi_write_reserve(sc, 32);
+			char *dst = ufbxwi_write_reserve_small(sc, 32);
 			int len = snprintf(dst, 32, "%.8g", va_arg(args, double));
 			ufbxw_assert(len >= 0);
 			ufbxwi_write_commit(sc, (size_t)len);
@@ -6714,26 +6757,53 @@ static void ufbxwi_binary_dom_write(ufbxwi_save_context *sc, const char *tag, co
 	}
 }
 
+static bool ufbxwi_deflate_advance(ufbxwi_save_context *sc, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, bool is_final)
+{
+	if (src_size == 0) return 0;
+
+	uint32_t flags = 0;
+	if (is_final) {
+		flags |= UFBXW_DEFLATE_ADVANCE_FINISH;
+	}
+
+	bool ok = sc->deflate.advance_fn(sc->deflate.user, status, dst, dst_size, src, src_size, flags);
+	if (ok && status->bytes_read == 0 && status->bytes_written == 0) {
+		flags |= UFBXW_DEFLATE_ADVANCE_FLUSH;
+		ok = sc->deflate.advance_fn(sc->deflate.user, status, dst, dst_size, src, src_size, flags);
+	}
+
+	if (!ok) {
+		ufbxwi_fail(&sc->error, UFBXW_ERROR_DEFLATE_FAILED, "deflate error");
+		return false;
+	}
+
+	if (status->bytes_written == 0 && status->bytes_read == 0) {
+		ufbxwi_fail(&sc->error, UFBXW_ERROR_DEFLATE_FAILED, "streaming deflate failed to make progress");
+		return false;
+	}
+
+	return true;
+}
+
 static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *tag, ufbxw_buffer_id buffer_id)
 {
 	ufbxwi_buffer *buffer = ufbxwi_get_buffer(&sc->buffers, buffer_id);
 	if (!buffer) return;
 
-	ufbxwi_binary_node_header *header = ufbxwi_list_push_zero(&sc->ator, &sc->binary_headers, ufbxwi_binary_node_header);
-	ufbxwi_check(header);
-
-	header->file_offset = ufbxwi_get_file_position(sc);
+	ufbxwi_binary_node_header header = { 0 };
+	header.file_offset = ufbxwi_get_file_position(sc);
 
 	// Skip header, written later
 	size_t header_size = sc->opts.version >= 7500 ? 24 : 12;
-	ufbxwi_write_skip(sc, header_size);
 
 	size_t tag_len = strlen(tag);
-	ufbxw_assert(tag_len <= 255);
-	uint8_t tag_len8[] = { (uint8_t)tag_len };
+	size_t array_header_size = 12;
+	size_t header_size_with_name = header_size + 1 + tag_len;
+	size_t header_size_with_array_header = header_size_with_name + 1 + array_header_size;
+	ufbxwi_write_skip(sc, header_size_with_name);
 
-	ufbxwi_write(sc, tag_len8, 1);
-	ufbxwi_write(sc, tag, tag_len);
+	char full_header[24 + 1 + 255 + 1 + 12];
+	ufbxw_assert(header_size_with_array_header <= sizeof(full_header));
 
 	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer_id);
 	ufbxwi_buffer_type_info type_info = ufbxwi_buffer_type_infos[type];
@@ -6743,6 +6813,8 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 	size_t data_size = buffer_count * type_info.size;
 
 	uint64_t values_begin = ufbxwi_get_file_position(sc);
+
+	ufbxwi_write_skip(sc, 1 + array_header_size);
 
 	char type_char = ' ';
 	switch (type_info.scalar_type) {
@@ -6754,8 +6826,6 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 		ufbxwi_unreachable("bad scalar type");
 	}
 
-	ufbxwi_write(sc, &type_char, 1);
-
 	if (!sc->tried_deflate_compressor && sc->opts.deflate.create_cb.fn) {
 		sc->tried_deflate_compressor = true;
 
@@ -6764,136 +6834,90 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 		}
 	}
 
+	uint32_t encoding = 0;
+	uint32_t encoded_size = 0;
+
 	if (sc->has_deflate_compressor) {
+		const size_t window_size = sc->opts.deflate.window_size;
 
 		size_t bound_size = sc->deflate.begin_fn(&sc->deflate.user, data_size);
-
+		size_t dst_size = window_size;
 		if (!sc->opts.deflate.streaming_input) {
 			ufbxwi_check(ufbxwi_buffer_materialize(&sc->buffers, buffer_id));
 		}
+		if (!sc->opts.deflate.streaming_output) {
+			dst_size = bound_size;
+		}
 
-		size_t input_offset = 0, input_size = 0;
-		const void *input = ufbxwi_buffer_get_data(&sc->buffer, buffer_id);
-		if (input) {
-			input_size = data_size;
+		ufbxwi_void_iterator src = { 0 };
+		size_t total_read = 0;
+		size_t total_written = 0;
+
+		const char *buffer_data = (const char *)ufbxwi_buffer_get_data(&sc->buffers, buffer_id);
+		if (buffer_data) {
+			const char *src = buffer_data;
+			const char *src_end = src + data_size;
+			for (;;) {
+				size_t src_len = ufbxwi_to_size(src_end - src);
+
+				ufbxw_deflate_advance_status status = { 0, 0 };
+				ufbxwi_mutable_void_span dst = ufbxwi_write_reserve_at_least(sc, dst_size);
+				ufbxwi_check(ufbxwi_deflate_advance(sc, &status, dst.data, dst.count, src, src_len, true));
+				src += status.bytes_read;
+				total_written += status.bytes_written;
+				ufbxwi_write_commit(sc, status.bytes_written);
+			}
 		} else {
-			size_t buffer_size = 64 * 1024;
-			ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_input_buffer, char, buffer_size));
-			input = sc->tmp_input_buffer.data;
-			input_size = buffer_size;
-			input_offset = input_size;
-		}
+			size_t read_offset = 0;
+			size_t src_buffer_size = window_size * 2;
+			ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_input_buffer, char, src_buffer_size));
 
-		void *output = NULL;
-		size_t output_offset = 0, output_size = 0;
+			char *src = sc->tmp_input_buffer.data;
+			size_t src_pos = 0;
+			size_t src_len = 0;
+			bool at_end = false;
+			size_t input_index = 0;
 
-		size_t buffer_left = ufbxwi_to_size(sc->buffer_end - sc->buffer_pos);
-		if (bound_size <= buffer_left || sc->opts.deflate.streaming_output) {
-			output = sc->buffer;
-			output_offset = ufbxwi_to_size(sc->buffer_pos - sc->buffer);
-			output_size = ufbxwi_to_size(sc->buffer_end - sc->buffer);
-		} else {
-			ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_compress_buffer, char, bound_size));
-			output = sc->tmp_compress_buffer.data;
-			output_size = bound_size;
-		}
+			for (;;) {
+				if (!at_end && src_len - src_pos < window_size) {
+					size_t elems_read = src_pos / type_info.size;
+					size_t bytes_read = elems_read * type_info.size;
 
-		bool require_flush = false;
-		size_t total_bytes_read = 0;
-		size_t stream_offset = 0;
-		for (;;) {
-			ufbxw_deflate_advance_status status = { 0, 0 };
+					memmove(src + src_pos - bytes_read, src + src_pos, src_len - src_pos);
+					src_pos -= bytes_read;
+					src_len -= bytes_read;
+					input_index += bytes_read;
 
-			// TODO: Use a bigger buffer, rewrite the whole header including the length
-			// TODO: Flush a subset of the buffer if not writing arrays
+					size_t input_left = buffer_count - input_index;
+					size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, src + src_pos, input_left, input_index);
+					ufbxwi_check(num_read > 0);
 
-			const void *src = (const char*)input + input_offset;
-			size_t src_size = input_size - input_offset;
-			void *dst = (char*)output + output_offset;
-			size_t dst_size = output_size - output_offset;
-
-			size_t input_left = data_size - total_bytes_read;
-
-			uint32_t flags = 0;
-			if (src_size == input_left) {
-				flags |= UFBXW_DEFLATE_ADVANCE_FINISH;
-			}
-
-			if (src_size > 0 && dst_size > 0) {
-				if (!sc->deflate.advance_fn(sc->deflate.user, &status, dst, dst_size, src, src_size, flags)) {
-					ufbxwi_fail(&sc->error, UFBXW_ERROR_DEFLATE_FAILED, "deflate failed");
-					return;
+					src_len += num_read * type_info.size;
+					if (input_index + num_read == buffer_count) {
+						at_end = true;
+					}
 				}
-			}
 
-			total_bytes_read += status.bytes_read;
-
-			if (src_size < 256 && src_size != input_left) {
-				if (src_size > 0) {
-					memmove(input, (const char*)input + input_offset, src_size);
-				}
-				input_offset = src_size;
-
-				char *read_dst = (char*)input + input_offset;
-				size_t read_count = ufbxwi_min_sz(input_left, input_size - input_offset) / type_info.size;
-				size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, read_dst, read_count, stream_offset);
-				ufbxwi_check(num_read > 0);
-
-				stream_offset += num_read;
-				input_offset += num_read * type_info.size;
+				ufbxw_deflate_advance_status status = { 0, 0 };
+				ufbxwi_mutable_void_span dst = ufbxwi_write_reserve_at_least(sc, dst_size);
+				ufbxwi_check(ufbxwi_deflate_advance(sc, &status, dst.data, dst.count, src + src_pos, src_len - src_pos, at_end));
+				src_pos += status.bytes_read;
+				total_written += status.bytes_written;
+				ufbxwi_write_commit(sc, status.bytes_written);
 			}
 		}
 
-#if 0
-		// TODO: Proper bound, maybe a callback?
-		size_t deflate_bound = 64 + data_size + (data_size >> 2);
-
-		ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_compress_buffer, char, deflate_bound));
-
-		const void *deflate_input = NULL;
-		switch (buffer->state) {
-		case UFBXWI_BUFFER_STATE_NONE:
-			ufbxwi_unreachable("bad buffer");
-			break;
-		case UFBXWI_BUFFER_STATE_OWNED:
-			deflate_input = buffer->data.owned.data;
-			break;
-		case UFBXWI_BUFFER_STATE_EXTERNAL:
-			deflate_input = buffer->data.external.data;
-			break;
-		case UFBXWI_BUFFER_STATE_STREAM: {
-			ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_input_buffer, char, data_size));
-			size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, sc->tmp_input_buffer.data, data_size, 0);
-			ufbxwi_check(num_read == data_size);
-			deflate_input = sc->tmp_input_buffer.data;
-		} break;
+		if (total_written > UINT32_MAX) {
+			ufbxwi_failf(&sc->error, UFBXW_ERROR_ARRAY_TOO_BIG, "compressed array is too big for FBX (%zu bytes, max 2^32 bytes)", total_written);
 		}
-
-		void *dst_buffer = sc->tmp_compress_buffer.data;
-		size_t deflate_size = sc->opts.deflate_cb.fn(sc->opts.deflate_cb.user, dst_buffer, deflate_bound, deflate_input, data_size);
-		if (deflate_size == 0 || deflate_size == SIZE_MAX) {
-			ufbxwi_fail(&sc->error, UFBXW_ERROR_DEFLATE_FAILED, "failed to deflate compress buffer");
-		}
-		if (deflate_size > UINT32_MAX) {
-			ufbxwi_failf(&sc->error, UFBXW_ERROR_ARRAY_TOO_BIG, "compressed array is too big for FBX (%zu bytes, max 2^32 bytes)", deflate_size);
-		}
-		ufbxw_assert(deflate_size <= deflate_bound);
-
-		const uint32_t encoding = 1;
-		const uint32_t array_header[] = { (uint32_t)scalar_count, encoding, (uint32_t)deflate_size };
-		ufbxwi_write(sc, array_header, sizeof(array_header));
-		ufbxwi_write(sc, dst_buffer, deflate_size);
-#endif
+		encoded_size = (uint32_t)total_written;
 
 	} else {
 		if (data_size > UINT32_MAX) {
 			ufbxwi_failf(&sc->error, UFBXW_ERROR_ARRAY_TOO_BIG, "array is too big for FBX (%zu bytes, max 2^32 bytes)", data_size);
 		}
 
-		// TODO: Compression (encoding=1)
-		const uint32_t encoding = 0;
-		const uint32_t array_header[] = { (uint32_t)scalar_count, encoding, (uint32_t)data_size };
-		ufbxwi_write(sc, array_header, sizeof(array_header));
+		encoded_size = (uint32_t)data_size;
 
 		switch (buffer->state) {
 		case UFBXWI_BUFFER_STATE_NONE:
@@ -6908,14 +6932,14 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 		case UFBXWI_BUFFER_STATE_STREAM: {
 			size_t offset = 0;
 			if (data_size >= sc->direct_write_size) {
-				size_t buffer_size = sc->buffer_end - sc->buffer;
+				size_t buffer_size = sc->buffer_end - sc->buffer_begin;
 				size_t max_elements = buffer_size / type_info.size;
 
 				while (!ufbxwi_is_fatal(&sc->error) && offset < buffer_count) {
 					ufbxwi_write_flush(sc);
 
 					size_t to_read = ufbxwi_min_sz(max_elements, buffer_count - offset);
-					size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, sc->buffer, to_read, offset);
+					size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, sc->buffer_begin, to_read, offset);
 					ufbxwi_check(num_read == to_read);
 
 					offset += num_read;
@@ -6944,12 +6968,44 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 		}
 	}
 
-	uint64_t values_end = ufbxwi_get_file_position(sc);
+	// Manually write out the header in one piece
+	{
+		ufbxwi_check(sc->binary_headers.count > 0);
+		uint64_t values_end = ufbxwi_get_file_position(sc);
 
-	header->num_values = 1;
-	header->values_len = values_end - values_begin;
+		char *header_ptr = full_header;
 
-	ufbxwi_binary_finish_node(sc);
+		header.end_offset = values_end;
+		header.num_values = 1;
+		header.values_len = values_end - values_begin;
+
+		// TODO: Endian
+		if (sc->opts.version >= 7500) {
+			uint64_t header_data[] = { header.end_offset, header.num_values, header.values_len };
+			memcpy(header_ptr, header_data, sizeof(header_data));
+			header_ptr += sizeof(header_data);
+		} else {
+			uint32_t header_data[] = { (uint32_t)header.end_offset, (uint32_t)header.num_values, (uint32_t)header.values_len };
+			memcpy(header_ptr, header_data, sizeof(header_data));
+			header_ptr += sizeof(header_data);
+		}
+
+		ufbxw_assert(tag_len <= 255);
+		*header_ptr++ = (char)(uint8_t)tag_len;
+		memcpy(header_ptr, tag, tag_len);
+		header_ptr += tag_len;
+
+		*header_ptr++ = type_char;
+
+		const uint32_t array_header[] = { (uint32_t)scalar_count, encoding, encoded_size };
+		memcpy(header_ptr, array_header, sizeof(array_header));
+		header_ptr += sizeof(array_header);
+
+		size_t header_len = ufbxwi_to_size(header_ptr - full_header);
+		ufbxw_assert(header_len == header_size_with_array_header);
+
+		ufbxwi_write_at(sc, header.file_offset, full_header, header_len);
+	}
 }
 
 // TODO: Allocate this dynamically?
@@ -8222,7 +8278,7 @@ static bool ufbxwi_open_file_write(ufbxw_write_stream *stream, const char *path,
 static void ufbxwi_mark_save_context_failed(ufbxwi_save_context *sc)
 {
 	ufbxwi_mark_buffers_failed(&sc->buffers);
-	sc->buffer = NULL;
+	sc->buffer_begin = NULL;
 	sc->buffer_pos = NULL;
 	sc->buffer_end = NULL;
 }
@@ -8256,16 +8312,17 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc)
 	if (ufbxwi_is_fatal(&sc->error)) return;
 
 	if (sc->opts.compression_level == 0) sc->opts.compression_level = 6;
+	if (sc->opts.deflate.window_size == 0) sc->opts.deflate.window_size = UFBXWI_DEFLATE_WINDOW_SIZE;
 
 	size_t buffer_size = 0x10000;
 
 	// TODO: Make sure buffer fits at least binary header
 
-	sc->buffer = ufbxwi_alloc(&sc->ator, char, buffer_size);
-	ufbxwi_check(sc->buffer);
+	sc->buffer_begin = ufbxwi_alloc(&sc->ator, char, buffer_size);
+	ufbxwi_check(sc->buffer_begin);
 
-	sc->buffer_pos = sc->buffer;
-	sc->buffer_end = sc->buffer + buffer_size;
+	sc->buffer_pos = sc->buffer_begin;
+	sc->buffer_end = sc->buffer_begin + buffer_size;
 	sc->direct_write_size = buffer_size / 2;
 
 	ufbxwi_save_init(sc);
