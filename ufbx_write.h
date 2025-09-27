@@ -1129,6 +1129,9 @@ typedef struct ufbxw_save_opts {
 	bool enable_override_creator;
 	ufbxw_string override_creator;
 
+	// Buffer size to use for writing streaming output.
+	size_t buffer_size;
+
 	uint32_t _end_zero;
 } ufbxw_save_opts;
 

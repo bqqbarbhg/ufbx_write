@@ -2457,7 +2457,6 @@ ufbxwi_nodiscard static bool ufbxwi_buffer_materialize(ufbxwi_buffer_pool *pool,
 	case UFBXWI_BUFFER_STATE_OWNED:
 	case UFBXWI_BUFFER_STATE_EXTERNAL:
 		return true;
-		return buffer->data.external.data;
 	case UFBXWI_BUFFER_STATE_STREAM:
 		ufbxwi_check(ufbxwi_make_buffer_owned(pool, id), false);
 		return true;
@@ -6126,6 +6125,7 @@ static ufbxwi_noinline void ufbxwi_write_slow(ufbxwi_save_context *sc, const voi
 			data = (const char*)data + left;
 		}
 
+		sc->buffer_pos = dst + left;
 		length -= left;
 		ufbxwi_write_flush(sc);
 
@@ -6141,7 +6141,6 @@ static ufbxwi_noinline void ufbxwi_write_slow(ufbxwi_save_context *sc, const voi
 			}
 
 			sc->file_pos += (uint64_t)length;
-			sc->buffer_pos = sc->buffer_begin;
 		} else {
 			if (data) {
 				memcpy(sc->buffer_pos, data, length);
@@ -6160,7 +6159,7 @@ static ufbxwi_noinline void ufbxwi_write_at_slow(ufbxwi_save_context *sc, uint64
 
 	if (ufbxwi_is_fatal(&sc->error)) return;
 
-	bool write_ok = sc->stream.write_fn(sc->stream.user, pos, sc->buffer_begin, length);
+	bool write_ok = sc->stream.write_fn(sc->stream.user, pos, data, length);
 	if (!write_ok) {
 		ufbxwi_fail(&sc->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
 		return;
@@ -6759,7 +6758,7 @@ static void ufbxwi_binary_dom_write(ufbxwi_save_context *sc, const char *tag, co
 
 static bool ufbxwi_deflate_advance(ufbxwi_save_context *sc, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, bool is_final)
 {
-	if (src_size == 0) return 0;
+	if (src_size == 0) return true;
 
 	uint32_t flags = 0;
 	if (is_final) {
@@ -6831,6 +6830,9 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 
 		if (sc->opts.deflate.create_cb.fn(sc->opts.deflate.create_cb.user, &sc->deflate, sc->opts.compression_level)) {
 			sc->has_deflate_compressor = true;
+		} else {
+			ufbxwi_fail(&sc->error, UFBXW_ERROR_DEFLATE_FAILED, "failed to initialize deflate");
+			return;
 		}
 	}
 
@@ -6840,7 +6842,7 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 	if (sc->has_deflate_compressor) {
 		const size_t window_size = sc->opts.deflate.window_size;
 
-		size_t bound_size = sc->deflate.begin_fn(&sc->deflate.user, data_size);
+		size_t bound_size = sc->deflate.begin_fn(sc->deflate.user, data_size);
 		size_t dst_size = window_size;
 		if (!sc->opts.deflate.streaming_input) {
 			ufbxwi_check(ufbxwi_buffer_materialize(&sc->buffers, buffer_id));
@@ -6857,7 +6859,7 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 		if (buffer_data) {
 			const char *src = buffer_data;
 			const char *src_end = src + data_size;
-			for (;;) {
+			while (src != src_end) {
 				size_t src_len = ufbxwi_to_size(src_end - src);
 
 				ufbxw_deflate_advance_status status = { 0, 0 };
@@ -6904,14 +6906,21 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 				src_pos += status.bytes_read;
 				total_written += status.bytes_written;
 				ufbxwi_write_commit(sc, status.bytes_written);
+
+				if (at_end && src_pos == src_len) break;
 			}
+		}
+
+		if (sc->deflate.end_fn) {
+			sc->deflate.end_fn(&sc->deflate.user);
 		}
 
 		if (total_written > UINT32_MAX) {
 			ufbxwi_failf(&sc->error, UFBXW_ERROR_ARRAY_TOO_BIG, "compressed array is too big for FBX (%zu bytes, max 2^32 bytes)", total_written);
 		}
-		encoded_size = (uint32_t)total_written;
 
+		encoding = 1;
+		encoded_size = (uint32_t)total_written;
 	} else {
 		if (data_size > UINT32_MAX) {
 			ufbxwi_failf(&sc->error, UFBXW_ERROR_ARRAY_TOO_BIG, "array is too big for FBX (%zu bytes, max 2^32 bytes)", data_size);
@@ -8315,6 +8324,9 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc)
 	if (sc->opts.deflate.window_size == 0) sc->opts.deflate.window_size = UFBXWI_DEFLATE_WINDOW_SIZE;
 
 	size_t buffer_size = 0x10000;
+	if (sc->opts.buffer_size > 0) {
+		buffer_size = ufbxwi_max_sz(sc->opts.buffer_size, 512);
+	}
 
 	// TODO: Make sure buffer fits at least binary header
 

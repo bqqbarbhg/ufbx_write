@@ -176,6 +176,16 @@ void ufbxwt_log_error(const ufbxw_error *err)
 
 #include "testing_utils.h"
 
+typedef enum {
+	UFBXWT_DEFLATE_IMPL_NONE,
+	UFBXWT_DEFLATE_IMPL_LIBDEFLATE,
+	UFBXWT_DEFLATE_IMPL_ZLIB,
+
+	UFBXWT_DEFLATE_IMPL_COUNT,
+} ufbxwt_deflate_impl;
+
+bool ufbxwt_deflate_setup(struct ufbxw_deflate *deflate, ufbxwt_deflate_impl impl);
+const char *ufbxwt_deflate_impl_name(ufbxwt_deflate_impl impl);
 bool ufbxwt_check_scene_error_imp(ufbxw_scene *scene, const char *file, int line);
 void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, ufbxwt_diff_error *err), void (*check_fn)(ufbx_scene *scene, ufbxwt_diff_error *err), const ufbxw_scene_opts *user_opts, uint32_t flags);
 
@@ -295,6 +305,43 @@ static void ufbxwt_error_callback(void *user, const ufbxw_error *error)
 	ufbxwt_assert(0 && "error");
 }
 
+bool ufbxwt_deflate_setup(struct ufbxw_deflate *deflate, ufbxwt_deflate_impl impl)
+{
+	switch (impl) {
+	case UFBXWT_DEFLATE_IMPL_NONE:
+		return true;
+
+	case UFBXWT_DEFLATE_IMPL_LIBDEFLATE:
+		#if UFBXWT_HAS_LIBDEFLATE
+			ufbxw_libdeflate_setup(deflate, NULL);
+			return true;
+		#endif
+		return false;
+
+	case UFBXWT_DEFLATE_IMPL_ZLIB:
+		#if UFBXWT_HAS_LIBDEFLATE
+			ufbxw_zlib_setup(deflate, NULL);
+			return true;
+		#endif
+		return false;
+
+	default:
+		ufbxwt_assert(false);
+		break;
+	}
+	return false;
+}
+
+const char *ufbxwt_deflate_impl_name(ufbxwt_deflate_impl impl)
+{
+	switch (impl) {
+	case UFBXWT_DEFLATE_IMPL_NONE: return "none";
+	case UFBXWT_DEFLATE_IMPL_LIBDEFLATE: return "libdeflate";
+	case UFBXWT_DEFLATE_IMPL_ZLIB: return "zlib";
+	default: return "";
+	}
+}
+
 void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, ufbxwt_diff_error *err), void (*check_fn)(ufbx_scene *scene, ufbxwt_diff_error *err), const ufbxw_scene_opts *user_opts, uint32_t flags)
 {
 	ufbxw_scene_opts scene_opts = { 0 };
@@ -322,17 +369,13 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 	);
 
 	static const uint32_t versions[] = { 7400, 7500 };
-	static const ufbxw_save_format formats[] = { UFBXW_SAVE_FORMAT_BINARY, UFBXW_SAVE_FORMAT_ASCII };
+	static const ufbxw_save_format formats[] = { UFBXW_SAVE_FORMAT_ASCII, UFBXW_SAVE_FORMAT_BINARY };
 
 	for (int version_ix = 0; version_ix < ufbxwt_arraycount(versions); version_ix++) {
 		for (int format_ix = 0; format_ix < ufbxwt_arraycount(formats); format_ix++) {
 			ufbxw_save_opts save_opts = { 0 };
 			save_opts.version = versions[version_ix];
 			save_opts.format = formats[format_ix];
-
-			// TODO: Proper setup
-			// ufbxw_libdeflate_setup(&save_opts.deflate_compressor_cb, NULL);
-			// ufbxw_zlib_setup(&save_opts.deflate_compressor_cb, NULL);
 
 			uint32_t version = save_opts.version;
 			const char *format = save_opts.format == UFBXW_SAVE_FORMAT_ASCII ? "ascii" : "binary";
