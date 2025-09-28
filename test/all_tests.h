@@ -7,4 +7,5 @@
 #include "test_blend_shape.h"
 #include "test_light.h"
 #include "test_camera.h"
+#include "test_deflate.h"
 

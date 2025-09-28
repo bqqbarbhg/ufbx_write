@@ -19,12 +19,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      - name: Create temporary directories
-        run: mkdir -p build output
-      - name: Compile test runner
-        run: clang -Werror -g -lm -DUFBX_DEV -DUFBXW_DEV ufbx_write.c test/runner.c test/ufbx.c -o build/test-runner
+      - name: Configure test CMake
+        run: cmake -S test -B build-test
+      - name: Compile tests
+        run: cmake --build build-test
       - name: Run tests
-        run: build/test-runner --fuzz --verbose
+        run: build-test/ufbxw_test --verbose
   ci_cpp:
     runs-on: ubuntu-latest
     steps:

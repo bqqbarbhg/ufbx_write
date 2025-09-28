@@ -55,7 +55,35 @@
 	#define UFBXW_LIST_TYPE(p_name, p_type) typedef struct p_name { p_type *data; size_t count; } p_name
 #endif
 
+#define ufbxw_unsafe
+
 #define UFBXW_ERROR_DESCRIPTION_LENGTH 256
+
+// -- Version
+
+// Packing/unpacking for `UFBX_HEADER_VERSION` and `ufbx_source_version`.
+#define ufbxw_pack_version(major, minor, patch) ((major)*1000000u + (minor)*1000u + (patch))
+#define ufbxw_version_major(version) ((uint32_t)(version)/1000000u%1000u)
+#define ufbxw_version_minor(version) ((uint32_t)(version)/1000u%1000u)
+#define ufbxw_version_patch(version) ((uint32_t)(version)%1000u)
+
+// Version of the ufbx_write header.
+// `UFBXW_VERSION` is simply an alias of `UFBXW_HEADER_VERSION`.
+// `ufbxw_source_version` contains the version of the corresponding source file.
+// HINT: The version can be compared numerically to the result of `ufbxw_pack_version()`,
+// for example `#if UFBXW_VERSION >= ufbxw_pack_version(0, 12, 0)`.
+#define UFBXW_HEADER_VERSION ufbxw_pack_version(0, 1, 0)
+#define UFBXW_VERSION UFBXW_HEADER_VERSION
+
+// -- Configuration
+
+// Number of thread groups to use if threading is enabled.
+// A thread group processes a number of tasks and is then waited and potentially
+// re-used later. In essence, this controls the granularity of threading.
+#define UFBXW_THREAD_GROUP_COUNT 4
+
+// Number of locks used by the threading API.
+#define UFBXW_THREAD_LOCK_COUNT 1
 
 // UTF-8
 typedef struct ufbxw_string {
@@ -275,6 +303,10 @@ typedef enum ufbxw_error_type {
 	UFBXW_ERROR_ALLOCATION_FAILURE,
 	UFBXW_ERROR_BUFFER_STREAM,
 	UFBXW_ERROR_WRITE_FAILED,
+	UFBXW_ERROR_DEFLATE_FAILED,
+	UFBXW_ERROR_ARRAY_TOO_BIG,
+	UFBXW_ERROR_PATH_TOO_LONG,
+	UFBXW_ERROR_FILE_OPEN_FAILED,
 
 } ufbxw_error_type;
 
@@ -967,7 +999,114 @@ typedef struct ufbxw_write_stream {
 	void *user;
 } ufbxw_write_stream;
 
-ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *path, size_t path_len);
+ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *path, size_t path_len, ufbxw_error *error);
+
+// -- Thread pool
+
+// Internal thread pool handle.
+// Passed to `ufbx_thread_pool_run_task()` from an user thread to run ufbx tasks.
+// HINT: This context can store a user pointer via `ufbx_thread_pool_set_user_ptr()`.
+typedef uintptr_t ufbxw_thread_pool_context;
+
+// Thread pool creation information from ufbx.
+typedef struct ufbxw_thread_pool_info {
+	uint32_t max_concurrent_tasks;
+} ufbxw_thread_pool_info;
+
+// Initialize the thread pool.
+// Return `true` on success.
+typedef bool ufbxw_thread_pool_init_fn(void *user, ufbxw_thread_pool_context ctx, const ufbxw_thread_pool_info *info);
+
+// Run tasks `count` tasks in threads.
+// You must call `ufbxw_thread_pool_run_task()` with indices `[start_index, start_index + count)`.
+// The threads are launched in batches indicated by `group`, see `ufbxw_THREAD_GROUP_COUNT` for more information.
+// Ideally, you should run all the task indices in parallel within each `ufbxw_thread_pool_run_fn()` call.
+typedef void ufbxw_thread_pool_run_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t group, uint32_t start_index, uint32_t count);
+
+// Wait for previous tasks spawned in `ufbxw_thread_pool_run_fn()` to finish.
+// `group` specifies the batch to wait for, `max_index` contains `start_index + count` from that group instance.
+typedef void ufbxw_thread_pool_wait_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t group, uint32_t max_index);
+
+typedef void ufbxw_thread_pool_lock_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t lock_index);
+typedef void ufbxw_thread_pool_unlock_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t lock_index);
+
+// Free the thread pool.
+typedef void ufbxw_thread_pool_free_fn(void *user, ufbxw_thread_pool_context ctx);
+
+// Thread pool interface.
+// See functions above for more information.
+typedef struct ufbxw_thread_pool {
+	ufbxw_thread_pool_lock_fn *lock_fn;     // < Required
+	ufbxw_thread_pool_unlock_fn *unlock_fn; // < Required
+	void *user;
+} ufbxw_thread_pool;
+
+// -- Deflate
+
+typedef struct ufbxw_deflate_advance_status {
+	size_t bytes_written;
+	size_t bytes_read;
+} ufbxw_deflate_advance_status;
+
+typedef enum ufbxw_deflate_advance_flag {
+	UFBXW_DEFLATE_ADVANCE_FLAG_FLUSH = 0x1,
+	UFBXW_DEFLATE_ADVANCE_FLAG_FINISH = 0x2,
+
+	UFBXW_DEFLAT_ADVANCE_FLAG_FORCE_32BIT = 0x7fffffff,
+} ufbxw_deflate_advance_flag;
+
+typedef enum ufbxw_deflate_advance_result {
+	// The compressor is finished with the current stream.
+	UFBXW_DEFLATE_ADVANCE_RESULT_COMPLETED = 1,
+
+	// There is still buffered output left in the compressor.
+	// If you return this, ufbxw will call `advance_fn()` again with more output space.
+	UFBXW_DEFLATE_ADVANCE_RESULT_INCOMPLETE = 2,
+
+	// Error in the compressor.
+	UFBXW_DEFLATE_ADVANCE_RESULT_ERROR = 3,
+
+	UFBXW_DEFLATE_ADVANCE_RESULT_FORCE_32BIT = 0x7fffffff,
+} ufbxw_deflate_advance_result;
+
+// Begin DEFLATE compressing a new stream.
+// You must return the buffer size you require for decompression.
+// Returning `0` is allowed to indicate that the decompressor supports streaming.
+typedef size_t ufbxw_deflate_begin_fn(void *user, size_t input_size);
+
+// Advance the compression stream.
+typedef ufbxw_deflate_advance_result ufbxw_deflate_advance_fn(void *user, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags);
+
+// Finish compressing one stream.
+typedef void ufbxw_deflate_end_fn(void *user);
+
+// Free the deflate compressor.
+typedef void ufbxw_deflate_free_fn(void *user);
+
+// DEFLATE compressor interface.
+typedef struct ufbxw_deflate_compressor {
+	ufbxw_deflate_begin_fn *begin_fn;
+	ufbxw_deflate_advance_fn *advance_fn;
+	ufbxw_deflate_end_fn *end_fn;
+	ufbxw_deflate_free_fn *free_fn;
+	void *user;
+} ufbxw_deflate_compressor;
+
+// Function for instantiating deflate compressors
+
+typedef bool ufbxw_deflate_create_fn(void *user, ufbxw_deflate_compressor *compressor, int32_t compression_level);
+
+typedef struct ufbxw_deflate_create_cb {
+	ufbxw_deflate_create_fn *fn;
+	void *user;
+} ufbxw_deflate_create_cb;
+
+typedef struct ufbxw_deflate {
+	ufbxw_deflate_create_cb create_cb;
+	bool streaming_input;
+	bool streaming_output;
+	size_t window_size;
+} ufbxw_deflate;
 
 // -- Writing API
 
@@ -981,6 +1120,14 @@ typedef struct ufbxw_save_opts {
 
 	ufbxw_save_format format;
 	uint32_t version;
+
+	ufbxw_deflate deflate;
+
+	ufbxw_allocator allocator;
+
+	// Compression level.
+	// Defaults to `6`.
+	int32_t compression_level;
 
 	// TODO: Do not save animation
 	bool ignore_animation;
@@ -998,6 +1145,9 @@ typedef struct ufbxw_save_opts {
 	bool enable_override_creator;
 	ufbxw_string override_creator;
 
+	// Buffer size to use for writing streaming output.
+	size_t buffer_size;
+
 	uint32_t _end_zero;
 } ufbxw_save_opts;
 
@@ -1005,6 +1155,15 @@ ufbxw_abi bool ufbxw_save_file(ufbxw_scene *scene, const char *path, const ufbxw
 ufbxw_abi bool ufbxw_save_file_len(ufbxw_scene *scene, const char *path, size_t path_len, const ufbxw_save_opts *opts, ufbxw_error *error);
 
 ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error);
+
+// -- Thread pool
+
+ufbxw_unsafe ufbxw_abi bool ufbxw_thread_pool_run_task(ufbxw_thread_pool_context ctx);
+
+// Get or set an arbitrary user pointer for the thread pool context.
+// `ufbxw_thread_pool_get_user_ptr()` returns `NULL` if unset.
+ufbxw_unsafe ufbxw_abi void ufbxw_thread_pool_set_user_ptr(ufbxw_thread_pool_context ctx, void *user_ptr);
+ufbxw_unsafe ufbxw_abi void *ufbxw_thread_pool_get_user_ptr(ufbxw_thread_pool_context ctx);
 
 // -- Utility
 
