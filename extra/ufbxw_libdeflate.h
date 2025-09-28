@@ -46,15 +46,15 @@ static size_t ufbxw_libdeflate_begin(void *user, size_t input_size)
 	return libdeflate_zlib_compress_bound(c, input_size);
 }
 
-static bool ufbxw_libdeflate_advance(void *user, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags)
+static ufbxw_deflate_advance_result ufbxw_libdeflate_advance(void *user, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags)
 {
 	struct libdeflate_compressor *c = (struct libdeflate_compressor*)user;
 	size_t dst_written = libdeflate_zlib_compress(c, src, src_size, dst, dst_size);
-	if (dst_written == 0) return false;
+	if (dst_written == 0) return UFBXW_DEFLATE_ADVANCE_RESULT_ERROR;
 
 	status->bytes_read = src_size;
 	status->bytes_written = dst_written;
-	return true;
+	return UFBXW_DEFLATE_ADVANCE_RESULT_COMPLETED;
 }
 
 static void ufbxw_libdeflate_free(void *user)

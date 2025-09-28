@@ -1049,9 +1049,25 @@ typedef struct ufbxw_deflate_advance_status {
 } ufbxw_deflate_advance_status;
 
 typedef enum ufbxw_deflate_advance_flag {
-	UFBXW_DEFLATE_ADVANCE_FLUSH = 0x1,
-	UFBXW_DEFLATE_ADVANCE_FINISH = 0x2,
+	UFBXW_DEFLATE_ADVANCE_FLAG_FLUSH = 0x1,
+	UFBXW_DEFLATE_ADVANCE_FLAG_FINISH = 0x2,
+
+	UFBXW_DEFLAT_ADVANCE_FLAG_FORCE_32BIT = 0x7fffffff,
 } ufbxw_deflate_advance_flag;
+
+typedef enum ufbxw_deflate_advance_result {
+	// The compressor is finished with the current stream.
+	UFBXW_DEFLATE_ADVANCE_RESULT_COMPLETED = 1,
+
+	// There is still buffered output left in the compressor.
+	// If you return this, ufbxw will call `advance_fn()` again with more output space.
+	UFBXW_DEFLATE_ADVANCE_RESULT_INCOMPLETE = 2,
+
+	// Error in the compressor.
+	UFBXW_DEFLATE_ADVANCE_RESULT_ERROR = 3,
+
+	UFBXW_DEFLATE_ADVANCE_RESULT_FORCE_32BIT = 0x7fffffff,
+} ufbxw_deflate_advance_result;
 
 // Begin DEFLATE compressing a new stream.
 // You must return the buffer size you require for decompression.
@@ -1059,7 +1075,7 @@ typedef enum ufbxw_deflate_advance_flag {
 typedef size_t ufbxw_deflate_begin_fn(void *user, size_t input_size);
 
 // Advance the compression stream.
-typedef bool ufbxw_deflate_advance_fn(void *user, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags);
+typedef ufbxw_deflate_advance_result ufbxw_deflate_advance_fn(void *user, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags);
 
 // Finish compressing one stream.
 typedef void ufbxw_deflate_end_fn(void *user);

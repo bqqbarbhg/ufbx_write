@@ -9,8 +9,9 @@ typedef struct {
 static bool ufbxwt_memory_stream_write(void *user, uint64_t offset, const void *data, size_t size)
 {
 	ufbxwt_memory_stream *s = (ufbxwt_memory_stream*)user;
-	if (offset >= s->data_size) return false;
-	if (s->data_size - offset < size) return false;
+	if (offset >= s->data_size || s->data_size - offset < size) {
+		return false;
+	}
 	memcpy((char*)s->data + offset, data, size);
 	return true;
 }
@@ -44,6 +45,16 @@ static ufbxw_scene *ufbxwt_deflate_scene_simple()
 
 	ufbxw_mesh_set_vertices(scene, mesh, vertex_buffer);
 	ufbxw_mesh_set_polygons(scene, mesh, index_buffer, face_buffer);
+
+	return scene;
+}
+
+static ufbxw_scene *ufbxwt_deflate_scene_wave()
+{
+	ufbxw_scene *scene = ufbxw_create_scene(NULL);
+	ufbxwt_assert(scene);
+
+	ufbxwt_create_grid_mesh(scene, &ufbxwt_grid_wave_128);
 
 	return scene;
 }
@@ -129,5 +140,15 @@ UFBXWT_TEST(deflate_streaming)
 	opts.buffer_size = 128;
 	opts.deflate.window_size = 128;
 	ufbxwt_deflate_test("simple", ufbxwt_deflate_scene_simple(), &opts, 64 * 1024);
+}
+#endif
+
+UFBXWT_TEST(deflate_streaming_wave)
+#if UFBXWT_IMPL
+{
+	ufbxw_save_opts opts = { 0 };
+	opts.buffer_size = 128;
+	opts.deflate.window_size = 128;
+	ufbxwt_deflate_test("simple", ufbxwt_deflate_scene_wave(), &opts, 1024 * 1024);
 }
 #endif

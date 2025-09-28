@@ -6215,9 +6215,10 @@ static ufbxwi_noinline char *ufbxwi_write_reserve_slow(ufbxwi_save_context *sc, 
 		ufbxwi_write_flush(sc);
 	}
 
-	size_t buffer_used = ufbxwi_to_size(sc->buffer_end - sc->buffer_pos);
+	size_t buffer_used = ufbxwi_to_size(sc->buffer_pos - sc->buffer_begin);
+	size_t buffer_left = ufbxwi_to_size(sc->buffer_end - sc->buffer_pos);
 	size_t buffer_size = ufbxwi_to_size(sc->buffer_end - sc->buffer_begin);
-	if (buffer_size < length) {
+	if (buffer_left < length) {
 		size_t new_size = ufbxwi_max_sz(buffer_size * 2, buffer_used + length);
 		char *new_buffer = ufbxwi_alloc(&sc->ator, char, new_size);
 		ufbxwi_check(new_buffer, NULL);
@@ -6262,7 +6263,7 @@ static ufbxwi_mutable_void_span ufbxwi_write_reserve_at_least(ufbxwi_save_contex
 
 static ufbxwi_forceinline void ufbxwi_write_commit(ufbxwi_save_context *sc, size_t length)
 {
-	ufbxw_assert(length < ufbxwi_to_size(sc->buffer_end - sc->buffer_pos));
+	ufbxw_assert(length <= ufbxwi_to_size(sc->buffer_end - sc->buffer_pos));
 	sc->buffer_pos += length;
 }
 
@@ -6756,32 +6757,36 @@ static void ufbxwi_binary_dom_write(ufbxwi_save_context *sc, const char *tag, co
 	}
 }
 
-static bool ufbxwi_deflate_advance(ufbxwi_save_context *sc, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, bool is_final)
+static ufbxw_deflate_advance_result ufbxwi_deflate_advance(ufbxwi_save_context *sc, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, bool is_final)
 {
-	if (src_size == 0) return true;
-
 	uint32_t flags = 0;
 	if (is_final) {
-		flags |= UFBXW_DEFLATE_ADVANCE_FINISH;
+		flags |= UFBXW_DEFLATE_ADVANCE_FLAG_FINISH;
 	}
 
-	bool ok = sc->deflate.advance_fn(sc->deflate.user, status, dst, dst_size, src, src_size, flags);
-	if (ok && status->bytes_read == 0 && status->bytes_written == 0) {
-		flags |= UFBXW_DEFLATE_ADVANCE_FLUSH;
-		ok = sc->deflate.advance_fn(sc->deflate.user, status, dst, dst_size, src, src_size, flags);
+	ufbxw_deflate_advance_result result = sc->deflate.advance_fn(sc->deflate.user, status, dst, dst_size, src, src_size, flags);
+	if (result == UFBXW_DEFLATE_ADVANCE_RESULT_INCOMPLETE && status->bytes_read == 0 && status->bytes_written == 0) {
+		flags |= UFBXW_DEFLATE_ADVANCE_FLAG_FLUSH;
+		result = sc->deflate.advance_fn(sc->deflate.user, status, dst, dst_size, src, src_size, flags);
 	}
 
-	if (!ok) {
-		ufbxwi_fail(&sc->error, UFBXW_ERROR_DEFLATE_FAILED, "deflate error");
-		return false;
+	if (result == UFBXW_DEFLATE_ADVANCE_RESULT_ERROR) {
+		ufbxwi_fail(&sc->error, UFBXW_ERROR_DEFLATE_FAILED, "internal deflate error");
+		return UFBXW_DEFLATE_ADVANCE_RESULT_ERROR;
 	}
 
 	if (status->bytes_written == 0 && status->bytes_read == 0) {
 		ufbxwi_fail(&sc->error, UFBXW_ERROR_DEFLATE_FAILED, "streaming deflate failed to make progress");
-		return false;
+		return UFBXW_DEFLATE_ADVANCE_RESULT_ERROR;
 	}
 
-	return true;
+	if (result == UFBXW_DEFLATE_ADVANCE_RESULT_COMPLETED) {
+		// Advance should only return completed status if the stream is finished, and it should have consumed all input.
+		ufbxw_assert(is_final);
+		ufbxw_assert(status->bytes_read == src_size);
+	}
+
+	return result;
 }
 
 static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *tag, ufbxw_buffer_id buffer_id)
@@ -6859,15 +6864,19 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 		if (buffer_data) {
 			const char *src = buffer_data;
 			const char *src_end = src + data_size;
-			while (src != src_end) {
+			for (;;) {
 				size_t src_len = ufbxwi_to_size(src_end - src);
 
 				ufbxw_deflate_advance_status status = { 0, 0 };
 				ufbxwi_mutable_void_span dst = ufbxwi_write_reserve_at_least(sc, dst_size);
-				ufbxwi_check(ufbxwi_deflate_advance(sc, &status, dst.data, dst.count, src, src_len, true));
+				ufbxw_deflate_advance_result result = ufbxwi_deflate_advance(sc, &status, dst.data, dst.count, src, src_len, true);
+				ufbxwi_check(result != UFBXW_DEFLATE_ADVANCE_RESULT_ERROR);
+
 				src += status.bytes_read;
 				total_written += status.bytes_written;
 				ufbxwi_write_commit(sc, status.bytes_written);
+
+				if (result == UFBXW_DEFLATE_ADVANCE_RESULT_COMPLETED) break;
 			}
 		} else {
 			size_t read_offset = 0;
@@ -6885,13 +6894,19 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 					size_t elems_read = src_pos / type_info.size;
 					size_t bytes_read = elems_read * type_info.size;
 
+					if (src_pos != bytes_read) {
+						printf("letsgooo");
+					}
+
 					memmove(src + src_pos - bytes_read, src + src_pos, src_len - src_pos);
 					src_pos -= bytes_read;
 					src_len -= bytes_read;
-					input_index += bytes_read;
+					input_index += elems_read;
 
 					size_t input_left = buffer_count - input_index;
-					size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, src + src_pos, input_left, input_index);
+					size_t input_buffer_left = (src_buffer_size - src_len) / type_info.size;
+					size_t to_read = ufbxwi_min_sz(input_left, input_buffer_left);
+					size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, src + src_len, to_read, input_index);
 					ufbxwi_check(num_read > 0);
 
 					src_len += num_read * type_info.size;
@@ -6902,12 +6917,13 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 
 				ufbxw_deflate_advance_status status = { 0, 0 };
 				ufbxwi_mutable_void_span dst = ufbxwi_write_reserve_at_least(sc, dst_size);
-				ufbxwi_check(ufbxwi_deflate_advance(sc, &status, dst.data, dst.count, src + src_pos, src_len - src_pos, at_end));
+				ufbxw_deflate_advance_result result = ufbxwi_deflate_advance(sc, &status, dst.data, dst.count, src + src_pos, src_len - src_pos, at_end);
+				ufbxwi_check(result != UFBXW_DEFLATE_ADVANCE_RESULT_ERROR);
 				src_pos += status.bytes_read;
 				total_written += status.bytes_written;
 				ufbxwi_write_commit(sc, status.bytes_written);
 
-				if (at_end && src_pos == src_len) break;
+				if (result == UFBXW_DEFLATE_ADVANCE_RESULT_COMPLETED) break;
 			}
 		}
 
@@ -6947,9 +6963,14 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 				while (!ufbxwi_is_fatal(&sc->error) && offset < buffer_count) {
 					ufbxwi_write_flush(sc);
 
+					char *dst_buffer = sc->buffer_begin;
+					ufbxw_assert(sc->buffer_pos == dst_buffer);
+
 					size_t to_read = ufbxwi_min_sz(max_elements, buffer_count - offset);
-					size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, sc->buffer_begin, to_read, offset);
+					size_t num_read = ufbxwi_buffer_read_to(&sc->buffers, buffer_id, dst_buffer, to_read, offset);
 					ufbxwi_check(num_read == to_read);
+
+					sc->buffer_pos = dst_buffer + to_read * type_info.size;
 
 					offset += num_read;
 				}

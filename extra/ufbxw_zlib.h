@@ -47,7 +47,7 @@ static size_t ufbxw_zlib_begin(void *user, size_t input_size)
 	return 0;
 }
 
-static bool ufbxw_zlib_advance(void *user, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags)
+static ufbxw_deflate_advance_result ufbxw_zlib_advance(void *user, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags)
 {
 	if (src_size > UINT_MAX) src_size = UINT_MAX;
 	if (dst_size > UINT_MAX) dst_size = UINT_MAX;
@@ -60,20 +60,25 @@ static bool ufbxw_zlib_advance(void *user, ufbxw_deflate_advance_status *status,
     zs->next_out = (Bytef*)dst;
 	zs->avail_out = (uInt)dst_size;
 
-	int flush = 0;
-	if (flags & UFBXW_DEFLATE_ADVANCE_FLUSH) {
-		flush = Z_PARTIAL_FLUSH;
-	} else if (flags & UFBXW_DEFLATE_ADVANCE_FINISH) {
+	int flush = Z_NO_FLUSH;
+	if (flags & UFBXW_DEFLATE_ADVANCE_FLAG_FINISH) {
 		flush = Z_FINISH;
+	} else if (flags & UFBXW_DEFLATE_ADVANCE_FLAG_FLUSH) {
+		flush = Z_SYNC_FLUSH;
 	}
+
 	int res = deflate(zs, flush);
-	if (res < 0 && res != Z_BUF_ERROR) {
-		return false;
-	}
 
 	status->bytes_read += (size_t)(zs->next_in - (z_const Bytef*)src);
 	status->bytes_written += (size_t)(zs->next_out - (Bytef*)dst);
-	return true;
+
+	if (res == Z_STREAM_END) {
+		return UFBXW_DEFLATE_ADVANCE_RESULT_COMPLETED;
+	} else if (res == Z_OK || res == Z_BUF_ERROR) {
+		return UFBXW_DEFLATE_ADVANCE_RESULT_INCOMPLETE;
+	} else {
+		return UFBXW_DEFLATE_ADVANCE_RESULT_ERROR;
+	}
 }
 
 static void ufbxw_zlib_free(void *user)
