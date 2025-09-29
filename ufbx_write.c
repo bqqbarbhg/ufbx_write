@@ -6522,12 +6522,12 @@ static void ufbxwi_ascii_dom_write_real_array(ufbxwi_save_context *sc, ufbxwi_bu
 
 			for (size_t i = 0; i < pre_comma_count; i++) {
 				// TODO: Fast float printing
-				int len = snprintf(fmt_buffer, sizeof(fmt_buffer), "%g,", src[i]);
+				int len = snprintf(fmt_buffer, sizeof(fmt_buffer), "%.15g,", src[i]);
 				ufbxwi_write(sc, fmt_buffer, (size_t)len);
 			}
 
 			{
-				int len = snprintf(fmt_buffer, sizeof(fmt_buffer), "%g", src[pre_comma_count]);
+				int len = snprintf(fmt_buffer, sizeof(fmt_buffer), "%.15g", src[pre_comma_count]);
 				ufbxwi_write(sc, fmt_buffer, (size_t)len);
 				if (offset * type_info.components + begin + count == scalar_count) {
 					ufbxwi_write(sc, "\n", 1);
@@ -6569,12 +6569,12 @@ static void ufbxwi_ascii_dom_write_float_array(ufbxwi_save_context *sc, ufbxwi_b
 
 			for (size_t i = 0; i < pre_comma_count; i++) {
 				// TODO: Fast float printing
-				int len = snprintf(fmt_buffer, sizeof(fmt_buffer), "%g,", src[i]);
+				int len = snprintf(fmt_buffer, sizeof(fmt_buffer), "%.7g,", src[i]);
 				ufbxwi_write(sc, fmt_buffer, (size_t)len);
 			}
 
 			{
-				int len = snprintf(fmt_buffer, sizeof(fmt_buffer), "%g", src[pre_comma_count]);
+				int len = snprintf(fmt_buffer, sizeof(fmt_buffer), "%.7g", src[pre_comma_count]);
 				ufbxwi_write(sc, fmt_buffer, (size_t)len);
 				if (offset * type_info.components + begin + count == scalar_count) {
 					ufbxwi_write(sc, "\n", 1);
