@@ -211,6 +211,7 @@ typedef struct ufbxw_real_buffer { ufbxw_buffer_id id; } ufbxw_real_buffer;
 typedef struct ufbxw_vec2_buffer { ufbxw_buffer_id id; } ufbxw_vec2_buffer;
 typedef struct ufbxw_vec3_buffer { ufbxw_buffer_id id; } ufbxw_vec3_buffer;
 typedef struct ufbxw_vec4_buffer { ufbxw_buffer_id id; } ufbxw_vec4_buffer;
+typedef struct ufbxw_float_buffer { ufbxw_buffer_id id; } ufbxw_float_buffer;
 
 UFBXW_LIST_TYPE(ufbxw_int_list, int32_t);
 UFBXW_LIST_TYPE(ufbxw_long_list, int64_t);
@@ -218,6 +219,7 @@ UFBXW_LIST_TYPE(ufbxw_real_list, ufbxw_real);
 UFBXW_LIST_TYPE(ufbxw_vec2_list, ufbxw_vec2);
 UFBXW_LIST_TYPE(ufbxw_vec3_list, ufbxw_vec3);
 UFBXW_LIST_TYPE(ufbxw_vec4_list, ufbxw_vec4);
+UFBXW_LIST_TYPE(ufbxw_float_list, float);
 
 typedef int64_t ufbxw_ktime;
 
@@ -631,6 +633,7 @@ typedef size_t ufbxw_real_stream_fn(void *user, ufbxw_real *dst, size_t dst_size
 typedef size_t ufbxw_vec2_stream_fn(void *user, ufbxw_vec2 *dst, size_t dst_size, size_t offset);
 typedef size_t ufbxw_vec3_stream_fn(void *user, ufbxw_vec3 *dst, size_t dst_size, size_t offset);
 typedef size_t ufbxw_vec4_stream_fn(void *user, ufbxw_vec4 *dst, size_t dst_size, size_t offset);
+typedef size_t ufbxw_float_stream_fn(void *user, float *dst, size_t dst_size, size_t offset);
 typedef void ufbxw_buffer_deleter_fn(void *user, void *data);
 
 ufbxw_abi void ufbxw_retain_buffer(ufbxw_scene *scene, ufbxw_buffer_id buffer);
@@ -643,6 +646,12 @@ ufbxw_abi ufbxw_int_buffer ufbxw_copy_int_array(ufbxw_scene *scene, const int32_
 ufbxw_abi ufbxw_int_buffer ufbxw_view_int_array(ufbxw_scene *scene, const int32_t *data, size_t count);
 ufbxw_abi ufbxw_int_buffer ufbxw_external_int_array(ufbxw_scene *scene, const int32_t *data, size_t count);
 ufbxw_abi ufbxw_int_buffer ufbxw_external_int_stream(ufbxw_scene *scene, ufbxw_int_stream_fn *fn, void *user, size_t count);
+
+ufbxw_abi ufbxw_long_buffer ufbxw_create_long_buffer(ufbxw_scene *scene, size_t count);
+ufbxw_abi ufbxw_long_buffer ufbxw_copy_long_array(ufbxw_scene *scene, const int64_t *data, size_t count);
+ufbxw_abi ufbxw_long_buffer ufbxw_view_long_array(ufbxw_scene *scene, const int64_t *data, size_t count);
+ufbxw_abi ufbxw_long_buffer ufbxw_external_long_array(ufbxw_scene *scene, const int64_t *data, size_t count);
+ufbxw_abi ufbxw_long_buffer ufbxw_external_long_stream(ufbxw_scene *scene, ufbxw_long_stream_fn *fn, void *user, size_t count);
 
 ufbxw_abi ufbxw_real_buffer ufbxw_create_real_buffer(ufbxw_scene *scene, size_t count);
 ufbxw_abi ufbxw_real_buffer ufbxw_copy_real_array(ufbxw_scene *scene, const ufbxw_real *data, size_t count);
@@ -668,10 +677,20 @@ ufbxw_abi ufbxw_vec4_buffer ufbxw_view_vec4_array(ufbxw_scene *scene, const ufbx
 ufbxw_abi ufbxw_vec4_buffer ufbxw_external_vec4_array(ufbxw_scene *scene, const ufbxw_vec4 *data, size_t count);
 ufbxw_abi ufbxw_vec4_buffer ufbxw_external_vec4_stream(ufbxw_scene *scene, ufbxw_vec4_stream_fn *fn, void *user, size_t count);
 
+ufbxw_abi ufbxw_float_buffer ufbxw_create_float_buffer(ufbxw_scene* scene, size_t count);
+ufbxw_abi ufbxw_float_buffer ufbxw_copy_float_array(ufbxw_scene *scene, const float *data, size_t count);
+ufbxw_abi ufbxw_float_buffer ufbxw_view_float_array(ufbxw_scene *scene, const float *data, size_t count);
+ufbxw_abi ufbxw_float_buffer ufbxw_external_float_array(ufbxw_scene *scene, const float *data, size_t count);
+ufbxw_abi ufbxw_float_buffer ufbxw_external_float_stream(ufbxw_scene *scene, ufbxw_float_stream_fn *fn, void *user, size_t count);
+
 // TODO: Lock/unlock version for Rust
 ufbxw_abi ufbxw_int_list ufbxw_edit_int_buffer(ufbxw_scene *scene, ufbxw_int_buffer buffer);
+ufbxw_abi ufbxw_long_list ufbxw_edit_long_buffer(ufbxw_scene *scene, ufbxw_long_buffer buffer);
+ufbxw_abi ufbxw_real_list ufbxw_edit_real_buffer(ufbxw_scene *scene, ufbxw_real_buffer buffer);
+ufbxw_abi ufbxw_vec2_list ufbxw_edit_vec2_buffer(ufbxw_scene *scene, ufbxw_vec2_buffer buffer);
 ufbxw_abi ufbxw_vec3_list ufbxw_edit_vec3_buffer(ufbxw_scene *scene, ufbxw_vec3_buffer buffer);
 ufbxw_abi ufbxw_vec4_list ufbxw_edit_vec4_buffer(ufbxw_scene* scene, ufbxw_vec4_buffer buffer);
+ufbxw_abi ufbxw_float_list ufbxw_edit_float_buffer(ufbxw_scene* scene, ufbxw_float_buffer buffer);
 
 // --
 
@@ -924,6 +943,24 @@ ufbxw_abi void ufbxw_anim_curve_add_keyframe(ufbxw_scene *scene, ufbxw_anim_curv
 ufbxw_abi void ufbxw_anim_curve_add_keyframe_key(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_keyframe_real key);
 ufbxw_abi void ufbxw_anim_curve_finish_keyframes(ufbxw_scene *scene, ufbxw_anim_curve curve);
 
+typedef struct ufbxw_anim_curve_data_desc {
+	uint32_t _begin_zero;
+
+	ufbxw_long_buffer key_times;
+	ufbxw_float_buffer key_values;
+	uint32_t key_flags;
+
+	// Optional: FBX internal values
+	ufbxw_int_buffer fbx_attr_refcounts;
+	ufbxw_int_buffer fbx_attr_flags;
+	ufbxw_float_buffer fbx_attr_data;
+
+	uint32_t _end_zero;
+} ufbxw_anim_curve_data_desc;
+
+// Advanced API for manually specifying the animation.
+ufbxw_abi void ufbxw_anim_curve_set_data(ufbxw_scene *scene, ufbxw_anim_curve curve, const ufbxw_anim_curve_data_desc *data);
+
 // -- Scene info
 
 ufbxw_abi ufbxw_id ufbxw_get_scene_info_id(ufbxw_scene *scene);
@@ -1105,7 +1142,6 @@ typedef struct ufbxw_deflate {
 	ufbxw_deflate_create_cb create_cb;
 	bool streaming_input;
 	bool streaming_output;
-	size_t window_size;
 } ufbxw_deflate;
 
 // -- Writing API
@@ -1128,6 +1164,10 @@ typedef struct ufbxw_save_opts {
 	// Compression level.
 	// Defaults to `6`.
 	int32_t compression_level;
+
+	// Window size to use when doing streaming deflate compression.
+	// Defaults to `64kB`.
+	size_t deflate_window_size;
 
 	// TODO: Do not save animation
 	bool ignore_animation;
