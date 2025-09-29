@@ -136,13 +136,11 @@ UFBXWT_SCENE_CHECK(anim_buffers)
 		ufbx_keyframe key = anim_curve->keyframes.data[i];
 		ufbxwt_assert(key.interpolation == UFBX_INTERPOLATION_LINEAR);
 
-		ufbxwt_assert_close_real(&err, (ufbxw_real)key.time, (ufbxw_real)(i / (double)frame_rate));
+		ufbxwt_assert_close_real(err, (ufbxw_real)key.time, (ufbxw_real)(i / (double)frame_rate));
 
 		float ref_value = ufbxwt_sin_anim_value(key.time);
-		ufbxwt_assert_close_real(&err, key.value, ref_value);
+		ufbxwt_assert_close_real(err, key.value, ref_value);
 	}
 }
 #endif
-
-
 
