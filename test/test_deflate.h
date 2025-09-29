@@ -149,6 +149,6 @@ UFBXWT_TEST(deflate_streaming_wave)
 	ufbxw_save_opts opts = { 0 };
 	opts.buffer_size = 128;
 	opts.deflate_window_size = 128;
-	ufbxwt_deflate_test("simple", ufbxwt_deflate_scene_wave(), &opts, 1024 * 1024);
+	ufbxwt_deflate_test("simple", ufbxwt_deflate_scene_wave(), &opts, 2 * 1024 * 1024);
 }
 #endif
