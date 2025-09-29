@@ -1144,6 +1144,32 @@ typedef struct ufbxw_deflate {
 	bool streaming_output;
 } ufbxw_deflate;
 
+// -- ASCII formatting
+
+// TODO: Should round trip be default?
+typedef enum ufbxw_ascii_float_format {
+	// Fixed-precision formatting, matching what the FBX SDK outputs.
+	// Equivalent to printing the floats as `%.15g` (double) and `%.7g` (float)
+	UFBXW_ASCII_FLOAT_FORMAT_FIXED_PRECISION,
+
+	// Print the floats using an implementation-defined method that guarantees round trip.
+	UFBXW_ASCII_FLOAT_FORMAT_ROUND_TRIP,
+
+} ufbxw_ascii_float_format;
+
+typedef size_t ufbxw_ascii_format_int_fn(void *user, char *dst, size_t dst_size, const int32_t *src, size_t src_count);
+typedef size_t ufbxw_ascii_format_long_fn(void *user, char *dst, size_t dst_size, const int64_t *src, size_t src_count);
+typedef size_t ufbxw_ascii_format_float_fn(void *user, char *dst, size_t dst_size, const float *src, size_t src_count, ufbxw_ascii_float_format format);
+typedef size_t ufbxw_ascii_format_double_fn(void *user, char *dst, size_t dst_size, const double *src, size_t src_count, ufbxw_ascii_float_format format);
+
+typedef struct ufbxw_ascii_formatter {
+	ufbxw_ascii_format_int_fn *format_int_fn;
+	ufbxw_ascii_format_long_fn *format_long_fn;
+	ufbxw_ascii_format_float_fn *format_float_fn;
+	ufbxw_ascii_format_double_fn *format_double_fn;
+	void *user;
+} ufbxw_ascii_formatter;
+
 // -- Writing API
 
 typedef enum ufbxw_save_format {
@@ -1159,6 +1185,8 @@ typedef struct ufbxw_save_opts {
 
 	ufbxw_deflate deflate;
 
+	ufbxw_ascii_formatter ascii_formatter;
+
 	ufbxw_allocator allocator;
 
 	// Compression level.
@@ -1168,6 +1196,9 @@ typedef struct ufbxw_save_opts {
 	// Window size to use when doing streaming deflate compression.
 	// Defaults to `64kB`.
 	size_t deflate_window_size;
+
+	// How to format floating point numbers in ASCII files.
+	ufbxw_ascii_float_format ascii_float_format;
 
 	// TODO: Do not save animation
 	bool ignore_animation;

@@ -16,17 +16,19 @@ static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr
 #include "ufbx/ufbx.h"
 
 #ifdef UFBXWT_HAS_LIBDEFLATE
-	#include "libdeflate.h"
-
-	#define UFBXW_LIBDEFLATE_IMPLEMENTATION
 	#include "../extra/ufbxw_libdeflate.h"
 #endif
 
 #ifdef UFBXWT_HAS_ZLIB
-	#include "zlib.h"
-
-	#define UFBXW_ZLIB_IMPLEMENTATION
 	#include "../extra/ufbxw_zlib.h"
+#endif
+
+#ifdef UFBXWT_HAS_FMTLIB
+	#include "../extra/ufbxw_fmtlib.h"
+#endif
+
+#ifdef UFBXWT_HAS_TO_CHARS
+	#include "../extra/ufbxw_to_chars.h"
 #endif
 
 #define ufbxwt_arraycount(arr) (sizeof(arr) / sizeof(*(arr)))

@@ -22,7 +22,15 @@ typedef struct ufbxw_zlib_opts {
 	ufbxw_zlib_allocator allocator;
 } ufbxw_zlib_opts;
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 ufbxw_zlib_abi void ufbxw_zlib_setup(struct ufbxw_deflate *deflate, const ufbxw_zlib_opts *opts);
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif
 
@@ -111,6 +119,10 @@ static bool ufbxw_zlib_init(void *user, ufbxw_deflate_compressor *compressor, in
 	return true;
 }
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 ufbxw_zlib_abi void ufbxw_zlib_setup(struct ufbxw_deflate *deflate, const ufbxw_zlib_opts *opts)
 {
 	deflate->create_cb.fn = &ufbxw_zlib_init;
@@ -118,6 +130,10 @@ ufbxw_zlib_abi void ufbxw_zlib_setup(struct ufbxw_deflate *deflate, const ufbxw_
 	deflate->streaming_input = true;
 	deflate->streaming_output = true;
 }
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif
 #endif
