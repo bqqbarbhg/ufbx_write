@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 #if !defined(ufbxw_to_chars_abi)
-	#if defined(UFBXW_to_chars_STATIC)
+	#if defined(UFBXW_TO_CHARS_STATIC)
 		#define ufbxw_to_chars_abi static
 	#else
 		#define ufbxw_to_chars_abi

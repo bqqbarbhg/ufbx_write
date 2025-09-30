@@ -2,7 +2,7 @@
 #define UFBXW_ZLIB_H_INCLUDED
 
 #if !defined(ufbxw_zlib_abi)
-	#if defined(UFBXW_zlib_STATIC)
+	#if defined(UFBXW_ZLIB_STATIC)
 		#define ufbxw_zlib_abi static
 	#else
 		#define ufbxw_zlib_abi

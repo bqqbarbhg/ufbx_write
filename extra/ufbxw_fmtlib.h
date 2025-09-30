@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 #if !defined(ufbxw_fmtlib_abi)
-	#if defined(UFBXW_fmtlib_STATIC)
+	#if defined(UFBXW_FMTLIB_STATIC)
 		#define ufbxw_fmtlib_abi static
 	#else
 		#define ufbxw_fmtlib_abi
