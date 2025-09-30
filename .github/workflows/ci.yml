@@ -22,7 +22,7 @@ jobs:
       - name: Configure test CMake
         run: cmake -S test -B build-test
       - name: Compile tests
-        run: cmake --build build-test
+        run: cmake --build build-test -j 4
       - name: Run tests
         run: build-test/ufbxw_test --verbose
   ci_cpp:
