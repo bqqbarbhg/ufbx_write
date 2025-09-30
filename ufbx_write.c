@@ -6390,28 +6390,48 @@ static void ufbxwi_ascii_dom_write(ufbxwi_save_context *sc, const char *tag, con
 
 		switch (f) {
 		case 'I': {
-			char *dst = ufbxwi_write_reserve_small(sc, 32);
-			int len = snprintf(dst, 32, "%d", va_arg(args, int32_t));
-			ufbxw_assert(len >= 0);
-			ufbxwi_write_commit(sc, (size_t)len);
+			char *dst = ufbxwi_write_reserve_small(sc, 128);
+			int32_t src[4];
+			size_t src_count = 1;
+			src[0] = va_arg(args, int32_t);
+			for (; pf[1] == 'I' && src_count < 4; src_count++, pf++) {
+				src[src_count] = va_arg(args, int32_t);
+			}
+			size_t len = sc->opts.ascii_formatter.format_int_fn(sc->opts.ascii_formatter.user, dst, 128, src, src_count);
+			ufbxwi_write_commit(sc, (size_t)len - 1);
 		} break;
 		case 'L': {
-			char *dst = ufbxwi_write_reserve_small(sc, 32);
-			int len = snprintf(dst, 32, "%lld", (long long)va_arg(args, int64_t));
-			ufbxw_assert(len >= 0);
-			ufbxwi_write_commit(sc, (size_t)len);
+			char *dst = ufbxwi_write_reserve_small(sc, 128);
+			int64_t src[4];
+			size_t src_count = 1;
+			src[0] = va_arg(args, int64_t);
+			for (; pf[1] == 'L' && src_count < 4; src_count++, pf++) {
+				src[src_count] = va_arg(args, int64_t);
+			}
+			size_t len = sc->opts.ascii_formatter.format_long_fn(sc->opts.ascii_formatter.user, dst, 128, src, src_count);
+			ufbxwi_write_commit(sc, (size_t)len - 1);
 		} break;
 		case 'F': {
-			char *dst = ufbxwi_write_reserve_small(sc, 32);
-			int len = snprintf(dst, 32, "%.8g", (float)va_arg(args, double));
-			ufbxw_assert(len >= 0);
-			ufbxwi_write_commit(sc, (size_t)len);
+			char *dst = ufbxwi_write_reserve_small(sc, 128);
+			float src[4];
+			size_t src_count = 1;
+			src[0] = va_arg(args, float);
+			for (; pf[1] == 'F' && src_count < 4; src_count++, pf++) {
+				src[src_count] = va_arg(args, float);
+			}
+			size_t len = sc->opts.ascii_formatter.format_float_fn(sc->opts.ascii_formatter.user, dst, 128, src, src_count, sc->opts.ascii_float_format);
+			ufbxwi_write_commit(sc, (size_t)len - 1);
 		} break;
 		case 'D': {
-			char *dst = ufbxwi_write_reserve_small(sc, 32);
-			int len = snprintf(dst, 32, "%.8g", va_arg(args, double));
-			ufbxw_assert(len >= 0);
-			ufbxwi_write_commit(sc, (size_t)len);
+			char *dst = ufbxwi_write_reserve_small(sc, 128);
+			double src[4];
+			size_t src_count = 1;
+			src[0] = va_arg(args, double);
+			for (; pf[1] == 'D' && src_count < 4; src_count++, pf++) {
+				src[src_count] = va_arg(args, double);
+			}
+			size_t len = sc->opts.ascii_formatter.format_double_fn(sc->opts.ascii_formatter.user, dst, 128, src, src_count, sc->opts.ascii_float_format);
+			ufbxwi_write_commit(sc, (size_t)len - 1);
 		} break;
 		case 'C': {
 			const char *str = va_arg(args, const char*);
