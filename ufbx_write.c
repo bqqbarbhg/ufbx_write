@@ -6417,7 +6417,7 @@ static void ufbxwi_ascii_dom_write(ufbxwi_save_context *sc, const char *tag, con
 			size_t src_count = 1;
 			src[0] = va_arg(args, float);
 			for (; pf[1] == 'F' && src_count < 4; src_count++, pf++) {
-				src[src_count] = va_arg(args, float);
+				src[src_count] = (float)va_arg(args, double);
 			}
 			size_t len = sc->opts.ascii_formatter.format_float_fn(sc->opts.ascii_formatter.user, dst, 128, src, src_count, sc->opts.ascii_float_format);
 			ufbxwi_write_commit(sc, (size_t)len - 1);
