@@ -309,6 +309,7 @@ typedef enum ufbxw_error_type {
 	UFBXW_ERROR_ARRAY_TOO_BIG,
 	UFBXW_ERROR_PATH_TOO_LONG,
 	UFBXW_ERROR_FILE_OPEN_FAILED,
+	UFBXW_ERROR_ASCII_FORMAT,
 
 } ufbxw_error_type;
 
