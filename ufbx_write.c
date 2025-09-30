@@ -6415,7 +6415,7 @@ static void ufbxwi_ascii_dom_write(ufbxwi_save_context *sc, const char *tag, con
 			char *dst = ufbxwi_write_reserve_small(sc, 128);
 			float src[4];
 			size_t src_count = 1;
-			src[0] = va_arg(args, float);
+			src[0] = (float)va_arg(args, double);
 			for (; pf[1] == 'F' && src_count < 4; src_count++, pf++) {
 				src[src_count] = (float)va_arg(args, double);
 			}
