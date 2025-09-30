@@ -1,3 +1,5 @@
+#undef UFBXWT_TEST_GROUP
+#define UFBXWT_TEST_GROUP "deflate"
 
 #if UFBXWT_IMPL
 
