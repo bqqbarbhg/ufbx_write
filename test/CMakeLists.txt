@@ -8,6 +8,8 @@ add_executable(ufbxw_test)
 
 option(USE_LIBDEFLATE "Enable libdeflate" ON)
 option(USE_ZLIB "Enable Zlib" ON)
+option(USE_FMTLIB "Enable fmtlib" ON)
+option(USE_TO_CHARS "Enable to_chars" ON)
 
 set(SRC_EXTRA "")
 
@@ -27,7 +29,7 @@ if(USE_LIBDEFLATE)
     target_link_libraries(ufbxw_test PRIVATE libdeflate_static)
     target_compile_definitions(ufbxw_test PRIVATE UFBXWT_HAS_LIBDEFLATE=1)
 
-    list(APPEND SRC_EXTRA "../extra/ufbxw_libdeflate.h")
+    list(APPEND SRC_EXTRA "../extra/ufbxw_libdeflate.h" "extra/ufbxw_libdeflate.c")
 endif()
 
 if(USE_ZLIB)
@@ -48,7 +50,28 @@ if(USE_ZLIB)
     target_link_libraries(ufbxw_test PRIVATE zlibstatic)
     target_compile_definitions(ufbxw_test PRIVATE UFBXWT_HAS_ZLIB=1)
 
-    list(APPEND SRC_EXTRA "../extra/ufbxw_zlib.h")
+    list(APPEND SRC_EXTRA "../extra/ufbxw_zlib.h" "extra/ufbxw_zlib.c")
+endif()
+
+if(USE_FMTLIB)
+    FetchContent_Declare(
+        fmtlib
+        GIT_REPOSITORY "https://github.com/fmtlib/fmt"
+        EXCLUDE_FROM_ALL
+    )
+
+    FetchContent_MakeAvailable(fmtlib)
+
+    target_link_libraries(ufbxw_test PRIVATE fmt)
+    target_compile_definitions(ufbxw_test PRIVATE UFBXWT_HAS_FMTLIB=1)
+
+    list(APPEND SRC_EXTRA "../extra/ufbxw_fmtlib.h" "extra/ufbxw_fmtlib.cpp")
+endif()
+
+if(USE_TO_CHARS)
+    target_compile_definitions(ufbxw_test PRIVATE UFBXWT_HAS_TO_CHARS=1)
+
+    list(APPEND SRC_EXTRA "../extra/ufbxw_to_chars.h" "extra/ufbxw_to_chars.cpp")
 endif()
 
 set(SRC_UFBX_WRITE
@@ -83,6 +106,8 @@ endif()
 target_compile_definitions(ufbxw_test PRIVATE UFBXW_DEV=1 UFBX_DEV=1)
 
 get_filename_component(ROOT_PATH "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+
+set_property(TARGET ufbxw_test PROPERTY CXX_STANDARD 17)
 
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ufbxw_test)
 set_target_properties(ufbxw_test PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY ${ROOT_PATH})

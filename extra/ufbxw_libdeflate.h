@@ -24,7 +24,15 @@ typedef struct ufbxw_libdeflate_opts {
 	ufbxw_libdeflate_allocator allocator;
 } ufbxw_libdeflate_opts;
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 ufbxw_libdeflate_abi void ufbxw_libdeflate_setup(struct ufbxw_deflate *deflate, const ufbxw_libdeflate_opts *opts);
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif
 
@@ -86,6 +94,10 @@ static bool ufbxw_libdeflate_init(void *user, ufbxw_deflate_compressor *compress
 	return true;
 }
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 ufbxw_libdeflate_abi void ufbxw_libdeflate_setup(struct ufbxw_deflate *deflate, const ufbxw_libdeflate_opts *opts)
 {
 	deflate->create_cb.fn = &ufbxw_libdeflate_init;
@@ -93,6 +105,10 @@ ufbxw_libdeflate_abi void ufbxw_libdeflate_setup(struct ufbxw_deflate *deflate, 
 	deflate->streaming_input = false;
 	deflate->streaming_output = false;
 }
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif
 #endif

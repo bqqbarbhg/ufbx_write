@@ -8,4 +8,4 @@
 #include "test_light.h"
 #include "test_camera.h"
 #include "test_deflate.h"
-
+#include "test_ascii.h"
