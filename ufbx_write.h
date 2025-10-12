@@ -77,12 +77,6 @@
 
 // -- Configuration
 
-// Number of signals used by the threading API.
-#define UFBXW_THREAD_SIGNAL_COUNT 1
-
-// Number of locks used by the threading API.
-#define UFBXW_THREAD_LOCK_COUNT 1
-
 // UTF-8
 typedef struct ufbxw_string {
 	const char *data;
@@ -1044,28 +1038,20 @@ ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *pat
 // HINT: This context can store a user pointer via `ufbx_thread_pool_set_user_ptr()`.
 typedef uintptr_t ufbxw_thread_pool_context;
 
-// Thread pool creation information from ufbx.
-typedef struct ufbxw_thread_pool_info {
-	uint32_t max_concurrent_tasks;
-} ufbxw_thread_pool_info;
-
-// Initialize the thread pool.
-// Return `true` on success.
-typedef bool ufbxw_thread_pool_init_fn(void *user, ufbxw_thread_pool_context ctx, const ufbxw_thread_pool_info *info);
-
+typedef bool ufbxw_thread_pool_init_fn(void *user, ufbxw_thread_pool_context ctx);
 typedef void ufbxw_thread_pool_run_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t count);
 typedef void ufbxw_thread_pool_wait_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t *p_value, uint32_t ref_value);
 typedef void ufbxw_thread_pool_notify_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t *p_value, uint32_t wake_count);
-
-// Free the thread pool.
 typedef void ufbxw_thread_pool_free_fn(void *user, ufbxw_thread_pool_context ctx);
 
 // Thread pool interface.
 // See functions above for more information.
 typedef struct ufbxw_thread_pool {
-	ufbxw_thread_pool_run_fn *run_fn;       // < Required
+	ufbxw_thread_pool_init_fn *init_fn;     // < Optional
+	ufbxw_thread_pool_run_fn *run_fn;       // < Optional
 	ufbxw_thread_pool_wait_fn *wait_fn;     // < Required
 	ufbxw_thread_pool_notify_fn *notify_fn; // < Required
+	ufbxw_thread_pool_free_fn *free_fn;     // < Optional
 	void *user;
 } ufbxw_thread_pool;
 

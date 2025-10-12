@@ -604,7 +604,7 @@ static void ufbxwi_atomic_store(ufbxwi_thread_pool *pool, ufbxwi_atomic_u32 *ato
 
 static void ufbxwi_atomic_wait(ufbxwi_thread_pool *pool, ufbxwi_atomic_u32 *p_value, uint32_t ref_value)
 {
-	if (ufbxwi_atomic_load(p_value) == ref_value) {
+	if (ufbxwi_atomic_load(pool, p_value) == ref_value) {
 		pool->wait_fn(pool->user, pool->ctx, &p_value->value, ref_value);
 	}
 }
@@ -6254,6 +6254,7 @@ typedef struct {
 	ufbxwi_atomic_u32 run_index;
 	bool completed;
 
+	void *user_ptr;
 } ufbxwi_task_queue;
 
 static bool ufbxwi_task_complete(ufbxwi_task_queue *queue, ufbxwi_task_id task_id)
@@ -6291,15 +6292,6 @@ static ufbxwi_task_id ufbxwi_task_push(ufbxwi_task_queue *queue, const ufbxwi_ta
 	ufbxwi_semaphore_notify(queue->thread_pool, &queue->task_sema, 1);
 
 	return task_id;
-}
-
-static ufbxw_task_run_result ufbxwi_task_try_run(ufbxwi_task_queue *queue)
-{
-	if (queue->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
-	if (ufbxwi_semaphore_try_wait(queue->thread_pool, &queue->task_sema)) {
-		uint32_t task_id = ufbxwi_atomic_add(queue->thread_pool, &queue->run_index, 1);
-		ufbxwi_task_complete(queue, task_id);
-	}
 }
 
 static ufbxw_task_run_result ufbxwi_task_try_run(ufbxwi_task_queue *queue)
@@ -6367,7 +6359,8 @@ typedef struct {
 	ufbxwi_mesh_attribute_ptr_list tmp_attributes;
 	ufbxwi_binary_node_header_list binary_headers;
 
-	ufbxwi_thread_pool_imp thread_pool;
+	ufbxwi_thread_pool thread_pool;
+	ufbxwi_task_queue task_queue;
 
 	// TODO: Threaded versions of these
 	ufbxwi_byte_list tmp_input_buffer;
@@ -10338,14 +10331,26 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 
 ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_try_run_task(ufbxw_thread_pool_context ctx)
 {
-	ufbxwi_thread_pool *pool = (ufbxw_thread_pool_context)ctx;
-	return ufbxwi_task_try_run(pool);
+	ufbxwi_task_queue *queue = (ufbxwi_task_queue*)ctx;
+	return ufbxwi_task_try_run(queue);
 }
 
 ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_blocking_run_task(ufbxw_thread_pool_context ctx)
 {
-	ufbxwi_thread_pool *pool = (ufbxw_thread_pool_context)ctx;
-	return ufbxwi_task_blocking_run(pool);
+	ufbxwi_task_queue *queue = (ufbxwi_task_queue*)ctx;
+	return ufbxwi_task_blocking_run(queue);
+}
+
+ufbxw_unsafe ufbxw_abi void ufbxw_thread_pool_set_user_ptr(ufbxw_thread_pool_context ctx, void *user_ptr)
+{
+	ufbxwi_task_queue *queue = (ufbxwi_task_queue*)ctx;
+	queue->user_ptr = user_ptr;
+}
+
+ufbxw_unsafe ufbxw_abi void *ufbxw_thread_pool_get_user_ptr(ufbxw_thread_pool_context ctx)
+{
+	ufbxwi_task_queue *queue = (ufbxwi_task_queue*)ctx;
+	return queue->user_ptr;
 }
 
 ufbxw_abi ufbxwi_noinline ufbxw_matrix ufbxw_transform_to_matrix(const ufbxw_transform *t)
