@@ -560,10 +560,14 @@ typedef struct { uint32_t value; } ufbxwi_atomic_u32;
 
 typedef struct {
 	// Thread pool API
+	ufbxw_thread_pool_init_fn *init_fn;
 	ufbxw_thread_pool_run_fn *run_fn;
 	ufbxw_thread_pool_notify_fn *notify_fn;
 	ufbxw_thread_pool_wait_fn *wait_fn;
+	ufbxw_thread_pool_free_fn *free_fn;
 	void *user;
+
+	bool ok;
 
 	ufbxw_thread_pool_context ctx;
 
@@ -10310,6 +10314,11 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 	if (sc.has_deflate_compressor) {
 		if (sc.deflate.free_fn) {
 			sc.deflate.free_fn(sc.deflate.user);
+		}
+	}
+	if (sc.thread_pool.ok) {
+		if (sc.thread_pool.free_fn) {
+			sc.thread_pool.free_fn(sc.thread_pool.user, sc.thread_pool.ctx);
 		}
 	}
 
