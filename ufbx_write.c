@@ -19,6 +19,9 @@
 // TODO: External
 #include <math.h>
 
+// HACK: Do not do this
+#include <xmmintrin.h>
+
 // -- Malloc
 
 #if defined(ufbxw_malloc) || defined(ufbxw_realloc) || defined(ufbxw_free)
@@ -551,6 +554,172 @@ static ufbxwi_noinline void ufbxwi_unstable_sort(void *in_data, size_t size, siz
 
 #define ufbxwi_array_list(arr) { arr, ufbxwi_arraycount(arr) }
 
+// -- Thread pool
+
+typedef struct { uint32_t value; } ufbxwi_atomic_u32;
+
+typedef struct {
+	// Thread pool API
+	ufbxw_thread_pool_run_fn *run_fn;
+	ufbxw_thread_pool_notify_fn *notify_fn;
+	ufbxw_thread_pool_wait_fn *wait_fn;
+	void *user;
+
+	ufbxw_thread_pool_context ctx;
+
+} ufbxwi_thread_pool;
+
+static uint32_t ufbxwi_atomic_load(ufbxwi_thread_pool *pool, ufbxwi_atomic_u32 *atomic)
+{
+	(void)pool;
+	return atomic->value;
+}
+
+long _InterlockedCompareExchange(long volatile *dst, long value, long expected);
+long _InterlockedExchangeAdd(long volatile *dst, long value);
+
+static bool ufbxwi_atomic_cas(ufbxwi_thread_pool *pool, ufbxwi_atomic_u32 *atomic, uint32_t expected, uint32_t value)
+{
+	(void)pool;
+	long ref = _InterlockedCompareExchange((volatile long*)&atomic->value, (long)value, (long)expected);
+	return ref == expected;
+}
+
+static uint32_t ufbxwi_atomic_add(ufbxwi_thread_pool *pool, ufbxwi_atomic_u32 *atomic, uint32_t value)
+{
+	return _InterlockedExchangeAdd((volatile long*)&atomic->value, (long)value);
+}
+
+static uint32_t ufbxwi_atomic_sub(ufbxwi_thread_pool *pool, ufbxwi_atomic_u32 *atomic, uint32_t value)
+{
+	return ufbxwi_atomic_add(pool, atomic, (uint32_t)-(int32_t)value);
+}
+
+static void ufbxwi_atomic_store(ufbxwi_thread_pool *pool, ufbxwi_atomic_u32 *atomic, uint32_t value)
+{
+	uint32_t prev = ufbxwi_atomic_load(pool, atomic);
+	bool ok = ufbxwi_atomic_cas(pool, atomic, prev, value);
+	ufbxw_assert(ok);
+}
+
+static void ufbxwi_atomic_wait(ufbxwi_thread_pool *pool, ufbxwi_atomic_u32 *p_value, uint32_t ref_value)
+{
+	if (ufbxwi_atomic_load(p_value) == ref_value) {
+		pool->wait_fn(pool->user, pool->ctx, &p_value->value, ref_value);
+	}
+}
+
+static void ufbxwi_atomic_notify(ufbxwi_thread_pool *pool, ufbxwi_atomic_u32 *p_value, uint32_t wake_count)
+{
+	pool->notify_fn(pool->user, pool->ctx, &p_value->value, wake_count);
+}
+
+static void ufbxwi_atomic_pause(ufbxwi_thread_pool *pool)
+{
+	_mm_pause();
+}
+
+typedef struct {
+	// [0:1]   locked
+	// [1:32]  waiters
+	ufbxwi_atomic_u32 lockers;
+} ufbxwi_mutex;
+
+static void ufbxwi_mutex_lock(ufbxwi_thread_pool *pool, ufbxwi_mutex *mutex)
+{
+	// Happy fast path
+	if (ufbxwi_atomic_cas(pool, &mutex->lockers, 0, 1)) return;
+
+	for (uint32_t spin = 0; ; spin++) {
+		const uint32_t state = ufbxwi_atomic_load(pool, &mutex->lockers);
+		const uint32_t locked = state & 0x1;
+		const uint32_t waiters = state >> 1u;
+
+		if (!locked) {
+			// Unlocked -> locked
+			const uint32_t new_state = 0x1 | waiters << 1u;
+			if (ufbxwi_atomic_cas(pool, &mutex->lockers, state, new_state)) {
+				return;
+			}
+		} else if (spin < 100) {
+			ufbxwi_atomic_pause(pool);
+		} else {
+			// Add waiter
+			const uint32_t new_waiters = waiters + 1u;
+			const uint32_t new_state = 0x1 | new_waiters << 1u;
+			if (ufbxwi_atomic_cas(pool, &mutex->lockers, state, new_state)) {
+				ufbxwi_atomic_wait(pool, &mutex->lockers, new_state);
+				ufbxwi_atomic_sub(pool, &mutex->lockers, 1u << 1u);
+			}
+		}
+	}
+}
+
+static void ufbxwi_mutex_unlock(ufbxwi_thread_pool *pool, ufbxwi_mutex *mutex)
+{
+	// Happy fast path
+	if (ufbxwi_atomic_cas(pool, &mutex->lockers, 1, 0)) return;
+
+	for (;;) {
+		const uint32_t state = ufbxwi_atomic_load(pool, &mutex->lockers);
+		const uint32_t locked = state & 0x1;
+		const uint32_t waiters = state >> 1u;
+
+		ufbxwi_dev_assert(locked);
+
+		const uint32_t new_state = 0x0 | waiters << 1u;
+		if (ufbxwi_atomic_cas(pool, &mutex->lockers, state, new_state)) {
+			if (waiters > 0) {
+				ufbxwi_atomic_notify(pool, &mutex->lockers, 1u);
+			}
+			return;
+		}
+	}
+}
+
+typedef struct {
+	ufbxwi_atomic_u32 count;
+} ufbxwi_semaphore;
+
+static bool ufbxwi_semaphore_try_wait(ufbxwi_thread_pool *pool, ufbxwi_semaphore *sema)
+{
+	for (;;) {
+		const uint32_t count = ufbxwi_atomic_load(pool, &sema->count);
+		if (count == 0) return false;
+
+		if (ufbxwi_atomic_cas(pool, &sema->count, count, count - 1)) {
+			return true;
+		}
+	}
+}
+
+static void ufbxwi_semaphore_wait(ufbxwi_thread_pool *pool, ufbxwi_semaphore *sema)
+{
+	for (uint32_t spin = 0;; spin++) {
+		const uint32_t count = ufbxwi_atomic_load(pool, &sema->count);
+		if (count > 0) {
+			if (ufbxwi_atomic_cas(pool, &sema->count, count, count - 1)) {
+				return;
+			}
+		} else if (spin < 100) {
+			ufbxwi_atomic_pause(pool);
+			continue;
+		}
+
+		ufbxwi_atomic_wait(pool, &sema->count, 0);
+	}
+}
+
+static void ufbxwi_semaphore_notify(ufbxwi_thread_pool *pool, ufbxwi_semaphore *sema, uint32_t count)
+{
+	if (count == 0) return;
+
+	uint32_t prev_count = ufbxwi_atomic_add(pool, &sema->count, count);
+	if (prev_count == 0) {
+		ufbxwi_atomic_notify(pool, &sema->count, count);
+	}
+}
+
 // -- Allocator
 
 #if defined(UFBXW_REGRESSION)
@@ -628,6 +797,7 @@ typedef struct {
 	size_t current_size;
 
 	size_t next_block_size;
+
 } ufbxwi_allocator;
 
 static void ufbxwi_mark_allocator_failed(ufbxwi_allocator *ator)
@@ -6057,6 +6227,325 @@ typedef struct {
 
 UFBXWI_LIST_TYPE(ufbxwi_binary_node_header_list, ufbxwi_binary_node_header);
 
+typedef struct ufbxwi_task ufbxwi_task;
+typedef uint32_t ufbxwi_task_id;
+
+typedef bool ufbxwi_task_fn(const ufbxwi_task *task);
+
+struct ufbxwi_task {
+	ufbxwi_task_fn *fn;
+};
+
+typedef struct {
+	ufbxwi_mutex mutex;
+	ufbxwi_atomic_u32 generation;
+	ufbxwi_task task;
+} ufbxwi_task_slot;
+
+typedef struct {
+	ufbxwi_thread_pool *thread_pool;
+
+	ufbxwi_task_slot *slots;
+	size_t num_slots;
+
+	uint32_t write_index;
+
+	ufbxwi_semaphore task_sema;
+	ufbxwi_atomic_u32 run_index;
+	bool completed;
+
+} ufbxwi_task_queue;
+
+static bool ufbxwi_task_complete(ufbxwi_task_queue *queue, ufbxwi_task_id task_id)
+{
+	const uint32_t slot_ix = task_id % queue->num_slots;
+	const uint32_t generation = task_id / queue->num_slots;
+	ufbxwi_task_slot *slot = &queue->slots[slot_ix];
+
+	if (ufbxwi_atomic_load(queue->thread_pool, &slot->generation) > generation) {
+		return false;
+	}
+
+	ufbxwi_mutex_lock(queue->thread_pool, &slot->mutex);
+	if (ufbxwi_atomic_load(queue->thread_pool, &slot->generation) == generation) {
+		slot->task.fn(&slot->task);
+	}
+	ufbxwi_atomic_store(queue->thread_pool, &slot->generation, generation + 1);
+	ufbxwi_mutex_unlock(queue->thread_pool, &slot->mutex);
+	return true;
+}
+
+static ufbxwi_task_id ufbxwi_task_push(ufbxwi_task_queue *queue, const ufbxwi_task *task)
+{
+	ufbxwi_task_id task_id = queue->write_index++;
+
+	// Wait until the previous task in this slot is completed.
+	if (task_id >= queue->num_slots) {
+		ufbxwi_task_complete(queue, task_id - queue->num_slots);
+	}
+
+	const uint32_t slot_ix = task_id % queue->num_slots;
+	ufbxwi_task_slot *slot = &queue->slots[slot_ix];
+	slot->task = *task;
+
+	ufbxwi_semaphore_notify(queue->thread_pool, &queue->task_sema, 1);
+
+	return task_id;
+}
+
+static ufbxw_task_run_result ufbxwi_task_try_run(ufbxwi_task_queue *queue)
+{
+	if (queue->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
+	if (ufbxwi_semaphore_try_wait(queue->thread_pool, &queue->task_sema)) {
+		uint32_t task_id = ufbxwi_atomic_add(queue->thread_pool, &queue->run_index, 1);
+		ufbxwi_task_complete(queue, task_id);
+	}
+}
+
+static ufbxw_task_run_result ufbxwi_task_try_run(ufbxwi_task_queue *queue)
+{
+	if (queue->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
+
+	for (;;) {
+		if (ufbxwi_semaphore_try_wait(queue->thread_pool, &queue->task_sema)) {
+			if (queue->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
+
+			uint32_t task_id = ufbxwi_atomic_add(queue->thread_pool, &queue->run_index, 1);
+			if (ufbxwi_task_complete(queue, task_id)) {
+				return UFBXW_TASK_RUN_RESULT_COMPLETED;
+			}
+		} else {
+			return UFBXW_TASK_RUN_RESULT_NO_TASKS;
+		}
+	}
+}
+
+static ufbxw_task_run_result ufbxwi_task_blocking_run(ufbxwi_task_queue *queue)
+{
+	if (queue->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
+
+	for (;;) {
+		ufbxwi_semaphore_wait(queue->thread_pool, &queue->task_sema);
+		if (queue->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
+
+		uint32_t task_id = ufbxwi_atomic_add(queue->thread_pool, &queue->run_index, 1);
+		if (ufbxwi_task_complete(queue, task_id)) {
+			return UFBXW_TASK_RUN_RESULT_COMPLETED;
+		}
+	}
+}
+
+#if 0
+
+typedef struct {
+	void *data;
+	uint32_t stride;
+	uint32_t item_size;
+	uint32_t size;
+	ufbxwi_thread_pool *pool;
+	ufbxwi_atomic_u32 read_index;
+	ufbxwi_atomic_u32 write_index;
+} ufbxwi_mpmc_queue;
+
+typedef enum {
+	UFBXWI_MPMC_STATE_EMPTY = 0x0,
+	UFBXWI_MPMC_STATE_FULL = 0x1,
+} ufbxwi_mpmc_state;
+
+typedef struct {
+	// Combination of a state, waiter count and cycle to prevent ABA problems
+	//   [0:1]    state (ufbxwi_mpmc_state)
+	//   [1:4]    cycle (slot_index / slot_count)
+	//   [4:32]   waiters (number of threads waiting to be notified)
+	ufbxwi_atomic_u32 turn;
+	uint32_t _padding;
+} ufbxwi_mpmc_slot;
+
+#define UFBXWI_MPMC_CYCLE_BITS 3u
+#define UFBXWI_MPMC_CYCLE_MASK ((1u << UFBXWI_MPMC_CYCLE_BITS) - 1u)
+
+static ufbxwi_forceinline uint32_t ufbxwi_mpmc_make_turn(uint32_t cycle, uint32_t waiters, ufbxwi_mpmc_state state)
+{
+	ufbxwi_dev_assert(state <= 0x1 && cycle <= UFBXWI_MPMC_CYCLE_MASK);
+	return (uint32_t)state | (cycle << 1) | (waiters << 4);
+}
+
+#define ufbxwi_mpmc_turn_state(id) (ufbxwi_mpmc_state)((id) & 0x3)
+#define ufbxwi_mpmc_turn_cycle(id) (uint32_t)(((id) >> 1) & 0x7)
+#define ufbxwi_mpmc_turn_waiters(id) (uint32_t)((id) >> 4)
+
+static ufbxwi_forceinline ufbxwi_mpmc_slot *ufbxwi_mpmc_get_slot(ufbxwi_mpmc_queue *queue, uint32_t slot_index)
+{
+	return (ufbxwi_mpmc_slot*)((char*)queue->data + (slot_index % queue->size) * queue->stride);
+}
+
+static ufbxwi_forceinline uint32_t ufbxwi_mpmc_get_cycle(ufbxwi_mpmc_queue *queue, uint32_t slot_index)
+{
+	return (slot_index / queue->size) & UFBXWI_MPMC_CYCLE_MASK;
+}
+
+static void ufbxwi_mpmc_slot_wait(ufbxwi_mpmc_queue *queue, uint32_t slot_index, uint32_t cycle, ufbxwi_mpmc_state state)
+{
+	ufbxwi_mpmc_slot *slot = ufbxwi_mpmc_get_slot(queue, slot_index);
+
+	for (uint32_t spin = 0; ; spin++) {
+		uint32_t prev_turn = ufbxwi_atomic_load(queue->pool, &slot->turn);
+		uint32_t prev_cycle = ufbxwi_mpmc_turn_cycle(prev_turn);
+		uint32_t prev_state = ufbxwi_mpmc_turn_state(prev_turn);
+		uint32_t prev_waiters = ufbxwi_mpmc_turn_waiters(prev_turn);
+
+		if (prev_cycle == cycle && prev_state == state) {
+			return;
+		} else if (spin < 100) {
+			ufbxwi_atomic_pause(queue->pool);
+			continue;
+		}
+
+		// Notify that we have someone waiting on this address
+		uint32_t dst_turn = ufbxwi_mpmc_make_turn(cycle, prev_waiters + 1, prev_state);
+		if (!ufbxwi_atomic_cas(queue->pool, &slot->turn, prev_turn, dst_turn)) {
+			continue;
+		}
+
+		// Wait until the value changes
+		ufbxwi_atomic_wait(queue->pool, &slot->turn, dst_turn);
+
+		// Reduce the waiter count
+		ufbxwi_atomic_sub(queue->pool, &slot->turn, 1u << 4u);
+	}
+}
+
+static void ufbxwi_mpmc_slot_update(ufbxwi_mpmc_queue *queue, uint32_t slot_index, uint32_t cycle, ufbxwi_mpmc_state state)
+{
+	ufbxwi_mpmc_slot *slot = ufbxwi_mpmc_get_slot(queue, slot_index);
+
+	for (;;) {
+		uint32_t prev_turn = ufbxwi_atomic_load(queue->pool, &slot->turn);
+		uint32_t prev_cycle = ufbxwi_mpmc_turn_cycle(prev_turn);
+		uint32_t prev_state = ufbxwi_mpmc_turn_state(prev_turn);
+		uint32_t prev_waiters = ufbxwi_mpmc_turn_waiters(prev_turn);
+
+		uint32_t dst_turn = ufbxwi_mpmc_make_turn(cycle, prev_waiters, state);
+		if (ufbxwi_atomic_cas(queue->pool, &slot->turn, prev_turn, dst_turn)) {
+			// Wake up any potential waiters
+			if (prev_waiters > 0) {
+				ufbxwi_atomic_notify(queue->pool, &slot->turn, prev_waiters);
+			}
+			return;
+		} else {
+			// Try again
+			continue;
+		}
+	}
+}
+
+static bool ufbxwi_mpmc_push(ufbxwi_mpmc_queue *queue, const void *p_item)
+{
+	for (;;) {
+		uint32_t read_index = ufbxwi_atomic_load(queue->pool, &queue->read_index);
+		uint32_t write_index = ufbxwi_atomic_load(queue->pool, &queue->write_index);
+		if (write_index >= read_index + queue->size - 1) {
+			return false;
+		}
+
+		uint32_t write_cycle = (write_index / queue->size) % UFBXWI_MPMC_CYCLE_MASK;
+		if (ufbxwi_atomic_cas(queue->pool, &queue->write_index, write_index, write_index + 1)) {
+			ufbxwi_mpmc_slot_wait(queue, write_index, write_cycle, UFBXWI_MPMC_STATE_EMPTY);
+
+			ufbxwi_mpmc_slot *slot = ufbxwi_mpmc_get_slot(queue, write_index);
+			memcpy(slot + 1, p_item, queue->item_size);
+
+			ufbxwi_mpmc_slot_update(queue, write_index, write_cycle, UFBXWI_MPMC_STATE_FULL);
+			return true;
+		}
+	}
+}
+
+static bool ufbxwi_mpmc_pop(ufbxwi_mpmc_queue *queue, void *p_item)
+{
+	for (;;) {
+		uint32_t read_index = ufbxwi_atomic_load(queue->pool, &queue->read_index);
+		uint32_t write_index = ufbxwi_atomic_load(queue->pool, &queue->write_index);
+		if (read_index == write_index) {
+			return false;
+		}
+
+		uint32_t read_cycle = (read_index / queue->size) % UFBXWI_MPMC_CYCLE_MASK;
+		if (ufbxwi_atomic_cas(queue->pool, &queue->write_index, write_index, write_index + 1)) {
+			ufbxwi_mpmc_slot_wait(queue, write_index, read_cycle, UFBXWI_MPMC_STATE_FULL);
+
+			ufbxwi_mpmc_slot *slot = ufbxwi_mpmc_get_slot(queue, write_index);
+			memcpy(p_item, slot + 1, queue->item_size);
+
+			ufbxwi_mpmc_slot_update(queue, write_index, read_cycle + 1, UFBXWI_MPMC_STATE_EMPTY);
+			return true;
+		}
+	}
+}
+
+typedef struct ufbxwi_task ufbxwi_task;
+
+typedef bool ufbxwi_task_fn(const ufbxwi_task *task);
+
+struct ufbxwi_task {
+	ufbxwi_task_fn *fn;
+	void *data;
+};
+
+typedef struct {
+	ufbxwi_thread_pool pool;
+	ufbxwi_semaphore task_sema;
+	ufbxwi_mpmc_queue task_queue;
+	ufbxwi_atomic_u32 finished;
+} ufbxwi_thread_pool_imp;
+
+static void ufbxwi_run_task(const ufbxwi_task *task)
+{
+	task->fn(task);
+}
+
+static bool ufbxwi_tasks_finsihed(ufbxwi_thread_pool_imp *pool)
+{
+	return ufbxwi_atomic_load(&pool->pool, &pool->finished) != 0;
+}
+
+static void ufbxwi_push_task(ufbxwi_thread_pool_imp *pool, const ufbxwi_task *task)
+{
+	if (ufbxwi_mpmc_push(&pool->task_queue, task)) {
+		ufbxwi_semaphore_notify(pool, &pool->task_sema, 1u);
+	} else {
+		ufbxwi_run_task(task);
+	}
+}
+
+static ufbxw_task_run_result ufbxwi_try_run_task(ufbxwi_thread_pool_imp *pool)
+{
+	ufbxwi_task task;
+	if (!ufbxwi_mpmc_pop(&pool->task_queue, &task)) {
+		if (ufbxwi_tasks_finsihed(pool)) {
+			return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
+		}
+		return UFBXW_TASK_RUN_RESULT_NO_TASKS;
+	}
+
+	ufbxwi_run_task(&task);
+	return UFBXW_TASK_RUN_RESULT_CONTINUE;
+}
+
+static ufbxw_task_run_result ufbxwi_blocking_run_task(ufbxwi_thread_pool_imp *pool)
+{
+	for (;;) {
+		ufbxwi_semaphore_wait(&pool->pool, &pool->task_sema);
+
+		ufbxw_task_run_result result = ufbxwi_try_run_task(pool);
+		if (result != UFBXW_TASK_RUN_RESULT_NO_TASKS) {
+			return result;
+		}
+	}
+}
+
+#endif
+
 typedef struct {
 	ufbxwi_allocator ator;
 
@@ -6088,6 +6577,8 @@ typedef struct {
 
 	ufbxwi_mesh_attribute_ptr_list tmp_attributes;
 	ufbxwi_binary_node_header_list binary_headers;
+
+	ufbxwi_thread_pool_imp thread_pool;
 
 	// TODO: Threaded versions of these
 	ufbxwi_byte_list tmp_input_buffer;
@@ -10054,6 +10545,18 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 	}
 
 	return true;
+}
+
+ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_try_run_task(ufbxw_thread_pool_context ctx)
+{
+	ufbxwi_thread_pool *pool = (ufbxw_thread_pool_context)ctx;
+	return ufbxwi_task_try_run(pool);
+}
+
+ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_blocking_run_task(ufbxw_thread_pool_context ctx)
+{
+	ufbxwi_thread_pool *pool = (ufbxw_thread_pool_context)ctx;
+	return ufbxwi_task_blocking_run(pool);
 }
 
 ufbxw_abi ufbxwi_noinline ufbxw_matrix ufbxw_transform_to_matrix(const ufbxw_transform *t)
