@@ -302,6 +302,7 @@ typedef enum ufbxw_error_type {
 	UFBXW_ERROR_PATH_TOO_LONG,
 	UFBXW_ERROR_FILE_OPEN_FAILED,
 	UFBXW_ERROR_ASCII_FORMAT,
+	UFBXW_ERROR_THREAD_POOL_INIT,
 
 } ufbxw_error_type;
 
@@ -1042,6 +1043,7 @@ typedef bool ufbxw_thread_pool_init_fn(void *user, ufbxw_thread_pool_context ctx
 typedef void ufbxw_thread_pool_run_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t count);
 typedef void ufbxw_thread_pool_wait_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t *p_value, uint32_t ref_value);
 typedef void ufbxw_thread_pool_notify_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t *p_value, uint32_t wake_count);
+typedef void ufbxw_thread_pool_finish_fn(void *user, ufbxw_thread_pool_context ctx);
 typedef void ufbxw_thread_pool_free_fn(void *user, ufbxw_thread_pool_context ctx);
 
 // Thread pool interface.
@@ -1166,6 +1168,8 @@ typedef struct ufbxw_save_opts {
 
 	ufbxw_allocator allocator;
 
+	ufbxw_thread_pool thread_pool;
+
 	// Compression level.
 	// Defaults to `6`.
 	int32_t compression_level;
@@ -1209,11 +1213,12 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 typedef enum ufbxw_task_run_result {
 	UFBXW_TASK_RUN_RESULT_NO_TASKS,
 	UFBXW_TASK_RUN_RESULT_COMPLETED,
+	UFBXW_TASK_RUN_RESULT_FAILED,
 	UFBXW_TASK_RUN_RESULT_ALL_FINISHED,
 } ufbxw_task_run_result;
 
-ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_try_run_task(ufbxw_thread_pool_context ctx);
-ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_blocking_run_task(ufbxw_thread_pool_context ctx);
+ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_try_run_tasks(ufbxw_thread_pool_context ctx, uint32_t thread_id_hint, size_t max_count);
+ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_blocking_run_tasks(ufbxw_thread_pool_context ctx, uint32_t thread_id_hint, size_t max_count);
 
 // Get or set an arbitrary user pointer for the thread pool context.
 // `ufbxw_thread_pool_get_user_ptr()` returns `NULL` if unset.

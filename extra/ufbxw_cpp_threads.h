@@ -47,12 +47,20 @@ ufbxw_cpp_threads_abi void ufbxw_cpp_threads_setup(struct ufbxw_thread_pool *poo
 #include <vector>
 #include <memory>
 
+#define UFBXW_CPP_THREADS_NUM_SLOTS 16
+#define UFBXW_CPP_THREADS_NUM_ADDRS 4
+
+typedef struct {
+	std::condition_variable cv;
+	uintptr_t ptr = 0;
+	size_t waiters = 0;
+} ufbxw_cpp_threads_addr;
+
 typedef struct {
 	std::mutex mutex;
-	std::condition_variable cv;
+	ufbxw_cpp_threads_addr addrs[UFBXW_CPP_THREADS_NUM_ADDRS];
+	ufbxw_cpp_threads_addr fallback_addr;
 } ufbxw_cpp_threads_slot;
-
-#define UFBXW_CPP_THREADS_NUM_SLOTS 32
 
 typedef struct {
 	ufbxw_cpp_threads_slot slots[UFBXW_CPP_THREADS_NUM_SLOTS];
@@ -73,12 +81,9 @@ static uint32_t ufbxw_cpp_threads_slot_from_ptr(const void *ptr)
 
 static_assert(sizeof(std::atomic_uint32_t) == sizeof(uint32_t), "std::atomic_uint32_t must match the size of uint32_t");
 
-static void ufbxw_cpp_threads_run_fn(ufbxw_thread_pool_context ctx)
+static void ufbxw_cpp_threads_run_fn(ufbxw_thread_pool_context ctx, uint32_t thread_id)
 {
-	for (;;) {
-		ufbxw_task_run_result result = ufbxw_thread_pool_blocking_run_task(ctx);
-		if (result == UFBXW_TASK_RUN_RESULT_ALL_FINISHED) break;
-	}
+	ufbxw_thread_pool_blocking_run_tasks(ctx, thread_id, SIZE_MAX);
 }
 
 static bool ufbxw_cpp_threads_thread_pool_init_fn(void *user, ufbxw_thread_pool_context ctx)
@@ -103,11 +108,30 @@ static bool ufbxw_cpp_threads_thread_pool_init_fn(void *user, ufbxw_thread_pool_
 
 	tc->threads.reserve(total_threads);
 	for (size_t i = 0; i < total_threads; i++) {
-		tc->threads.emplace_back(ufbxw_cpp_threads_run_fn, ctx);
+		tc->threads.emplace_back(ufbxw_cpp_threads_run_fn, ctx, (uint32_t)i);
 	}
 
 	ufbxw_thread_pool_set_user_ptr(ctx, tc.release());
 	return true;
+}
+
+static ufbxw_cpp_threads_addr *ufbxw_cpp_threads_add_addr(ufbxw_cpp_threads_slot &slot, uintptr_t ptr)
+{
+	ufbxw_cpp_threads_addr *to_insert = nullptr;
+	for (ufbxw_cpp_threads_addr &addr : slot.addrs) {
+		if (addr.ptr == ptr) {
+			return &addr;
+		} else if (addr.ptr == 0 && !to_insert) {
+			to_insert = &addr;
+		}
+	}
+
+	if (to_insert) {
+		to_insert->ptr = ptr;
+		return to_insert;
+	}
+
+	return &slot.fallback_addr;
 }
 
 static void ufbxw_cpp_threads_thread_pool_wait_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t *p_value, uint32_t ref_value)
@@ -119,8 +143,16 @@ static void ufbxw_cpp_threads_thread_pool_wait_fn(void *user, ufbxw_thread_pool_
 	std::atomic_uint32_t *p_atomic = (std::atomic_uint32_t*)p_value;
 
 	std::unique_lock<std::mutex> lock { slot->mutex };
+
+	ufbxw_cpp_threads_addr *addr = ufbxw_cpp_threads_add_addr(*slot, (uintptr_t)p_value);
+	addr->waiters++;
+
 	while (p_atomic->load(std::memory_order_acquire) == ref_value) {
-		slot->cv.wait(lock);
+		addr->cv.wait(lock);
+	}
+
+	if (--addr->waiters == 0) {
+		addr->ptr = 0;
 	}
 }
 
@@ -130,10 +162,22 @@ static void ufbxw_cpp_threads_thread_pool_notify_fn(void *user, ufbxw_thread_poo
 	uint32_t slot_ix = ufbxw_cpp_threads_slot_from_ptr(p_value);
 	ufbxw_cpp_threads_slot *slot = &tc->slots[slot_ix];
 
-	if (wake_count == 1) {
-		slot->cv.notify_one();
-	} else {
-		slot->cv.notify_all();
+	std::unique_lock<std::mutex> lock { slot->mutex };
+
+	uintptr_t ptr = (uintptr_t)p_value;
+	for (ufbxw_cpp_threads_addr &addr : slot->addrs) {
+		if (addr.ptr == ptr) {
+			if (wake_count == 1) {
+				addr.cv.notify_one();
+			} else {
+				addr.cv.notify_all();
+			}
+		}
+	}
+
+	// We cannot be sure if the waiters are relevant to us, just wake everyone up.
+	if (slot->fallback_addr.waiters > 0) {
+		slot->fallback_addr.cv.notify_all();
 	}
 }
 
