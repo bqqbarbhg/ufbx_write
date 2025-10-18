@@ -7158,7 +7158,6 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 			ufbxwi_write(sc, buffer->data.external.data, data_size);
 			break;
 		case UFBXWI_BUFFER_STATE_STREAM: {
-			// TODO(wq): Remove this
 			size_t offset = 0;
 			// Read through a temporary buffer so that we can stream to aligned memory
 			if (!sc->stream_buffer) {
@@ -8482,7 +8481,7 @@ static void ufbxwi_mark_save_context_failed(ufbxwi_save_context *sc)
 {
 	ufbxwi_mark_buffers_failed(&sc->buffers);
 
-	// TODO(wq): Remove this
+	// TODO(wq): Make this better
 	sc->write_queue.buffer_begin = NULL;
 	sc->write_queue.buffer_pos = NULL;
 	sc->write_queue.buffer_end = NULL;
