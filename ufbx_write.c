@@ -670,6 +670,7 @@ static ufbxwi_noinline ufbxwi_alloc *ufbxwi_alloc_block(ufbxwi_allocator *ator, 
 	block->size = size;
 	block->prev = &ator->block_root;
 	block->next = ator->block_root.next;
+	if (block->next) block->next->prev = block;
 	ator->block_root.next = block;
 
 	return block;
