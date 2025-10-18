@@ -6044,7 +6044,7 @@ typedef uint32_t ufbxwi_task_id;
 
 // -- Write queue
 
-// We cannot flush output consecutively for two reasons:
+// We cannot write the output file consecutively for two reasons:
 // - Binary files have forward offsets that we may not know yet
 // - Threaded writing may compute parts of the file in parallel
 //
