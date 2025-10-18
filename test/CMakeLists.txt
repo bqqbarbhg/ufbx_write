@@ -84,6 +84,11 @@ set(SRC_UFBX
     ufbx/ufbx.h
 )
 
+set(SRC_NATVIS
+    ../misc/ufbxw.natvis
+    ../misc/ufbxwi.natvis
+)
+
 file(GLOB SRC_TEST *.c *.h)
 
 target_sources(ufbxw_test PRIVATE ${SRC_UFBX_WRITE})
@@ -95,6 +100,11 @@ source_group("ufbx_write" FILES ${SRC_UFBX_WRITE})
 source_group("ufbx" FILES ${SRC_UFBX})
 source_group("test" FILES ${SRC_TEST})
 source_group("extra" FILES ${SRC_EXTRA})
+
+if (MSVC)
+    target_sources(ufbxw_test PRIVATE ${SRC_NATVIS})
+    source_group("natvis" FILES ${SRC_NATVIS})
+endif()
 
 if (MSVC)
     add_compile_options(/W4 /WX)
