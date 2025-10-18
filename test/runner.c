@@ -111,6 +111,9 @@ uint32_t g_log_pos;
 
 char g_hint[8*1024];
 
+uint32_t g_file_version;
+const char *g_file_format;
+
 void ufbxwt_logf(const char *fmt, ...)
 {
 	va_list args;
@@ -290,8 +293,6 @@ void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr)
 
 bool g_fuzz = false;
 bool g_allow_scene_error = false;
-uint32_t g_file_version;
-const char *g_file_format;
 
 bool ufbxwt_check_scene_error_imp(ufbxw_scene *scene, const char *file, int line)
 {

@@ -91,6 +91,9 @@ static void ufbxwt_deflate_test(const char *name, ufbxw_scene *scene, const ufbx
 				ufbxwt_deflate_impl deflate_impl = (ufbxwt_deflate_impl)deflate_ix;
 				const char *format = save_opts.format == UFBXW_SAVE_FORMAT_ASCII ? "ascii" : "binary";
 
+				if (g_file_version && save_opts.version != g_file_version) continue;
+				if (g_file_format && strcmp(format, g_file_format) != 0) continue;
+
 				if (save_opts.format == UFBXW_SAVE_FORMAT_ASCII && deflate_impl != UFBXWT_DEFLATE_IMPL_NONE) {
 					continue;
 				}
