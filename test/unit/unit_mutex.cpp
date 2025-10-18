@@ -52,3 +52,27 @@ UFBXWT_UNIT_TEST(mutex_try_lock)
 
 	ufbxwt_assert(value == num_threads * num_iters);
 }
+
+UFBXWT_UNIT_TEST(mutex_multiple)
+{
+	ufbxwt_thread_pool thread_pool;
+	ufbxwi_thread_pool &tp = thread_pool.tp;
+
+	constexpr size_t num_slots = 8;
+	uint32_t values[num_slots] = { };
+	ufbxwi_mutex mutex[num_slots] = { };
+
+	const size_t num_threads = 16;
+	const size_t num_iters = 64 * 1024;
+	fork_threads(num_threads, num_iters, [&](size_t id, size_t index) {
+		size_t slot = index % num_slots;
+
+		ufbxwi_mutex_lock(&tp, &mutex[slot]);
+		values[slot]++;
+		ufbxwi_mutex_unlock(&tp, &mutex[slot]);
+	});
+
+	for (size_t i = 0; i < num_slots; i++) {
+		ufbxwt_assert(values[i] == num_threads * num_iters / num_slots);
+	}
+}
