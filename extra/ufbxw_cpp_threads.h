@@ -41,11 +41,15 @@ ufbxw_cpp_threads_abi void ufbxw_cpp_threads_setup(struct ufbxw_thread_pool *poo
 #endif
 
 #include <stdlib.h>
+#include <string.h>
+
 #include <thread>
+#include <atomic>
 #include <mutex>
 #include <new>
 #include <vector>
 #include <memory>
+#include <condition_variable>
 
 #define UFBXW_CPP_THREADS_NUM_SLOTS 16
 #define UFBXW_CPP_THREADS_NUM_ADDRS 4

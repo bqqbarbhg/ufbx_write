@@ -496,7 +496,7 @@ static ufbxwi_noinline void ufbxwi_unstable_sort(void *in_data, size_t size, siz
 		#define UFBXWI_HAS_MM_PAUSE
 	#endif
 
-	typedef struct { uint32_t value; } fbxwi_atomic_u32;
+	typedef struct { uint32_t value; } ufbxwi_atomic_u32;
 
 	static ufbxwi_forceinline bool ufbxwi_atomic_cas(ufbxwi_atomic_u32 *atomic, uint32_t expected, uint32_t value)
 	{

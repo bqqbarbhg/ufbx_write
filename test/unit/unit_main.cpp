@@ -1,5 +1,8 @@
 #include "unit_test.h"
 
+#include <string.h>
+#include <stdio.h>
+
 #include <vector>
 #include <algorithm>
 
