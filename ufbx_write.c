@@ -6315,7 +6315,7 @@ static void ufbxwi_write_queue_finish_reloc(ufbxwi_write_queue *wq, uint32_t rel
 
 	ufbxwi_queue_write_at(wq, reloc->dst_offset, dst, dst_size);
 
-	ufbxwi_list_push_copy(wq->ator, &wq->free_reloc_ids, uint32_t, &reloc_id);
+	ufbxwi_check(ufbxwi_list_push_copy(wq->ator, &wq->free_reloc_ids, uint32_t, &reloc_id));
 }
 
 // -- Saving
