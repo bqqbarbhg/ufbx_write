@@ -327,102 +327,28 @@
 
 // TODO: External
 
+// -- Features
+
+#ifndef UFBXW_UNIT_TEST
+	#define UFBXWI_FEATURE_ATOMICS 1
+	#define UFBXWI_FEATURE_THREAD_POOL 1
+	#define UFBXWI_FEATURE_ERROR 1
+	#define UFBXWI_FEATURE_ALLOCATOR 1
+	#define UFBXWI_FEATURE_LIST 1
+	#define UFBXWI_FEATURE_STRING_POOL 1
+	#define UFBXWI_FEATURE_BUFFER 1
+	#define UFBXWI_FEATURE_SCENE 1
+	#define UFBXWI_FEATURE_WRITE_QUEUE 1
+	#define UFBXWI_FEATURE_SAVE 1
+	#define UFBXWI_FEATURE_API 1
+#endif
+
 // -- Version
 
 #define UFBXW_SOURCE_VERSION ufbxw_pack_version(0, 1, 0)
 ufbxw_abi_data_def const uint32_t ufbxw_source_version = UFBXW_SOURCE_VERSION;
 
 ufbxw_static_assert(source_header_version, UFBXW_SOURCE_VERSION/1000U == UFBXW_HEADER_VERSION/1000U);
-
-// -- Error
-
-static const char ufbxwi_empty_char[] = "";
-static const ufbxw_string ufbxwi_empty_string = { ufbxwi_empty_char, 0 };
-
-static ufbxw_string ufbxwi_c_str(const char *str)
-{
-	if (str == NULL) str = ufbxwi_empty_char;
-	ufbxw_string s = { str, strlen(str) };
-	return s;
-}
-
-typedef struct ufbxwi_error ufbxwi_error;
-
-typedef void ufbxwi_fatal_fn(void *user, ufbxwi_error *error);
-
-struct ufbxwi_error {
-	ufbxw_error error;
-
-	ufbxw_error_fn *error_fn;
-	void *error_user;
-
-	ufbxwi_fatal_fn *fatal_fn;
-	void *fatal_user;
-};
-
-static ufbxwi_noinline void ufbxwi_failf_imp(ufbxwi_error *error, ufbxw_error_type type, const char *func, const char *fmt, ...)
-{
-	if (error->error.type >= UFBXW_ERROR_FATAL) return;
-
-	if (type < UFBXW_ERROR_FATAL) {
-		if (error->error_fn) {
-			va_list args;
-			va_start(args, fmt);
-
-			ufbxw_error err;
-			err.type = type;
-			err.function = ufbxwi_c_str(func);
-
-			int len = vsnprintf(err.description, sizeof(err.description), fmt, args);
-			err.description_length = (size_t)len;
-
-			va_end(args);
-
-			error->error_fn(error->error_user, &err);
-		}
-		return;
-	}
-
-	error->error.type = type;
-	error->error.function = ufbxwi_c_str(func);
-
-	va_list args;
-	va_start(args, fmt);
-	int desc_len = vsnprintf(error->error.description, sizeof(error->error.description), fmt, args);
-	va_end(args);
-	error->error.description_length = (size_t)desc_len;
-
-	if (error->error_fn) {
-		error->error_fn(error->error_user, &error->error);
-	}
-
-	if (error->fatal_fn) {
-		error->fatal_fn(error->fatal_user, error);
-	}
-}
-
-static ufbxwi_noinline void ufbxwi_fail_imp(ufbxwi_error *error, ufbxw_error_type type, const char *func, const char *desc)
-{
-	ufbxwi_failf_imp(error, type, func, "%s", desc);
-}
-
-#define ufbxwi_failf(error, type, ...) ufbxwi_failf_imp((error), (type), ufbxwi_func, __VA_ARGS__)
-#define ufbxwi_fail(error, type, desc) ufbxwi_fail_imp((error), (type), ufbxwi_func, (desc))
-
-static ufbxwi_forceinline bool ufbxwi_is_fatal(ufbxwi_error *error)
-{
-	return error->error.type != UFBXW_ERROR_NONE;
-}
-
-#define ufbxwi_check(cond, ...) do { if (!(cond)) return __VA_ARGS__; } while (0)
-
-#define ufbxwi_check_index(error, index, count, ...) do { \
-		size_t mi_index = (index), mi_count = (count); \
-		if (mi_index >= mi_count) { \
-			ufbxwi_failf((error), UFBXW_ERROR_INDEX_OUT_OF_BOUNDS, "index (%zu) out of bounds (%zu)", mi_index, mi_count); \
-			return __VA_ARGS__; \
-		} \
-	} while (0)
 
 // -- Utility
 
@@ -551,7 +477,346 @@ static ufbxwi_noinline void ufbxwi_unstable_sort(void *in_data, size_t size, siz
 
 #define ufbxwi_array_list(arr) { arr, ufbxwi_arraycount(arr) }
 
+// -- Atomics
+
+#ifdef UFBXWI_FEATURE_ATOMICS
+
+#define UFBXWI_THREAD_SAFE 1
+
+#if defined(__cplusplus)
+	#define ufbxwi_extern_c extern "C"
+#else
+	#define ufbxwi_extern_c
+#endif
+
+#if !defined(UFBXW_STANDARD_C) && (defined(__GNUC__) || defined(__clang__) || defined(__INTEL_COMPILER))
+	// TODO(threads): ARM/x86/etc
+	#if defined(__x86_64__)
+		#include <emmintrin.h>
+		#define UFBXWI_HAS_MM_PAUSE
+	#endif
+
+	typedef struct { uint32_t value; } fbxwi_atomic_u32;
+
+	static ufbxwi_forceinline bool ufbxwi_atomic_cas(ufbxwi_atomic_u32 *atomic, uint32_t expected, uint32_t value)
+	{
+		return __sync_bool_compare_and_swap(&atomic->value, expected, value);
+	}
+
+	static ufbxwi_forceinline uint32_t ufbxwi_atomic_add(ufbxwi_atomic_u32 *atomic, uint32_t value)
+	{
+		return __sync_fetch_and_add(&atomic->value, value);
+	}
+
+	static ufbxwi_forceinline uint32_t ufbxwi_atomic_load_relaxed(ufbxwi_atomic_u32 *atomic)
+	{
+		return atomic->value;
+	}
+
+	static void ufbxwi_atomic_pause(void)
+	{
+		#ifdef UFBXWI_HAS_MM_PAUSE
+			_mm_pause();
+		#endif
+	}
+#elif !defined(UFBXW_STANDARD_C) && defined(_MSC_VER)
+	#if defined(_M_X64)
+		#include <emmintrin.h>
+		#define UFBXWI_HAS_MM_PAUSE
+	#endif
+
+	typedef struct { uint32_t value; } ufbxwi_atomic_u32;
+	ufbxwi_extern_c long _InterlockedCompareExchange(long volatile *dst, long value, long expected);
+	ufbxwi_extern_c long _InterlockedExchangeAdd(long volatile *dst, long value);
+
+	static ufbxwi_forceinline bool ufbxwi_atomic_cas(ufbxwi_atomic_u32 *atomic, uint32_t expected, uint32_t value)
+	{
+		long ref = _InterlockedCompareExchange((volatile long*)&atomic->value, (long)value, (long)expected);
+		return ref == expected;
+	}
+
+	static ufbxwi_forceinline uint32_t ufbxwi_atomic_add(ufbxwi_atomic_u32 *atomic, uint32_t value)
+	{
+		return _InterlockedExchangeAdd((volatile long*)&atomic->value, (long)value);
+	}
+
+	static ufbxwi_forceinline uint32_t ufbxwi_atomic_load_relaxed(ufbxwi_atomic_u32 *atomic)
+	{
+		return atomic->value;
+	}
+
+	static void ufbxwi_atomic_pause(void)
+	{
+		#ifdef UFBXWI_HAS_MM_PAUSE
+			_mm_pause();
+		#endif
+	}
+#else
+	#error TODO: Atomic fallbacks
+#endif
+
+// Some primitives built with the above
+
+static ufbxwi_forceinline uint32_t ufbxwi_atomic_load_acquire(ufbxwi_atomic_u32 *atomic)
+{
+	// TODO: This could be optimized
+	return ufbxwi_atomic_add(atomic, 0);
+}
+
+static ufbxwi_forceinline uint32_t ufbxwi_atomic_sub(ufbxwi_atomic_u32 *atomic, uint32_t value)
+{
+	return ufbxwi_atomic_add(atomic, (uint32_t)-(int32_t)value);
+}
+
+static ufbxwi_forceinline void ufbxwi_atomic_store(ufbxwi_atomic_u32 *atomic, uint32_t value)
+{
+	uint32_t prev = ufbxwi_atomic_load_relaxed(atomic);
+	bool ok = ufbxwi_atomic_cas(atomic, prev, value);
+	ufbxw_assert(ok);
+}
+
+#endif
+
+// -- Synchronization
+
+#ifdef UFBXWI_FEATURE_THREAD_POOL
+
+typedef struct {
+	bool enabled;
+
+	ufbxw_thread_pool_run_fn *run_fn;
+	ufbxw_thread_pool_wait_fn *wait_fn;
+	ufbxw_thread_pool_notify_fn *notify_fn;
+	ufbxw_thread_pool_free_fn *free_fn;
+	void *user;
+
+	void *user_ptr;
+
+} ufbxwi_thread_pool;
+
+static bool ufbxwi_thread_pool_init(ufbxwi_thread_pool *tp, const ufbxw_thread_pool *pool)
+{
+	ufbxw_thread_pool_context ctx = (ufbxw_thread_pool_context)tp;
+	if (!pool->init_fn(pool->user, ctx)) {
+		return false;
+	}
+
+	tp->enabled = true;
+	tp->run_fn = pool->run_fn;
+	tp->wait_fn = pool->wait_fn;
+	tp->notify_fn = pool->notify_fn;
+	tp->free_fn = pool->free_fn;
+	tp->user = pool->user;
+	return true;
+}
+
+static void ufbxwi_thread_pool_free(ufbxwi_thread_pool *tp)
+{
+	ufbxw_thread_pool_context ctx = (ufbxw_thread_pool_context)tp;
+	if (tp->free_fn) {
+		tp->free_fn(tp->user, ctx);
+	}
+}
+
+static void ufbxwi_atomic_wait(ufbxwi_thread_pool *tp, ufbxwi_atomic_u32 *p_value, uint32_t ref_value)
+{
+	ufbxw_thread_pool_context ctx = (ufbxw_thread_pool_context)tp;
+	if (ufbxwi_atomic_load_acquire(p_value) == ref_value) {
+		tp->wait_fn(tp->user, ctx, &p_value->value, ref_value);
+	}
+}
+
+static void ufbxwi_atomic_notify(ufbxwi_thread_pool *tp, ufbxwi_atomic_u32 *p_value, uint32_t wake_count)
+{
+	ufbxw_thread_pool_context ctx = (ufbxw_thread_pool_context)tp;
+	tp->notify_fn(tp->user, ctx, &p_value->value, wake_count);
+}
+
+typedef struct {
+	// [0:1]   locked
+	// [1:32]  waiters
+	ufbxwi_atomic_u32 lockers;
+} ufbxwi_mutex;
+
+static bool ufbxwi_mutex_try_lock(ufbxwi_thread_pool *tp, ufbxwi_mutex *mutex)
+{
+	ufbxwi_dev_assert(tp->enabled);
+
+	// Happy fast path
+	if (ufbxwi_atomic_cas(&mutex->lockers, 0, 1)) return true;
+
+	for (uint32_t spin = 0; ; spin++) {
+		const uint32_t state = ufbxwi_atomic_load_relaxed(&mutex->lockers);
+		const uint32_t locked = state & 0x1;
+		const uint32_t waiters = state >> 1u;
+
+		if (!locked) {
+			// Unlocked -> locked
+			const uint32_t new_state = 0x1 | waiters << 1u;
+			if (ufbxwi_atomic_cas(&mutex->lockers, state, new_state)) {
+				return true;
+			}
+		} else {
+			return false;
+		}
+	}
+}
+
+static void ufbxwi_mutex_lock(ufbxwi_thread_pool *tp, ufbxwi_mutex *mutex)
+{
+	ufbxwi_dev_assert(tp->enabled);
+
+	// Happy fast path
+	if (ufbxwi_atomic_cas(&mutex->lockers, 0, 1)) return;
+
+	for (uint32_t spin = 0; ; spin++) {
+		const uint32_t state = ufbxwi_atomic_load_relaxed(&mutex->lockers);
+		const uint32_t locked = state & 0x1;
+		const uint32_t waiters = state >> 1u;
+
+		if (!locked) {
+			// Unlocked -> locked
+			const uint32_t new_state = 0x1 | waiters << 1u;
+			if (ufbxwi_atomic_cas(&mutex->lockers, state, new_state)) {
+				return;
+			}
+		} else if (spin < 100) {
+			ufbxwi_atomic_pause();
+		} else {
+			// Add waiter
+			const uint32_t new_waiters = waiters + 1u;
+			const uint32_t new_state = 0x1 | new_waiters << 1u;
+			if (ufbxwi_atomic_cas(&mutex->lockers, state, new_state)) {
+				ufbxwi_atomic_wait(tp, &mutex->lockers, new_state);
+				ufbxwi_atomic_sub(&mutex->lockers, 1u << 1u);
+			}
+		}
+	}
+}
+
+static void ufbxwi_mutex_unlock(ufbxwi_thread_pool *tp, ufbxwi_mutex *mutex)
+{
+	ufbxwi_dev_assert(tp->enabled);
+
+	// Happy fast path
+	if (ufbxwi_atomic_cas(&mutex->lockers, 1, 0)) return;
+
+	for (;;) {
+		const uint32_t state = ufbxwi_atomic_load_relaxed(&mutex->lockers);
+		const uint32_t locked = state & 0x1;
+		const uint32_t waiters = state >> 1u;
+
+		ufbxwi_dev_assert(locked);
+
+		const uint32_t new_state = 0x0 | waiters << 1u;
+		if (ufbxwi_atomic_cas(&mutex->lockers, state, new_state)) {
+			if (waiters > 0) {
+				ufbxwi_atomic_notify(tp, &mutex->lockers, 1u);
+			}
+			return;
+		}
+	}
+}
+
+#endif
+
+// -- Error
+
+#ifdef UFBXWI_FEATURE_ERROR
+
+static const char ufbxwi_empty_char[] = "";
+static const ufbxw_string ufbxwi_empty_string = { ufbxwi_empty_char, 0 };
+
+static ufbxw_string ufbxwi_c_str(const char *str)
+{
+	if (str == NULL) str = ufbxwi_empty_char;
+	ufbxw_string s = { str, strlen(str) };
+	return s;
+}
+
+typedef struct ufbxwi_error ufbxwi_error;
+
+typedef void ufbxwi_fatal_fn(void *user, ufbxwi_error *error);
+
+struct ufbxwi_error {
+	ufbxw_error error;
+
+	ufbxw_error_fn *error_fn;
+	void *error_user;
+
+	ufbxwi_fatal_fn *fatal_fn;
+	void *fatal_user;
+};
+
+static ufbxwi_noinline void ufbxwi_failf_imp(ufbxwi_error *error, ufbxw_error_type type, const char *func, const char *fmt, ...)
+{
+	if (error->error.type >= UFBXW_ERROR_FATAL) return;
+
+	if (type < UFBXW_ERROR_FATAL) {
+		if (error->error_fn) {
+			va_list args;
+			va_start(args, fmt);
+
+			ufbxw_error err;
+			err.type = type;
+			err.function = ufbxwi_c_str(func);
+
+			int len = vsnprintf(err.description, sizeof(err.description), fmt, args);
+			err.description_length = (size_t)len;
+
+			va_end(args);
+
+			error->error_fn(error->error_user, &err);
+		}
+		return;
+	}
+
+	error->error.type = type;
+	error->error.function = ufbxwi_c_str(func);
+
+	va_list args;
+	va_start(args, fmt);
+	int desc_len = vsnprintf(error->error.description, sizeof(error->error.description), fmt, args);
+	va_end(args);
+	error->error.description_length = (size_t)desc_len;
+
+	if (error->error_fn) {
+		error->error_fn(error->error_user, &error->error);
+	}
+
+	if (error->fatal_fn) {
+		error->fatal_fn(error->fatal_user, error);
+	}
+}
+
+static ufbxwi_noinline void ufbxwi_fail_imp(ufbxwi_error *error, ufbxw_error_type type, const char *func, const char *desc)
+{
+	ufbxwi_failf_imp(error, type, func, "%s", desc);
+}
+
+#define ufbxwi_failf(error, type, ...) ufbxwi_failf_imp((error), (type), ufbxwi_func, __VA_ARGS__)
+#define ufbxwi_fail(error, type, desc) ufbxwi_fail_imp((error), (type), ufbxwi_func, (desc))
+
+static ufbxwi_forceinline bool ufbxwi_is_fatal(ufbxwi_error *error)
+{
+	return error->error.type != UFBXW_ERROR_NONE;
+}
+
+#define ufbxwi_check(cond, ...) do { if (!(cond)) return __VA_ARGS__; } while (0)
+
+#define ufbxwi_check_index(error, index, count, ...) do { \
+		size_t mi_index = (index), mi_count = (count); \
+		if (mi_index >= mi_count) { \
+			ufbxwi_failf((error), UFBXW_ERROR_INDEX_OUT_OF_BOUNDS, "index (%zu) out of bounds (%zu)", mi_index, mi_count); \
+			return __VA_ARGS__; \
+		} \
+	} while (0)
+
+#endif
+
 // -- Allocator
+
+#ifdef UFBXWI_FEATURE_ALLOCATOR
 
 #if defined(UFBXW_REGRESSION)
 static const char ufbxwi_zero_size_buffer[4096] = { 0 };
@@ -811,7 +1076,11 @@ static ufbxwi_noinline void ufbxwi_free_allocator(ufbxwi_allocator *ator)
 
 #define ufbxwi_alloc(ator, type, n) ufbxwi_maybe_null((type*)ufbxwi_alloc_size((ator), sizeof(type), (n), NULL))
 
+#endif
+
 // -- Dynamic List
+
+#ifdef UFBXWI_FEATURE_LIST
 
 typedef struct {
 	void *data;
@@ -924,6 +1193,7 @@ static ufbxwi_forceinline void ufbxwi_list_free_size(ufbxwi_allocator *ator, voi
 #define ufbxwi_list_resize_uninit(ator, list, type, n) (ufbxwi_check_ptr_type(type, (list)->data), (type*)ufbxwi_list_resize_size((ator), (list), sizeof(type), (n)))
 #define ufbxwi_list_free(ator, list) ufbxwi_list_free_size((ator), (list), sizeof(*(list)->data))
 
+
 // -- Special list
 
 UFBXWI_LIST_TYPE(ufbxwi_id_list, ufbxw_id);
@@ -958,6 +1228,8 @@ static bool ufbxwi_id_list_remove_one(void *p_list, ufbxw_id id)
 	return true;
 }
 
+#endif
+
 // -- Hash functions
 
 static ufbxwi_noinline uint32_t ufbxwi_hash_string(const char *str, size_t length)
@@ -990,6 +1262,8 @@ static ufbxwi_noinline uint32_t ufbxwi_hash_string(const char *str, size_t lengt
 }
 
 // -- String
+
+#ifdef UFBXWI_FEATURE_STRING_POOL
 
 typedef struct ufbxwi_string_entry {
 	uint32_t hash;
@@ -1927,7 +2201,11 @@ uint32_t ufbxwi_hash_token(ufbxwi_token token)
 	return x;
 }
 
+#endif
+
 // -- Buffers
+
+#ifdef UFBXWI_FEATURE_STRING_POOL
 
 UFBXWI_LIST_TYPE(ufbxwi_uint32_list, uint32_t);
 UFBXWI_LIST_TYPE(ufbxwi_ktime_list, ufbxw_ktime);
@@ -2629,11 +2907,15 @@ static ufbxwi_noinline ufbxwi_void_iterator ufbxwi_advance_stream_imp(ufbxwi_buf
 
 #define ufbxwi_commit_stream(m_pool, m_id, m_iterator) ufbxwi_advance_stream_imp((m_pool), (m_id), (m_iterator).pos)
 
+#endif
+
 // -- Prop types
 
 static const ufbxw_vec3 ufbxwi_one_vec3 = { 1.0f, 1.0f, 1.0f };
 
 // -- Scene
+
+#ifdef UFBXWI_FEATURE_SCENE
 
 #define UFBXWI_ELEMENT_TYPE_NONE ((ufbxw_element_type)0)
 
@@ -6039,10 +6321,14 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 	ufbxwi_free(&scene->ator, elements.data);
 }
 
+#endif
+
 // TODO(wb): Make this real
 typedef uint32_t ufbxwi_task_id;
 
 // -- Write queue
+
+#if UFBXWI_FEATURE_WRITE_QUEUE
 
 // We cannot write the output file consecutively for two reasons:
 // - Binary files have forward offsets that we may not know yet
@@ -6479,7 +6765,11 @@ static void ufbxwi_write_queue_finish_reloc(ufbxwi_write_queue *wq, uint32_t rel
 	}
 }
 
+#endif
+
 // -- Saving
+
+#ifdef UFBXWI_FEATURE_SAVE
 
 typedef struct {
 	uint32_t reference_count;
@@ -8545,7 +8835,11 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 	ufbxwi_write_queue_flush(&sc->write_queue, 0);
 }
 
+#endif
+
 // -- API
+
+#ifdef UFBXWI_FEATURE_API
 
 #ifdef __cplusplus
 extern "C" {
@@ -10265,6 +10559,18 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 	return true;
 }
 
+ufbxw_unsafe ufbxw_abi void ufbxw_thread_pool_set_user_ptr(ufbxw_thread_pool_context ctx, void *user_ptr)
+{
+	ufbxwi_thread_pool *tp = (ufbxwi_thread_pool*)ctx;
+	tp->user_ptr = user_ptr;
+}
+
+ufbxw_unsafe ufbxw_abi void *ufbxw_thread_pool_get_user_ptr(ufbxw_thread_pool_context ctx)
+{
+	ufbxwi_thread_pool *tp = (ufbxwi_thread_pool*)ctx;
+	return tp->user_ptr;
+}
+
 ufbxw_abi ufbxwi_noinline ufbxw_matrix ufbxw_transform_to_matrix(const ufbxw_transform *t)
 {
 	ufbxw_assert(t);
@@ -10467,6 +10773,8 @@ ufbxw_abi ufbxw_string ufbxw_str(const char *str)
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif
 
 #endif

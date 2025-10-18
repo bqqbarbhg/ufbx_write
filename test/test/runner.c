@@ -12,23 +12,23 @@ static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr
 	ufbxwt_assert_fail_imp(file, line, expr);
 }
 
-#include "../ufbx_write.h"
-#include "ufbx/ufbx.h"
+#include "../../ufbx_write.h"
+#include "../ufbx/ufbx.h"
 
 #ifdef UFBXWT_HAS_LIBDEFLATE
-	#include "../extra/ufbxw_libdeflate.h"
+	#include "../../extra/ufbxw_libdeflate.h"
 #endif
 
 #ifdef UFBXWT_HAS_ZLIB
-	#include "../extra/ufbxw_zlib.h"
+	#include "../../extra/ufbxw_zlib.h"
 #endif
 
 #ifdef UFBXWT_HAS_FMTLIB
-	#include "../extra/ufbxw_fmtlib.h"
+	#include "../../extra/ufbxw_fmtlib.h"
 #endif
 
 #ifdef UFBXWT_HAS_TO_CHARS
-	#include "../extra/ufbxw_to_chars.h"
+	#include "../../extra/ufbxw_to_chars.h"
 #endif
 
 #define ufbxwt_arraycount(arr) (sizeof(arr) / sizeof(*(arr)))

@@ -77,14 +77,6 @@
 
 // -- Configuration
 
-// Number of thread groups to use if threading is enabled.
-// A thread group processes a number of tasks and is then waited and potentially
-// re-used later. In essence, this controls the granularity of threading.
-#define UFBXW_THREAD_GROUP_COUNT 4
-
-// Number of locks used by the threading API.
-#define UFBXW_THREAD_LOCK_COUNT 1
-
 // UTF-8
 typedef struct ufbxw_string {
 	const char *data;
@@ -1039,43 +1031,26 @@ typedef struct ufbxw_write_stream {
 
 ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *path, size_t path_len, ufbxw_error *error);
 
-// -- Thread pool
-
 // Internal thread pool handle.
 // Passed to `ufbx_thread_pool_run_task()` from an user thread to run ufbx tasks.
 // HINT: This context can store a user pointer via `ufbx_thread_pool_set_user_ptr()`.
 typedef uintptr_t ufbxw_thread_pool_context;
 
-// Thread pool creation information from ufbx.
-typedef struct ufbxw_thread_pool_info {
-	uint32_t max_concurrent_tasks;
-} ufbxw_thread_pool_info;
-
-// Initialize the thread pool.
-// Return `true` on success.
-typedef bool ufbxw_thread_pool_init_fn(void *user, ufbxw_thread_pool_context ctx, const ufbxw_thread_pool_info *info);
-
-// Run tasks `count` tasks in threads.
-// You must call `ufbxw_thread_pool_run_task()` with indices `[start_index, start_index + count)`.
-// The threads are launched in batches indicated by `group`, see `ufbxw_THREAD_GROUP_COUNT` for more information.
-// Ideally, you should run all the task indices in parallel within each `ufbxw_thread_pool_run_fn()` call.
-typedef void ufbxw_thread_pool_run_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t group, uint32_t start_index, uint32_t count);
-
-// Wait for previous tasks spawned in `ufbxw_thread_pool_run_fn()` to finish.
-// `group` specifies the batch to wait for, `max_index` contains `start_index + count` from that group instance.
-typedef void ufbxw_thread_pool_wait_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t group, uint32_t max_index);
-
-typedef void ufbxw_thread_pool_lock_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t lock_index);
-typedef void ufbxw_thread_pool_unlock_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t lock_index);
-
-// Free the thread pool.
+typedef bool ufbxw_thread_pool_init_fn(void *user, ufbxw_thread_pool_context ctx);
+typedef void ufbxw_thread_pool_run_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t count);
+typedef void ufbxw_thread_pool_wait_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t *p_value, uint32_t ref_value);
+typedef void ufbxw_thread_pool_notify_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t *p_value, uint32_t wake_count);
+typedef void ufbxw_thread_pool_finish_fn(void *user, ufbxw_thread_pool_context ctx);
 typedef void ufbxw_thread_pool_free_fn(void *user, ufbxw_thread_pool_context ctx);
 
 // Thread pool interface.
 // See functions above for more information.
 typedef struct ufbxw_thread_pool {
-	ufbxw_thread_pool_lock_fn *lock_fn;     // < Required
-	ufbxw_thread_pool_unlock_fn *unlock_fn; // < Required
+	ufbxw_thread_pool_init_fn *init_fn;     // < Optional
+	ufbxw_thread_pool_run_fn *run_fn;       // < Optional
+	ufbxw_thread_pool_wait_fn *wait_fn;     // < Required
+	ufbxw_thread_pool_notify_fn *notify_fn; // < Required
+	ufbxw_thread_pool_free_fn *free_fn;     // < Optional
 	void *user;
 } ufbxw_thread_pool;
 
