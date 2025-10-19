@@ -728,6 +728,47 @@ static void ufbxwi_mutex_unlock(ufbxwi_thread_pool *tp, ufbxwi_mutex *mutex)
 	}
 }
 
+typedef struct {
+	ufbxwi_atomic_u32 count;
+} ufbxwi_semaphore;
+
+static bool ufbxwi_semaphore_try_wait(ufbxwi_thread_pool *tp, ufbxwi_semaphore *sema)
+{
+	for (;;) {
+		const uint32_t count = ufbxwi_atomic_load_relaxed(&sema->count);
+		if (count == 0) return false;
+
+		if (ufbxwi_atomic_cas(&sema->count, count, count - 1)) {
+			return true;
+		}
+	}
+}
+
+static void ufbxwi_semaphore_wait(ufbxwi_thread_pool *tp, ufbxwi_semaphore *sema)
+{
+	for (uint32_t spin = 0;; spin++) {
+		const uint32_t count = ufbxwi_atomic_load_relaxed(&sema->count);
+		if (count > 0) {
+			if (ufbxwi_atomic_cas(&sema->count, count, count - 1)) {
+				return;
+			}
+		} else if (spin < 100) {
+			ufbxwi_atomic_pause();
+			continue;
+		}
+
+		ufbxwi_atomic_wait(tp, &sema->count, 0);
+	}
+}
+
+static void ufbxwi_semaphore_notify(ufbxwi_thread_pool *tp, ufbxwi_semaphore *sema, uint32_t count)
+{
+	if (count == 0) return;
+
+	// TODO: This could be optimized
+	ufbxwi_atomic_add(&sema->count, count);
+	ufbxwi_atomic_notify(tp, &sema->count, count);
+}
 #endif
 
 // -- Error
