@@ -76,3 +76,27 @@ UFBXWT_UNIT_TEST(mutex_multiple)
 		ufbxwt_assert(values[i] == num_threads * num_iters / num_slots);
 	}
 }
+
+UFBXWT_UNIT_TEST(mutex_sleep)
+{
+	ufbxwt_thread_pool thread_pool;
+	ufbxwi_thread_pool &tp = thread_pool.tp;
+
+	uint32_t value = 0;
+	ufbxwi_mutex mutex = { };
+
+	const size_t num_threads = 8;
+	const size_t num_iters = 100;
+	fork_threads(num_threads, num_iters, [&](size_t id, size_t index) {
+		ufbxwi_mutex_lock(&tp, &mutex);
+
+		if ((id * 3 + index + 7) % 23 == 0) {
+			std::this_thread::sleep_for(std::chrono::milliseconds{1});
+		}
+
+		value++;
+		ufbxwi_mutex_unlock(&tp, &mutex);
+	});
+
+	ufbxwt_assert(value == num_threads * num_iters);
+}

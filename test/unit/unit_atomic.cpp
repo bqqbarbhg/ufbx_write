@@ -6,7 +6,7 @@
 
 #include "util_threads.h"
 
-#define UFBXWT_UNIT_CATEGORY "atomics"
+#define UFBXWT_UNIT_CATEGORY "atomic"
 
 UFBXWT_UNIT_TEST(atomic_add)
 {
