@@ -477,6 +477,16 @@ static ufbxwi_noinline void ufbxwi_unstable_sort(void *in_data, size_t size, siz
 
 #define ufbxwi_array_list(arr) { arr, ufbxwi_arraycount(arr) }
 
+typedef struct {
+	const void *data;
+	size_t count;
+} ufbxwi_void_span;
+
+typedef struct {
+	void *data;
+	size_t count;
+} ufbxwi_mutable_void_span;
+
 // -- Atomics
 
 #ifdef UFBXWI_FEATURE_ATOMICS
@@ -922,7 +932,7 @@ static ufbxwi_noinline ufbxwi_alloc *ufbxwi_alloc_block(ufbxwi_allocator *ator, 
 	if (ator->ator.alloc_fn) {
 		block = (ufbxwi_alloc*)ator->ator.alloc_fn(ator->ator.user, size);
 	} else {
-		block = ufbxw_malloc(alloc_size);
+		block = (ufbxwi_alloc*)ufbxw_malloc(alloc_size);
 	}
 	if (!block) {
 		ufbxwi_failf(ator->error, UFBXW_ERROR_ALLOCATION_FAILURE, "Failed to allocate %zu bytes", alloc_size);
@@ -1102,7 +1112,7 @@ static ufbxwi_noinline void *ufbxwi_list_push_size_slow(ufbxwi_allocator *ator, 
 	size_t new_capacity = ufbxwi_max_sz(count + n, list->capacity * 2);
 
 	size_t alloc_size = 0;
-	char *new_data = ufbxwi_alloc_size(ator, size, new_capacity, &alloc_size);
+	char *new_data = (char*)ufbxwi_alloc_size(ator, size, new_capacity, &alloc_size);
 	ufbxwi_check(new_data, NULL);
 
 	memcpy(new_data, list->data, count * size);
@@ -1132,7 +1142,7 @@ static ufbxwi_noinline bool ufbxwi_list_resize_size_slow(ufbxwi_allocator *ator,
 	size_t new_capacity = ufbxwi_max_sz(n, list->capacity * 2);
 
 	size_t alloc_size = 0;
-	char *new_data = ufbxwi_alloc_size(ator, size, new_capacity, &alloc_size);
+	char *new_data = (char*)ufbxwi_alloc_size(ator, size, new_capacity, &alloc_size);
 	ufbxwi_check(new_data, false);
 
 	memcpy(new_data, list->data, list->count * size);
@@ -1227,6 +1237,13 @@ static bool ufbxwi_id_list_remove_one(void *p_list, ufbxw_id id)
 	}
 	return true;
 }
+
+// Some common list types
+UFBXWI_LIST_TYPE(ufbxwi_uint32_list, uint32_t);
+UFBXWI_LIST_TYPE(ufbxwi_ktime_list, ufbxw_ktime);
+UFBXWI_LIST_TYPE(ufbxwi_real_list, ufbxw_real);
+UFBXWI_LIST_TYPE(ufbxwi_float_list, float);
+UFBXWI_LIST_TYPE(ufbxwi_byte_list, char);
 
 #endif
 
@@ -2207,12 +2224,6 @@ uint32_t ufbxwi_hash_token(ufbxwi_token token)
 
 #ifdef UFBXWI_FEATURE_STRING_POOL
 
-UFBXWI_LIST_TYPE(ufbxwi_uint32_list, uint32_t);
-UFBXWI_LIST_TYPE(ufbxwi_ktime_list, ufbxw_ktime);
-UFBXWI_LIST_TYPE(ufbxwi_real_list, ufbxw_real);
-UFBXWI_LIST_TYPE(ufbxwi_float_list, float);
-UFBXWI_LIST_TYPE(ufbxwi_byte_list, char);
-
 #define ufbxwi_empty_int_buffer ((ufbxw_int_buffer){NULL,0})
 #define ufbxwi_empty_vec3_buffer ((ufbxw_vec3_buffer){0})
 
@@ -2256,21 +2267,6 @@ static ufbxwi_forceinline ufbxw_id ufbxwi_make_buffer_id(ufbxwi_buffer_type type
 	ufbxw_assert((uint64_t)index < ((uint64_t)1u << 32u));
 	return (ufbxw_id)(((uint64_t)type << 48) | ((uint64_t)generation << 32) | (index));
 }
-
-typedef struct {
-	const void *data;
-	size_t count;
-} ufbxwi_void_span;
-
-typedef struct {
-	void *data;
-	size_t count;
-} ufbxwi_mutable_void_span;
-
-typedef struct {
-	const int32_t *data;
-	size_t count;
-} ufbxwi_int_span;
 
 #define ufbxwi_buffer_id_index(id) (uint32_t)(id)
 #define ufbxwi_buffer_id_type(id) (ufbxwi_buffer_type)(((id) >> 48))
@@ -6636,6 +6632,13 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, siz
 	wq->buffer_pos = buffer->pos;
 	wq->buffer_end = buffer->end;
 
+	return true;
+}
+
+static ufbxwi_noinline bool ufbxwi_write_queue_finish(ufbxwi_write_queue *wq)
+{
+	// TODO: Make this better
+	ufbxwi_check(ufbxwi_write_queue_flush(wq, 0), false);
 	return true;
 }
 

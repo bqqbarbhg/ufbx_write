@@ -39,4 +39,3 @@ UFBXWT_UNIT_TEST(atomic_cas)
 	ufbxwt_assert(ufbxwi_atomic_load_relaxed(&value) == num_threads * num_iters);
 }
 
-
