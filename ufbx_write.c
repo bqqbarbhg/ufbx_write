@@ -335,6 +335,7 @@
 	#define UFBXWI_FEATURE_ERROR 1
 	#define UFBXWI_FEATURE_ALLOCATOR 1
 	#define UFBXWI_FEATURE_LIST 1
+	#define UFBXWI_FEATURE_TASK_QUEUE 1
 	#define UFBXWI_FEATURE_STRING_POOL 1
 	#define UFBXWI_FEATURE_BUFFER 1
 	#define UFBXWI_FEATURE_SCENE 1
@@ -591,6 +592,13 @@ static ufbxwi_forceinline void ufbxwi_atomic_store(ufbxwi_atomic_u32 *atomic, ui
 
 #ifdef UFBXWI_FEATURE_THREAD_POOL
 
+typedef enum {
+	UFBXWI_RUN_TASK_TRY,
+	UFBXWI_RUN_TASK_BLOCKING,
+} ufbxwi_run_task_mode;
+
+typedef ufbxw_task_run_result ufbxwi_run_task_fn(void *user, ufbxwi_run_task_mode mode, uint32_t thread_id_hint, size_t max_count);
+
 typedef struct {
 	bool enabled;
 
@@ -599,6 +607,10 @@ typedef struct {
 	ufbxw_thread_pool_notify_fn *notify_fn;
 	ufbxw_thread_pool_free_fn *free_fn;
 	void *user;
+
+	// Internal
+	ufbxwi_run_task_fn *run_task_fn;
+	void *run_task_user;
 
 	void *user_ptr;
 
@@ -1285,6 +1297,233 @@ UFBXWI_LIST_TYPE(ufbxwi_ktime_list, ufbxw_ktime);
 UFBXWI_LIST_TYPE(ufbxwi_real_list, ufbxw_real);
 UFBXWI_LIST_TYPE(ufbxwi_float_list, float);
 UFBXWI_LIST_TYPE(ufbxwi_byte_list, char);
+
+#endif
+
+// -- Task queue
+
+#ifdef UFBXWI_FEATURE_TASK_QUEUE
+
+typedef uint32_t ufbxwi_task_id;
+
+typedef bool ufbxwi_task_fn(void *user, void *thread_ctx);
+
+typedef void *ufbxwi_create_thread_ctx_fn(void *user);
+
+typedef struct {
+	ufbxwi_task_fn *fn;
+	void *user;
+} ufbxwi_task;
+
+typedef struct {
+	ufbxwi_mutex mutex;
+	ufbxwi_atomic_u32 generation;
+	ufbxwi_task task;
+} ufbxwi_task_slot;
+
+typedef struct {
+	ufbxwi_atomic_u32 thread_id;
+	void *thread_ctx;
+} ufbxwi_thread_context;
+
+typedef struct {
+	ufbxwi_thread_pool *thread_pool;
+
+	ufbxwi_create_thread_ctx_fn *create_thread_ctx_fn;
+	void *create_thread_ctx_user;
+
+	ufbxwi_task_slot *slots;
+	size_t num_slots;
+
+	uint32_t write_index;
+
+	ufbxwi_semaphore task_sema;
+	ufbxwi_atomic_u32 run_index;
+	bool completed;
+	bool enabled;
+
+	ufbxwi_mutex fail_mutex;
+	bool failed;
+
+	void *user_ptr;
+
+	uint32_t num_thread_contexts;
+	ufbxwi_thread_context *thread_contexts;
+} ufbxwi_task_queue;
+
+typedef struct {
+	uint32_t max_tasks;
+	uint32_t max_threads;
+} ufbxwi_task_queue_opts;
+
+static ufbxwi_thread_context *ufbxwi_get_thread_context(ufbxwi_task_queue *tq, uint32_t thread_id_hint)
+{
+	// Remap so that zero is a sentinel value
+	uint32_t id = thread_id_hint;
+	if (id < UINT32_MAX) {
+		id += 1;
+	}
+
+	// TODO: Make this better for non-contiguous IDs
+	// TODO: Attempt to reuse previous IDs if possible
+	uint32_t num_contexts = tq->num_thread_contexts;
+	for (uint32_t scan = 0; scan <= num_contexts; scan++) {
+		ufbxwi_thread_context *tc = &tq->thread_contexts[(id + scan) % num_contexts];
+		if (ufbxwi_atomic_cas(&tc->thread_id, 0, id)) {
+			if (!tc->thread_ctx) {
+				tc->thread_ctx = tq->create_thread_ctx_fn(tq->create_thread_ctx_user);
+			}
+			return tc;
+		}
+	}
+
+	return NULL;
+}
+
+static void ufbxwi_return_thread_context(ufbxwi_task_queue *tq, ufbxwi_thread_context *tc)
+{
+	ufbxwi_atomic_store(&tc->thread_id, 0);
+}
+
+static bool ufbxwi_task_complete(ufbxwi_task_queue *tq, ufbxwi_task_id task_id, void *thread_ctx)
+{
+    const uint32_t slot_ix = task_id % tq->num_slots;
+    const uint32_t generation = task_id / tq->num_slots;
+    ufbxwi_task_slot *slot = &tq->slots[slot_ix];
+
+	bool completed = false;
+    if (ufbxwi_atomic_load_acquire(&slot->generation) > generation) {
+        return completed;
+    }
+
+    ufbxwi_mutex_lock(tq->thread_pool, &slot->mutex);
+    if (ufbxwi_atomic_load_relaxed(&slot->generation) == generation) {
+        if (tq->failed) {
+            // Skip task
+        } else if (slot->task.fn(slot->task.user, thread_ctx)) {
+			completed = true;
+		} else {
+            // TODO: More descriptive failing
+            ufbxwi_mutex_lock(tq->thread_pool, &tq->fail_mutex);
+            tq->failed = true;
+            ufbxwi_mutex_unlock(tq->thread_pool, &tq->fail_mutex);
+        }
+    }
+    ufbxwi_atomic_store(&slot->generation, generation + 1);
+    ufbxwi_mutex_unlock(tq->thread_pool, &slot->mutex);
+    return completed;
+}
+
+static bool ufbxwi_task_queue_init(ufbxwi_task_queue *tq, ufbxwi_thread_pool *tp, ufbxwi_allocator *ator, const ufbxwi_task_queue_opts *opts)
+{
+	tq->enabled = true;
+
+	tq->thread_pool = tp;
+
+	size_t num_slots = opts->max_tasks;
+	if (num_slots == 0) {
+		num_slots = 0x1000;
+	}
+
+	tq->slots = ufbxwi_alloc(ator, ufbxwi_task_slot, num_slots);
+	if (!tq->slots) return false;
+
+	tq->num_slots = num_slots;
+
+	// Reserve task ID 0 for uninitialized
+	tq->write_index = 1;
+	ufbxwi_atomic_store(&tq->run_index, 1);
+	ufbxwi_atomic_store(&tq->slots[0].generation, 1);
+
+	tq->write_index = 1;
+
+	size_t max_threads = opts->max_threads;
+	if (max_threads == 0) {
+		max_threads = 64;
+	}
+	if (max_threads >= 0x1000) {
+		max_threads = 0x1000;
+	}
+
+	uint32_t num_thread_contexts = (uint32_t)max_threads * 2;
+	tq->thread_contexts = ufbxwi_alloc(ator, ufbxwi_thread_context, num_thread_contexts);
+	if (!tq->thread_contexts) return false;
+
+	tq->num_thread_contexts = num_thread_contexts;
+
+	return true;
+}
+
+static ufbxwi_task_id ufbxwi_task_push(ufbxwi_task_queue *tq, const ufbxwi_task *task, void *context)
+{
+	ufbxwi_task_id task_id = tq->write_index++;
+
+	// Wait until the previous task in this slot is completed.
+	if (task_id >= tq->num_slots) {
+		ufbxwi_task_complete(tq, task_id - tq->num_slots, context);
+	}
+
+	const uint32_t slot_ix = task_id % tq->num_slots;
+	ufbxwi_task_slot *slot = &tq->slots[slot_ix];
+	slot->task = *task;
+
+	ufbxwi_semaphore_notify(tq->thread_pool, &tq->task_sema, 1);
+
+	// TODO: Batch these?
+	if (tq->thread_pool->run_fn) {
+		tq->thread_pool->run_fn(tq->thread_pool->user, (ufbxw_thread_pool_context)tq->thread_pool, 1);
+	}
+
+	return task_id;
+}
+
+static ufbxw_task_run_result ufbxwi_task_try_run(ufbxwi_task_queue *tq, void *context)
+{
+	if (tq->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
+
+	for (;;) {
+		if (ufbxwi_semaphore_try_wait(tq->thread_pool, &tq->task_sema)) {
+			if (tq->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
+
+			uint32_t task_id = ufbxwi_atomic_add(&tq->run_index, 1);
+			if (ufbxwi_task_complete(tq, task_id, context)) {
+				return UFBXW_TASK_RUN_RESULT_COMPLETED;
+			}
+		} else {
+			return UFBXW_TASK_RUN_RESULT_NO_TASKS;
+		}
+	}
+}
+
+static ufbxw_task_run_result ufbxwi_task_blocking_run(ufbxwi_task_queue *tq, void *context)
+{
+	if (tq->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
+
+	for (;;) {
+		ufbxwi_semaphore_wait(tq->thread_pool, &tq->task_sema);
+		if (tq->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
+
+		uint32_t task_id = ufbxwi_atomic_add(&tq->run_index, 1);
+		if (ufbxwi_task_complete(tq, task_id, context)) {
+			return UFBXW_TASK_RUN_RESULT_COMPLETED;
+		}
+	}
+}
+
+static void ufbxwi_task_queue_close(ufbxwi_task_queue *tq, void *context)
+{
+	if (!tq->completed) {
+		tq->completed = true;
+		ufbxwi_semaphore_notify(tq->thread_pool, &tq->task_sema, UINT32_MAX / 2);
+	}
+
+	// Wait that all tasks are completed
+	// TODO: This could be optimized
+	const uint32_t task_start = tq->write_index >= tq->num_slots ? tq->write_index - tq->num_slots : 0;
+	for (uint32_t task_id = task_start; task_id < tq->write_index; task_id++) {
+		ufbxwi_task_complete(tq, task_id, context);
+	}
+}
 
 #endif
 
@@ -10601,6 +10840,26 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 	}
 
 	return true;
+}
+
+ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_try_run_tasks(ufbxw_thread_pool_context ctx, uint32_t thread_id_hint, size_t max_count)
+{
+	ufbxwi_thread_pool *tp = (ufbxwi_thread_pool*)ctx;
+	if (tp->run_task_fn) {
+		return tp->run_task_fn(tp->run_task_user, UFBXWI_RUN_TASK_TRY, thread_id_hint, max_count);
+	} else {
+		return UFBXW_TASK_RUN_RESULT_FAILED;
+	}
+}
+
+ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_blocking_run_tasks(ufbxw_thread_pool_context ctx, uint32_t thread_id_hint, size_t max_count)
+{
+	ufbxwi_thread_pool *tp = (ufbxwi_thread_pool*)ctx;
+	if (tp->run_task_fn) {
+		return tp->run_task_fn(tp->run_task_user, UFBXWI_RUN_TASK_BLOCKING, thread_id_hint, max_count);
+	} else {
+		return UFBXW_TASK_RUN_RESULT_FAILED;
+	}
 }
 
 ufbxw_unsafe ufbxw_abi void ufbxw_thread_pool_set_user_ptr(ufbxw_thread_pool_context ctx, void *user_ptr)

@@ -1205,7 +1205,15 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 
 // -- Thread pool
 
-ufbxw_unsafe ufbxw_abi bool ufbxw_thread_pool_run_task(ufbxw_thread_pool_context ctx);
+typedef enum ufbxw_task_run_result {
+	UFBXW_TASK_RUN_RESULT_NO_TASKS,
+	UFBXW_TASK_RUN_RESULT_COMPLETED,
+	UFBXW_TASK_RUN_RESULT_FAILED,
+	UFBXW_TASK_RUN_RESULT_ALL_FINISHED,
+} ufbxw_task_run_result;
+
+ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_try_run_tasks(ufbxw_thread_pool_context ctx, uint32_t thread_id_hint, size_t max_count);
+ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_blocking_run_tasks(ufbxw_thread_pool_context ctx, uint32_t thread_id_hint, size_t max_count);
 
 // Get or set an arbitrary user pointer for the thread pool context.
 // `ufbxw_thread_pool_get_user_ptr()` returns `NULL` if unset.
