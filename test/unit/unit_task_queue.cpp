@@ -99,3 +99,32 @@ UFBXWT_UNIT_TEST(task_queue_wait)
 		}
 	}
 }
+
+UFBXWT_UNIT_TEST(task_queue_blocking)
+{
+	std::atomic_uint32_t concurrent = 0;
+	const size_t slot_count = 8;
+	const size_t task_count = 1024;
+	const size_t num_threads = 16;
+
+	// TODO: This fails sometimes..
+
+	{
+		ufbxwt_thread_pool tp;
+		ufbxwt_error error = { tp.tp };
+		ufbxwt_allocator ator { tp.tp, error.error };
+		ufbxwt_task_queue<ufbxwt_empty_context> tq { tp.tp, ator.ator, num_threads, slot_count };
+
+		for (size_t i = 0; i < task_count; i++) {
+			tq.run([&](ufbxwt_empty_context) {
+				const uint32_t pre_num = concurrent.fetch_add(1u, std::memory_order_relaxed);
+				ufbxwt_assert(pre_num <= num_threads);
+
+				std::this_thread::sleep_for(std::chrono::milliseconds{2});
+
+				const uint32_t post_num = concurrent.fetch_sub(1u, std::memory_order_relaxed);
+				ufbxwt_assert(pre_num <= num_threads + 1);
+			});
+		}
+	}
+}
