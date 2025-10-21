@@ -488,6 +488,8 @@ typedef struct {
 	size_t count;
 } ufbxwi_mutable_void_span;
 
+typedef uint32_t ufbxwi_task_id;
+
 // -- Atomics
 
 #ifdef UFBXWI_FEATURE_ATOMICS
@@ -590,81 +592,53 @@ static ufbxwi_forceinline void ufbxwi_atomic_store(ufbxwi_atomic_u32 *atomic, ui
 
 // -- Synchronization
 
+// TODO(threads): Rename this
 #ifdef UFBXWI_FEATURE_THREAD_POOL
-
-typedef enum {
-	UFBXWI_RUN_TASK_TRY,
-	UFBXWI_RUN_TASK_BLOCKING,
-} ufbxwi_run_task_mode;
-
-typedef ufbxw_task_run_result ufbxwi_run_task_fn(void *user, ufbxwi_run_task_mode mode, uint32_t thread_id_hint, size_t max_count);
 
 typedef struct {
 	bool enabled;
 
-	ufbxw_thread_pool_start_fn *start_fn;
-	ufbxw_thread_pool_run_fn *run_fn;
-	ufbxw_thread_pool_wait_fn *wait_fn;
-	ufbxw_thread_pool_notify_fn *notify_fn;
-	ufbxw_thread_pool_free_fn *free_fn;
+	ufbxw_thread_sync_wait_fn *wait_fn;
+	ufbxw_thread_sync_notify_fn *notify_fn;
+	ufbxw_thread_sync_free_fn *free_fn;
 	void *user;
-
-	// Internal
-	ufbxwi_run_task_fn *run_task_fn;
-	void *run_task_user;
-
-	void *user_ptr;
+	void *ctx;
 
 } ufbxwi_thread_pool;
 
-static bool ufbxwi_thread_pool_init(ufbxwi_thread_pool *tp, const ufbxw_thread_pool *pool)
+static bool ufbxwi_thread_pool_init(ufbxwi_thread_pool *tp, const ufbxw_thread_sync *sync)
 {
-	ufbxw_thread_pool_context ctx = (ufbxw_thread_pool_context)tp;
-	if (!pool->init_fn(pool->user, ctx)) {
+	void *ctx = sync->init_fn(sync->user);
+	if (!ctx) {
 		return false;
 	}
 
 	tp->enabled = true;
-	tp->run_fn = pool->run_fn;
-	tp->start_fn = pool->start_fn;
-	tp->wait_fn = pool->wait_fn;
-	tp->notify_fn = pool->notify_fn;
-	tp->free_fn = pool->free_fn;
-	tp->user = pool->user;
+	tp->wait_fn = sync->wait_fn;
+	tp->notify_fn = sync->notify_fn;
+	tp->free_fn = sync->free_fn;
+	tp->user = sync->user;
+	tp->ctx = ctx;
 	return true;
-}
-
-static void ufbxwi_thread_pool_start(ufbxwi_thread_pool *tp, ufbxwi_run_task_fn *run_task_fn, void *run_task_user)
-{
-	tp->run_task_fn = run_task_fn;
-	tp->run_task_user = run_task_user;
-
-	ufbxw_thread_pool_context ctx = (ufbxw_thread_pool_context)tp;
-	if (tp->start_fn) {
-		tp->start_fn(tp->user, ctx);
-	}
 }
 
 static void ufbxwi_thread_pool_free(ufbxwi_thread_pool *tp)
 {
-	ufbxw_thread_pool_context ctx = (ufbxw_thread_pool_context)tp;
 	if (tp->free_fn) {
-		tp->free_fn(tp->user, ctx);
+		tp->free_fn(tp->user, tp->ctx);
 	}
 }
 
 static void ufbxwi_atomic_wait(ufbxwi_thread_pool *tp, ufbxwi_atomic_u32 *p_value, uint32_t ref_value)
 {
-	ufbxw_thread_pool_context ctx = (ufbxw_thread_pool_context)tp;
 	if (ufbxwi_atomic_load_acquire(p_value) == ref_value) {
-		tp->wait_fn(tp->user, ctx, &p_value->value, ref_value);
+		tp->wait_fn(tp->user, tp->ctx, &p_value->value, ref_value);
 	}
 }
 
 static void ufbxwi_atomic_notify(ufbxwi_thread_pool *tp, ufbxwi_atomic_u32 *p_value, uint32_t wake_count)
 {
-	ufbxw_thread_pool_context ctx = (ufbxw_thread_pool_context)tp;
-	tp->notify_fn(tp->user, ctx, &p_value->value, wake_count);
+	tp->notify_fn(tp->user, tp->ctx, &p_value->value, wake_count);
 }
 
 typedef struct {
@@ -753,6 +727,20 @@ static void ufbxwi_mutex_unlock(ufbxwi_thread_pool *tp, ufbxwi_mutex *mutex)
 	}
 }
 
+static ufbxwi_forceinline void ufbxwi_mutex_lock_if_enabled(ufbxwi_thread_pool *tp, ufbxwi_mutex *mutex)
+{
+	if (tp) {
+		ufbxwi_mutex_lock(tp, mutex);
+	}
+}
+
+static ufbxwi_forceinline void ufbxwi_mutex_unlock_if_enabled(ufbxwi_thread_pool *tp, ufbxwi_mutex *mutex)
+{
+	if (tp) {
+		ufbxwi_mutex_unlock(tp, mutex);
+	}
+}
+
 typedef struct {
 	ufbxwi_atomic_u32 count;
 } ufbxwi_semaphore;
@@ -817,6 +805,9 @@ typedef void ufbxwi_fatal_fn(void *user, ufbxwi_error *error);
 struct ufbxwi_error {
 	ufbxw_error error;
 
+	ufbxwi_thread_pool *thread_pool;
+	ufbxwi_mutex mutex;
+
 	ufbxw_error_fn *error_fn;
 	void *error_user;
 
@@ -847,6 +838,12 @@ static ufbxwi_noinline void ufbxwi_failf_imp(ufbxwi_error *error, ufbxw_error_ty
 		return;
 	}
 
+	ufbxwi_mutex_lock_if_enabled(error->thread_pool, &error->mutex);
+	if (error->error.type >= UFBXW_ERROR_FATAL) {
+		ufbxwi_mutex_unlock_if_enabled(error->thread_pool, &error->mutex);
+		return;
+	}
+
 	error->error.type = type;
 	error->error.function = ufbxwi_c_str(func);
 
@@ -863,6 +860,8 @@ static ufbxwi_noinline void ufbxwi_failf_imp(ufbxwi_error *error, ufbxw_error_ty
 	if (error->fatal_fn) {
 		error->fatal_fn(error->fatal_user, error);
 	}
+
+	ufbxwi_mutex_unlock_if_enabled(error->thread_pool, &error->mutex);
 }
 
 static ufbxwi_noinline void ufbxwi_fail_imp(ufbxwi_error *error, ufbxw_error_type type, const char *func, const char *desc)
@@ -955,6 +954,10 @@ struct ufbxwi_alloc {
 typedef struct {
 	ufbxwi_error *error;
 	ufbxw_allocator ator;
+
+	ufbxwi_thread_pool *thread_pool;
+	ufbxwi_mutex mutex;
+
 	size_t num_allocs;
 	size_t max_allocs;
 	size_t total_size;
@@ -1054,6 +1057,8 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 		return NULL;
 	}
 
+	ufbxwi_mutex_lock_if_enabled(ator->thread_pool, &ator->mutex);
+
 	ator->num_allocs++;
 	ator->total_size += total;
 
@@ -1066,6 +1071,8 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 		if (p_alloc_size) {
 			*p_alloc_size = total;
 		}
+
+		ufbxwi_mutex_unlock_if_enabled(ator->thread_pool, &ator->mutex);
 		return block + 1;
 	}
 
@@ -1077,6 +1084,8 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 		if (p_alloc_size) {
 			*p_alloc_size = size_class_size;
 		}
+
+		ufbxwi_mutex_unlock_if_enabled(ator->thread_pool, &ator->mutex);
 		return freed + 1;
 	}
 
@@ -1105,12 +1114,16 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 	if (p_alloc_size) {
 		*p_alloc_size = size_class_size;
 	}
+
+	ufbxwi_mutex_unlock_if_enabled(ator->thread_pool, &ator->mutex);
 	return alloc + 1;
 }
 
 static ufbxwi_noinline void ufbxwi_free(ufbxwi_allocator *ator, void *ptr)
 {
 	if (!ptr || ptr == ufbxwi_zero_size_buffer) return;
+
+	ufbxwi_mutex_lock_if_enabled(ator->thread_pool, &ator->mutex);
 
 	ufbxwi_alloc *alloc = (ufbxwi_alloc*)ptr - 1;
 	ufbxw_assert(alloc->magic == UFBXWI_ALLOC_MAGIC || alloc->magic == UFBXWI_HUGE_MAGIC);
@@ -1123,6 +1136,8 @@ static ufbxwi_noinline void ufbxwi_free(ufbxwi_allocator *ator, void *ptr)
 		alloc->next = ator->free_root[size_class];
 		ator->free_root[size_class] = alloc;
 	}
+
+	ufbxwi_mutex_unlock_if_enabled(ator->thread_pool, &ator->mutex);
 }
 
 static ufbxwi_noinline void ufbxwi_move_allocator(ufbxwi_allocator *dst, ufbxwi_allocator *src)
@@ -1327,7 +1342,10 @@ UFBXWI_LIST_TYPE(ufbxwi_byte_list, char);
 
 #ifdef UFBXWI_FEATURE_TASK_QUEUE
 
-typedef uint32_t ufbxwi_task_id;
+typedef enum {
+	UFBXWI_RUN_TASK_TRY,
+	UFBXWI_RUN_TASK_BLOCKING,
+} ufbxwi_run_task_mode;
 
 typedef bool ufbxwi_task_fn(void *user, void *thread_ctx);
 
@@ -1340,7 +1358,7 @@ typedef struct {
 	void *thread_ctx_user;
 
 	uint32_t max_tasks;
-	uint32_t max_threads;
+	uint32_t num_threads;
 } ufbxwi_task_queue_opts;
 
 typedef struct {
@@ -1361,6 +1379,9 @@ typedef struct {
 
 typedef struct {
 	ufbxwi_thread_pool *thread_pool;
+
+	// The naming is really nasty here
+	ufbxw_thread_pool user_pool;
 
 	ufbxwi_create_thread_ctx_fn *create_thread_ctx_fn;
 	ufbxwi_free_thread_ctx_fn *free_thread_ctx_fn;
@@ -1445,6 +1466,14 @@ static bool ufbxwi_task_complete(ufbxwi_task_queue *tq, ufbxwi_task_id task_id, 
     return completed;
 }
 
+static bool ufbxwi_task_get_completed(ufbxwi_task_queue *tq, ufbxwi_task_id task_id)
+{
+    const uint32_t slot_ix = task_id % tq->num_slots;
+    const uint32_t generation = task_id / tq->num_slots;
+    ufbxwi_task_slot *slot = &tq->slots[slot_ix];
+    return ufbxwi_atomic_load_acquire(&slot->generation) > generation;
+}
+
 static ufbxw_task_run_result ufbxwi_task_queue_run_task_imp(ufbxwi_task_queue *tq, void *thread_ctx, ufbxwi_run_task_mode mode, size_t max_count)
 {
 	for (size_t i = 0; i < max_count; i++) {
@@ -1466,9 +1495,8 @@ static ufbxw_task_run_result ufbxwi_task_queue_run_task_imp(ufbxwi_task_queue *t
 	return UFBXW_TASK_RUN_RESULT_COMPLETED;
 }
 
-static ufbxw_task_run_result ufbxwi_task_queue_run_task(void *user, ufbxwi_run_task_mode mode, uint32_t thread_id_hint, size_t max_count)
+static ufbxw_task_run_result ufbxwi_task_queue_run_task(ufbxwi_task_queue *tq, ufbxwi_run_task_mode mode, uint32_t thread_id_hint, size_t max_count)
 {
-	ufbxwi_task_queue *tq = (ufbxwi_task_queue*)user;
 	if (tq->completed) {
 		return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
 	}
@@ -1484,18 +1512,20 @@ static ufbxw_task_run_result ufbxwi_task_queue_run_task(void *user, ufbxwi_run_t
 	return result;
 }
 
-static bool ufbxwi_task_queue_init(ufbxwi_task_queue *tq, ufbxwi_thread_pool *tp, ufbxwi_allocator *ator, const ufbxwi_task_queue_opts *opts)
+static bool ufbxwi_task_queue_init(ufbxwi_task_queue *tq, ufbxwi_thread_pool *tp, ufbxwi_allocator *ator, const ufbxwi_task_queue_opts *opts, const ufbxw_thread_pool *pool)
 {
 	tq->enabled = true;
 
+	tq->user_pool = *pool;
 	tq->thread_pool = tp;
 	tq->create_thread_ctx_fn = opts->create_thread_ctx_fn;
 	tq->free_thread_ctx_fn = opts->free_thread_ctx_fn;
 	tq->thread_ctx_user = opts->thread_ctx_user;
 
-	size_t num_slots = opts->max_tasks;
-	if (num_slots == 0) {
-		num_slots = 0x1000;
+	size_t num_slots = 1;
+	const size_t max_tasks = opts->max_tasks ? opts->max_tasks : 0x1000;
+	while (num_slots < max_tasks) {
+		num_slots *= 2;
 	}
 
 	tq->slots = ufbxwi_alloc_zero(ator, ufbxwi_task_slot, num_slots);
@@ -1510,14 +1540,17 @@ static bool ufbxwi_task_queue_init(ufbxwi_task_queue *tq, ufbxwi_thread_pool *tp
 
 	tq->write_index = 1;
 
-	const uint32_t max_threads = 64;
-	const uint32_t num_thread_contexts = max_threads * 2;
+	const uint32_t num_threads = opts->num_threads;
+	const uint32_t num_thread_contexts = num_threads * 2;
 	tq->thread_contexts = ufbxwi_alloc_zero(ator, ufbxwi_thread_context, num_thread_contexts);
 	if (!tq->thread_contexts) return false;
 
 	tq->num_thread_contexts = num_thread_contexts;
 
-	ufbxwi_thread_pool_start(tp, &ufbxwi_task_queue_run_task, tq);
+	ufbxw_thread_pool_context ctx = (ufbxw_thread_pool_context)tq;
+	if (!tq->user_pool.init_fn(tq->user_pool.user, ctx, num_threads)) {
+		return false;
+	}
 
 	return true;
 }
@@ -1538,8 +1571,8 @@ static ufbxwi_task_id ufbxwi_task_push(ufbxwi_task_queue *tq, const ufbxwi_task 
 	ufbxwi_semaphore_notify(tq->thread_pool, &tq->task_sema, 1);
 
 	// TODO: Batch these?
-	if (tq->thread_pool->run_fn) {
-		tq->thread_pool->run_fn(tq->thread_pool->user, (ufbxw_thread_pool_context)tq->thread_pool, 1);
+	if (tq->user_pool.run_fn) {
+		tq->user_pool.run_fn(tq->user_pool.user, (ufbxw_thread_pool_context)tq, 1);
 	}
 
 	return task_id;
@@ -1564,6 +1597,10 @@ static void ufbxwi_task_queue_free(ufbxwi_task_queue *tq, void *context)
 			tq->free_thread_ctx_fn(tq->thread_ctx_user, tc->thread_ctx);
 			tc->thread_ctx = NULL;
 		}
+	}
+
+	if (tq->user_pool.free_fn) {
+		tq->user_pool.free_fn(tq->user_pool.user, (ufbxw_thread_pool_context)tq);
 	}
 }
 
@@ -6641,9 +6678,6 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 
 #endif
 
-// TODO(wb): Make this real
-typedef uint32_t ufbxwi_task_id;
-
 // -- Write queue
 
 #if UFBXWI_FEATURE_WRITE_QUEUE
@@ -6740,6 +6774,8 @@ UFBXWI_LIST_TYPE(ufbxwi_write_reloc_list, ufbxwi_write_reloc);
 typedef struct {
 	ufbxwi_allocator *ator;
 	ufbxwi_error *error;
+	ufbxwi_task_queue *task_queue;
+	void *main_ctx;
 
 	// Fast access pointers for the current buffer
 	char *buffer_begin;
@@ -6789,11 +6825,13 @@ static ufbxwi_noinline ufbxwi_write_buffer *ufbxwi_write_queue_alloc_buffer(ufbx
 	return buf;
 }
 
-static ufbxwi_noinline void ufbxwi_write_queue_init(ufbxwi_write_queue *wq, ufbxwi_allocator *ator, ufbxwi_error *error, ufbxw_write_stream stream, size_t buffer_size)
+static ufbxwi_noinline void ufbxwi_write_queue_init(ufbxwi_write_queue *wq, ufbxwi_allocator *ator, ufbxwi_error *error, ufbxwi_task_queue *tq, void *main_ctx, ufbxw_write_stream stream, size_t buffer_size)
 {
 	wq->ator = ator;
 	wq->error = error;
 	wq->stream = stream;
+	wq->task_queue = tq;
+	wq->main_ctx = main_ctx;
 
 	wq->preferred_buffer_size = buffer_size;
 	wq->direct_write_size = buffer_size / 2;
@@ -6885,6 +6923,15 @@ static ufbxwi_noinline bool ufbxwi_write_queue_try_flush_chunks(ufbxwi_write_que
 	size_t num_new_chunks = 0;
 	for (size_t i = 0; i < num_prev_chunks; i++) {
 		ufbxwi_write_chunk *chunk = wq->chunks.data[i];
+
+		if (chunk->task) {
+			if (ufbxwi_task_get_completed(wq->task_queue, chunk->task)) {
+				chunk->task = 0;
+			} else {
+				continue;
+			}
+		}
+
 		if (chunk->num_unresolved_relocs == 0 && chunk->has_file_offset) {
 			bool write_ok = wq->stream.write_fn(wq->stream.user, chunk->file_offset, chunk->data, chunk->size);
 			if (!write_ok) {
@@ -6959,8 +7006,23 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, siz
 
 static ufbxwi_noinline bool ufbxwi_write_queue_finish(ufbxwi_write_queue *wq)
 {
-	// TODO: Make this better
+	// TODO(wq): This could probably be neater
+
+	// Flush whatever is buffered currently
 	ufbxwi_check(ufbxwi_write_queue_flush(wq, 0), false);
+
+	// Complete all the tasks
+	const size_t num_chunks = wq->chunks.count;
+	for (size_t i = 0; i < num_chunks; i++) {
+		ufbxwi_write_chunk *chunk = wq->chunks.data[i];
+		if (chunk->task) {
+			ufbxwi_task_complete(wq->task_queue, chunk->task, wq->main_ctx);
+		}
+	}
+
+	// Flushing should succeed now
+	ufbxwi_check(ufbxwi_write_queue_try_flush_chunks(wq), false);
+
 	return true;
 }
 
@@ -7112,6 +7174,12 @@ typedef struct {
 UFBXWI_LIST_TYPE(ufbxwi_binary_node_header_list, ufbxwi_binary_node_header);
 
 typedef struct {
+	ufbxw_deflate_compressor deflate;
+	bool has_deflate_compressor;
+	bool tried_deflate_compressor;
+} ufbxwi_save_thread_context;
+
+typedef struct {
 	ufbxwi_allocator ator;
 
 	ufbxwi_error error;
@@ -7134,6 +7202,8 @@ typedef struct {
 	ufbxwi_mesh_attribute_ptr_list tmp_attributes;
 	ufbxwi_binary_node_header_list binary_headers;
 
+	ufbxwi_thread_pool thread_pool;
+	ufbxwi_task_queue task_queue;
 	ufbxwi_write_queue write_queue;
 
 	// TODO: Threaded versions of these
@@ -7143,8 +7213,13 @@ typedef struct {
 	bool has_deflate_compressor;
 	bool tried_deflate_compressor;
 
-} ufbxwi_save_context;
+	ufbxwi_save_thread_context main_thread_ctx;
 
+	// Thread-safe error and alloocator
+	ufbxwi_error thread_error;
+	ufbxwi_allocator thread_ator;
+
+} ufbxwi_save_context;
 
 // -- Convenience API for writing
 
@@ -7152,6 +7227,33 @@ typedef struct {
 #define ufbxwi_write_reserve_small(sc, length) ufbxwi_queue_write_reserve_small(&(sc)->write_queue, (length))
 #define ufbxwi_write_reserve_at_least(sc, length) ufbxwi_queue_write_reserve_at_least(&(sc)->write_queue, (length))
 #define ufbxwi_write_commit(sc, length) ufbxwi_queue_write_commit(&(sc)->write_queue, (length))
+
+// -- Saving thread context
+
+static void ufbxwi_init_save_thread_context(ufbxwi_save_context *sc, ufbxwi_save_thread_context *tc)
+{
+}
+
+static void ufbxwi_destroy_save_thread_context(ufbxwi_save_context *sc, ufbxwi_save_thread_context *tc)
+{
+}
+
+static void *ufbxwi_create_save_thread_context(void *user)
+{
+	ufbxwi_save_context *sc = (ufbxwi_save_context*)user;
+	ufbxwi_save_thread_context *tc = ufbxwi_alloc_zero(&sc->thread_ator, ufbxwi_save_thread_context, 1);
+	ufbxwi_check(tc, NULL);
+
+	ufbxwi_init_save_thread_context(sc, tc);
+	return tc;
+}
+
+static void ufbxwi_free_save_thread_context(void *user, void *thread_ctx)
+{
+	ufbxwi_save_context *sc = (ufbxwi_save_context*)user;
+	ufbxwi_save_thread_context *tc = (ufbxwi_save_thread_context*)thread_ctx;
+	ufbxwi_destroy_save_thread_context(sc, tc);
+}
 
 // -- ASCII
 
@@ -9151,13 +9253,43 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 		sc->opts.ascii_formatter.format_double_fn = &ufbxwi_default_ascii_format_double;
 	}
 
-	ufbxwi_write_queue_init(&sc->write_queue, &sc->ator, &sc->error, *stream, buffer_size);
+	// TODO(threads): Better checking
+	if (sc->opts.thread_sync.wait_fn) {
+		if (!ufbxwi_thread_pool_init(&sc->thread_pool, &sc->opts.thread_sync)) {
+			ufbxwi_failf(&sc->error, UFBXW_ERROR_THREAD_SYNC_INIT, "failed to init thread sync");
+			return;
+		}
+
+		sc->thread_error.thread_pool = &sc->thread_pool;
+
+		sc->thread_ator.error = &sc->thread_error;
+		sc->thread_ator.thread_pool = &sc->thread_pool;
+
+		// TODO: Options for these
+		sc->thread_ator.max_allocs = SIZE_MAX;
+		sc->thread_ator.max_size = SIZE_MAX / 4;
+
+		ufbxwi_task_queue_opts task_queue_opts = { 0 };
+
+		// TODO(tq): Make this configurable
+		task_queue_opts.max_tasks = 1024;
+		task_queue_opts.num_threads = 8;
+
+		task_queue_opts.create_thread_ctx_fn = &ufbxwi_create_save_thread_context;
+		task_queue_opts.free_thread_ctx_fn = &ufbxwi_free_save_thread_context;
+		task_queue_opts.thread_ctx_user = sc;
+
+		ufbxwi_task_queue_init(&sc->task_queue, &sc->thread_pool, &sc->thread_ator, &task_queue_opts, &sc->opts.thread_pool);
+	}
+
+	ufbxwi_init_save_thread_context(sc, &sc->main_thread_ctx);
+
+	ufbxwi_write_queue_init(&sc->write_queue, &sc->ator, &sc->error, &sc->task_queue, &sc->main_thread_ctx, *stream, buffer_size);
 
 	ufbxwi_save_init(sc);
 	ufbxwi_save_root(sc);
 
-	// TODO: Proper flushing
-	ufbxwi_write_queue_flush(&sc->write_queue, 0);
+	ufbxwi_write_queue_finish(&sc->write_queue);
 }
 
 #endif
@@ -10862,6 +10994,12 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 
 	ufbxwi_save_imp(&sc, stream);
 	ufbxwi_write_queue_free(&sc.write_queue);
+
+	ufbxwi_task_queue_free(&sc.task_queue, &sc.main_thread_ctx);
+	ufbxwi_destroy_save_thread_context(&sc, &sc.main_thread_ctx);
+
+	ufbxwi_thread_pool_free(&sc.thread_pool);
+
 	if (sc.has_deflate_compressor) {
 		if (sc.deflate.free_fn) {
 			sc.deflate.free_fn(sc.deflate.user);
@@ -10886,34 +11024,26 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 
 ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_try_run_tasks(ufbxw_thread_pool_context ctx, uint32_t thread_id_hint, size_t max_count)
 {
-	ufbxwi_thread_pool *tp = (ufbxwi_thread_pool*)ctx;
-	if (tp->run_task_fn) {
-		return tp->run_task_fn(tp->run_task_user, UFBXWI_RUN_TASK_TRY, thread_id_hint, max_count);
-	} else {
-		return UFBXW_TASK_RUN_RESULT_FAILED;
-	}
+	ufbxwi_task_queue *tq = (ufbxwi_task_queue*)ctx;
+	return ufbxwi_task_queue_run_task(tq, UFBXWI_RUN_TASK_TRY, thread_id_hint, max_count);
 }
 
 ufbxw_unsafe ufbxw_abi ufbxw_task_run_result ufbxw_thread_pool_blocking_run_tasks(ufbxw_thread_pool_context ctx, uint32_t thread_id_hint, size_t max_count)
 {
-	ufbxwi_thread_pool *tp = (ufbxwi_thread_pool*)ctx;
-	if (tp->run_task_fn) {
-		return tp->run_task_fn(tp->run_task_user, UFBXWI_RUN_TASK_BLOCKING, thread_id_hint, max_count);
-	} else {
-		return UFBXW_TASK_RUN_RESULT_FAILED;
-	}
+	ufbxwi_task_queue *tq = (ufbxwi_task_queue*)ctx;
+	return ufbxwi_task_queue_run_task(tq, UFBXWI_RUN_TASK_BLOCKING, thread_id_hint, max_count);
 }
 
 ufbxw_unsafe ufbxw_abi void ufbxw_thread_pool_set_user_ptr(ufbxw_thread_pool_context ctx, void *user_ptr)
 {
-	ufbxwi_thread_pool *tp = (ufbxwi_thread_pool*)ctx;
-	tp->user_ptr = user_ptr;
+	ufbxwi_task_queue *tq = (ufbxwi_task_queue*)ctx;
+	tq->user_ptr = user_ptr;
 }
 
 ufbxw_unsafe ufbxw_abi void *ufbxw_thread_pool_get_user_ptr(ufbxw_thread_pool_context ctx)
 {
-	ufbxwi_thread_pool *tp = (ufbxwi_thread_pool*)ctx;
-	return tp->user_ptr;
+	ufbxwi_task_queue *tq = (ufbxwi_task_queue*)ctx;
+	return tq->user_ptr;
 }
 
 ufbxw_abi ufbxwi_noinline ufbxw_matrix ufbxw_transform_to_matrix(const ufbxw_transform *t)

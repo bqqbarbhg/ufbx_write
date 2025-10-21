@@ -1,15 +1,21 @@
 #pragma once
 
+#include "../../extra/ufbxw_cpp_threads.h"
+
+struct ufbxwt_empty_context { };
+
 template <typename ThreadContext>
 struct ufbxwt_task_queue
 {
+	ufbxw_thread_pool pool;
 	ufbxwi_task_queue tq = { };
 	ThreadContext main_context;
 
-	ufbxwt_task_queue(ufbxwi_thread_pool &tp, ufbxwi_allocator &ator, size_t task_count)
+	ufbxwt_task_queue(ufbxwi_thread_pool &tp, ufbxwi_allocator &ator, size_t num_threads, size_t task_count)
 	{
 		ufbxwi_task_queue_opts opts = { };
 		opts.max_tasks = task_count * 2;
+		opts.num_threads = num_threads;
 
 		opts.create_thread_ctx_fn = [](void *user) -> void* {
 			return new ThreadContext();
@@ -18,7 +24,9 @@ struct ufbxwt_task_queue
 			delete (ThreadContext*)ctx;
 		};
 
-		ufbxwi_task_queue_init(&tq, &tp, &ator, &opts);
+		ufbxw_cpp_threads_setup_pool(&pool);
+
+		ufbxwi_task_queue_init(&tq, &tp, &ator, &opts, &pool);
 	}
 
 	~ufbxwt_task_queue()

@@ -6,10 +6,14 @@
 #define UFBXWI_FEATURE_ERROR 1
 #define UFBXWI_FEATURE_ALLOCATOR 1
 #define UFBXWI_FEATURE_LIST 1
+#define UFBXWI_FEATURE_TASK_QUEUE 1
 #define UFBXWI_FEATURE_WRITE_QUEUE 1
 #include "../../ufbx_write.c"
 
 #include "util_allocator.h"
+#include "util_error.h"
+#include "util_threads.h"
+#include "util_task_queue.h"
 
 #include <vector>
 
@@ -44,12 +48,15 @@ struct ufbxwt_vector_stream
 
 UFBXWT_UNIT_TEST(write_queue_simple)
 {
-	ufbxwi_error error = { };
-	ufbxwt_allocator ator { error };
+	ufbxwt_thread_pool tp;
+	ufbxwt_error error { tp.tp };
+	ufbxwt_allocator ator { tp.tp, error.error };
+	ufbxwt_task_queue<ufbxwt_empty_context> tq { tp.tp, ator.ator, 1, 10 };
+
 	ufbxwt_vector_stream stream;
 
 	ufbxwi_write_queue wq = { };
-	ufbxwi_write_queue_init(&wq, &ator.ator, &error, stream.stream(), 128);
+	ufbxwi_write_queue_init(&wq, &ator.ator, &error.error, &tq.tq, &tq.main_context, stream.stream(), 128);
 
 	const size_t write_length = 16 * 1024;
 
@@ -69,12 +76,15 @@ UFBXWT_UNIT_TEST(write_queue_simple)
 
 UFBXWT_UNIT_TEST(write_queue_direct)
 {
-	ufbxwi_error error = { };
-	ufbxwt_allocator ator { error };
+	ufbxwt_thread_pool tp;
+	ufbxwt_error error { tp.tp };
+	ufbxwt_allocator ator { tp.tp, error.error };
+	ufbxwt_task_queue<ufbxwt_empty_context> tq { tp.tp, ator.ator, 1, 10 };
+
 	ufbxwt_vector_stream stream;
 
 	ufbxwi_write_queue wq = { };
-	ufbxwi_write_queue_init(&wq, &ator.ator, &error, stream.stream(), 32);
+	ufbxwi_write_queue_init(&wq, &ator.ator, &error.error, &tq.tq, &tq.main_context, stream.stream(), 128);
 
 	ufbxwi_queue_write(&wq, "Hello ", 6);
 

@@ -10,6 +10,7 @@
 #include "../../ufbx_write.c"
 
 #include "util_allocator.h"
+#include "util_error.h"
 #include "util_threads.h"
 #include "util_task_queue.h"
 
@@ -17,8 +18,6 @@
 #include <mutex>
 
 #define UFBXWT_UNIT_CATEGORY "task_queue"
-
-struct ufbxwt_empty_context { };
 
 struct ufbxwt_mutex_context
 {
@@ -34,7 +33,7 @@ UFBXWT_UNIT_TEST(task_queue_simple)
 		ufbxwi_error error = { };
 		ufbxwt_allocator ator { error };
 		ufbxwt_thread_pool tp;
-		ufbxwt_task_queue<ufbxwt_empty_context> tq { tp.tp, ator.ator, task_count };
+		ufbxwt_task_queue<ufbxwt_empty_context> tq { tp.tp, ator.ator, 16, task_count };
 
 		for (size_t i = 0; i < task_count; i++) {
 			tq.run([&](ufbxwt_empty_context) {
@@ -52,10 +51,10 @@ UFBXWT_UNIT_TEST(task_queue_mutex)
 	const size_t task_count = 1000;
 
 	{
-		ufbxwi_error error = { };
-		ufbxwt_allocator ator { error };
-		ufbxwt_thread_pool tp { 100 };
-		ufbxwt_task_queue<ufbxwt_mutex_context> tq { tp.tp, ator.ator, task_count };
+		ufbxwt_thread_pool tp;
+		ufbxwt_error error = { tp.tp };
+		ufbxwt_allocator ator { tp.tp, error.error };
+		ufbxwt_task_queue<ufbxwt_mutex_context> tq { tp.tp, ator.ator, 100, task_count };
 
 		for (size_t i = 0; i < task_count; i++) {
 			tq.run([&](ufbxwt_mutex_context &ctx) {
@@ -76,10 +75,10 @@ UFBXWT_UNIT_TEST(task_queue_wait)
 	bool flags[task_count] = { };
 
 	{
-		ufbxwi_error error = { };
-		ufbxwt_allocator ator { error };
-		ufbxwt_thread_pool tp { 50 };
-		ufbxwt_task_queue<ufbxwt_empty_context> tq { tp.tp, ator.ator, task_count };
+		ufbxwt_thread_pool tp;
+		ufbxwt_error error = { tp.tp };
+		ufbxwt_allocator ator { tp.tp, error.error };
+		ufbxwt_task_queue<ufbxwt_empty_context> tq { tp.tp, ator.ator, 50, task_count };
 
 		std::vector<ufbxwi_task_id> task_ids;
 

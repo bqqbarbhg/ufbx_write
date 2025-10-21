@@ -15,12 +15,8 @@
 extern "C" {
 #endif
 
-typedef struct ufbxw_cpp_threads_opts {
-	size_t num_threads;
-	// TODO: Custom task run callback
-} ufbxw_cpp_threads_opts;
-
-ufbxw_cpp_threads_abi void ufbxw_cpp_threads_setup(struct ufbxw_thread_pool *pool, const ufbxw_cpp_threads_opts *opts);
+ufbxw_cpp_threads_abi void ufbxw_cpp_threads_setup_sync(struct ufbxw_thread_sync *sync);
+ufbxw_cpp_threads_abi void ufbxw_cpp_threads_setup_pool(struct ufbxw_thread_pool *pool);
 
 #if defined(__cplusplus)
 }
@@ -68,9 +64,11 @@ typedef struct {
 
 typedef struct {
 	ufbxw_cpp_threads_slot slots[UFBXW_CPP_THREADS_NUM_SLOTS];
+} ufbxw_cpp_threads_sync;
+
+typedef struct {
 	std::vector<std::thread> threads;
-	size_t num_threads = 0;
-} ufbxw_cpp_threads_ctx;
+} ufbxw_cpp_threads_pool;
 
 static uint32_t ufbxw_cpp_threads_slot_from_ptr(const void *ptr)
 {
@@ -91,32 +89,9 @@ static void ufbxw_cpp_threads_run_fn(ufbxw_thread_pool_context ctx, uint32_t thr
 	ufbxw_thread_pool_blocking_run_tasks(ctx, thread_id, SIZE_MAX);
 }
 
-static bool ufbxw_cpp_threads_thread_pool_init_fn(void *user, ufbxw_thread_pool_context ctx)
+static void *ufbxw_cpp_threads_thread_sync_init_fn(void *user)
 {
-	ufbxw_cpp_threads_opts default_opts;
-	const ufbxw_cpp_threads_opts *opts = (const ufbxw_cpp_threads_opts*)user;
-	if (!opts) {
-		memset(&default_opts, 0, sizeof(default_opts));
-		opts = &default_opts;
-	}
-
-	std::unique_ptr<ufbxw_cpp_threads_ctx> tc { new ufbxw_cpp_threads_ctx() };
-	if (!tc) return false;
-
-	tc->num_threads = opts->num_threads ? opts->num_threads : (size_t)std::thread::hardware_concurrency();
-
-	ufbxw_thread_pool_set_user_ptr(ctx, tc.release());
-	return true;
-}
-
-static void ufbxw_cpp_threads_thread_pool_start_fn(void *user, ufbxw_thread_pool_context ctx)
-{
-	ufbxw_cpp_threads_ctx *tc = (ufbxw_cpp_threads_ctx*)ufbxw_thread_pool_get_user_ptr(ctx);
-
-	tc->threads.reserve(tc->num_threads);
-	for (size_t i = 0; i < tc->num_threads; i++) {
-		tc->threads.emplace_back(ufbxw_cpp_threads_run_fn, ctx, (uint32_t)i);
-	}
+	return new ufbxw_cpp_threads_sync();
 }
 
 static ufbxw_cpp_threads_addr *ufbxw_cpp_threads_add_addr(ufbxw_cpp_threads_slot &slot, uintptr_t ptr)
@@ -138,9 +113,9 @@ static ufbxw_cpp_threads_addr *ufbxw_cpp_threads_add_addr(ufbxw_cpp_threads_slot
 	return &slot.fallback_addr;
 }
 
-static void ufbxw_cpp_threads_thread_pool_wait_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t *p_value, uint32_t ref_value)
+static void ufbxw_cpp_threads_thread_sync_wait_fn(void *user, void *ctx, uint32_t *p_value, uint32_t ref_value)
 {
-	ufbxw_cpp_threads_ctx *tc = (ufbxw_cpp_threads_ctx*)ufbxw_thread_pool_get_user_ptr(ctx);
+	ufbxw_cpp_threads_sync *tc = (ufbxw_cpp_threads_sync*)ctx;
 	uint32_t slot_ix = ufbxw_cpp_threads_slot_from_ptr(p_value);
 	ufbxw_cpp_threads_slot *slot = &tc->slots[slot_ix];
 
@@ -160,9 +135,9 @@ static void ufbxw_cpp_threads_thread_pool_wait_fn(void *user, ufbxw_thread_pool_
 	}
 }
 
-static void ufbxw_cpp_threads_thread_pool_notify_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t *p_value, uint32_t wake_count)
+static void ufbxw_cpp_threads_thread_sync_notify_fn(void *user, void *ctx, uint32_t *p_value, uint32_t wake_count)
 {
-	ufbxw_cpp_threads_ctx *tc = (ufbxw_cpp_threads_ctx*)ufbxw_thread_pool_get_user_ptr(ctx);
+	ufbxw_cpp_threads_sync *tc = (ufbxw_cpp_threads_sync*)ctx;
 	uint32_t slot_ix = ufbxw_cpp_threads_slot_from_ptr(p_value);
 	ufbxw_cpp_threads_slot *slot = &tc->slots[slot_ix];
 
@@ -185,28 +160,57 @@ static void ufbxw_cpp_threads_thread_pool_notify_fn(void *user, ufbxw_thread_poo
 	}
 }
 
+static void ufbxw_cpp_threads_thread_sync_free_fn(void *user, void *ctx)
+{
+	ufbxw_cpp_threads_sync *tc = (ufbxw_cpp_threads_sync*)ctx;
+	delete tc;
+}
+
+static bool ufbxw_cpp_threads_thread_pool_init_fn(void *user, ufbxw_thread_pool_context ctx, size_t num_threads)
+{
+	std::unique_ptr<ufbxw_cpp_threads_pool> pool { new ufbxw_cpp_threads_pool() };
+
+	if (num_threads == 0) {
+		num_threads = std::thread::hardware_concurrency();
+	}
+
+	pool->threads.reserve(num_threads);
+	for (size_t i = 0; i < num_threads; i++) {
+		pool->threads.emplace_back(ufbxw_cpp_threads_run_fn, ctx, (uint32_t)i);
+	}
+
+	ufbxw_thread_pool_set_user_ptr(ctx, pool.release());
+	return true;
+}
+
 static void ufbxw_cpp_threads_thread_pool_free_fn(void *user, ufbxw_thread_pool_context ctx)
 {
-	ufbxw_cpp_threads_ctx *tc = (ufbxw_cpp_threads_ctx*)ufbxw_thread_pool_get_user_ptr(ctx);
-	for (std::thread &thread : tc->threads) {
+	ufbxw_cpp_threads_pool *tp = (ufbxw_cpp_threads_pool*)ufbxw_thread_pool_get_user_ptr(ctx);
+	for (std::thread &thread : tp->threads) {
 		thread.join();
 	}
-	delete tc;
+	delete tp;
 }
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
-ufbxw_cpp_threads_abi void ufbxw_cpp_threads_setup(struct ufbxw_thread_pool *pool, const ufbxw_cpp_threads_opts *opts)
+ufbxw_cpp_threads_abi void ufbxw_cpp_threads_setup_sync(struct ufbxw_thread_sync *sync)
+{
+	sync->init_fn = &ufbxw_cpp_threads_thread_sync_init_fn;
+	sync->wait_fn = &ufbxw_cpp_threads_thread_sync_wait_fn;
+	sync->notify_fn = &ufbxw_cpp_threads_thread_sync_notify_fn;
+	sync->free_fn = &ufbxw_cpp_threads_thread_sync_free_fn;
+	sync->user = nullptr;
+}
+
+ufbxw_cpp_threads_abi void ufbxw_cpp_threads_setup_pool(struct ufbxw_thread_pool *pool)
 {
 	pool->init_fn = &ufbxw_cpp_threads_thread_pool_init_fn;
-	pool->start_fn = &ufbxw_cpp_threads_thread_pool_start_fn;
-	pool->run_fn = NULL;
-	pool->wait_fn = &ufbxw_cpp_threads_thread_pool_wait_fn;
-	pool->notify_fn = &ufbxw_cpp_threads_thread_pool_notify_fn;
+	pool->run_fn = nullptr;
 	pool->free_fn = &ufbxw_cpp_threads_thread_pool_free_fn;
-	pool->user = (void*)opts;
+	pool->user = nullptr;
 }
 
 #if defined(__cplusplus)
