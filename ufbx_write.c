@@ -1439,6 +1439,8 @@ static void ufbxwi_return_thread_context(ufbxwi_task_queue *tq, ufbxwi_thread_co
 
 static bool ufbxwi_task_complete(ufbxwi_task_queue *tq, ufbxwi_task_id task_id, void *thread_ctx)
 {
+	ufbxwi_dev_assert(tq->enabled);
+
     const uint32_t slot_ix = task_id % tq->num_slots;
     const uint32_t generation = task_id / tq->num_slots;
     ufbxwi_task_slot *slot = &tq->slots[slot_ix];
@@ -1468,6 +1470,8 @@ static bool ufbxwi_task_complete(ufbxwi_task_queue *tq, ufbxwi_task_id task_id, 
 
 static bool ufbxwi_task_get_completed(ufbxwi_task_queue *tq, ufbxwi_task_id task_id)
 {
+	ufbxwi_dev_assert(tq->enabled);
+
     const uint32_t slot_ix = task_id % tq->num_slots;
     const uint32_t generation = task_id / tq->num_slots;
     ufbxwi_task_slot *slot = &tq->slots[slot_ix];
@@ -1557,6 +1561,8 @@ static bool ufbxwi_task_queue_init(ufbxwi_task_queue *tq, ufbxwi_thread_pool *tp
 
 static ufbxwi_task_id ufbxwi_task_push(ufbxwi_task_queue *tq, const ufbxwi_task *task, void *context)
 {
+	ufbxwi_dev_assert(tq->enabled);
+
 	ufbxwi_task_id task_id = tq->write_index++;
 
 	// Wait until the previous task in this slot is completed.
@@ -1580,6 +1586,8 @@ static ufbxwi_task_id ufbxwi_task_push(ufbxwi_task_queue *tq, const ufbxwi_task 
 
 static void ufbxwi_task_queue_free(ufbxwi_task_queue *tq, void *context)
 {
+	if (!tq->enabled) return;
+
 	// Wait that all tasks are completed
 	// TODO: This could be optimized
 	const uint32_t task_start = tq->write_index >= tq->num_slots ? tq->write_index - tq->num_slots : 0;
