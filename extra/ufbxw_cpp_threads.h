@@ -52,7 +52,7 @@ ufbxw_cpp_threads_abi void ufbxw_cpp_threads_setup(struct ufbxw_thread_pool *poo
 #include <condition_variable>
 
 #define UFBXW_CPP_THREADS_NUM_SLOTS 8
-#define UFBXW_CPP_THREADS_NUM_ADDRS 2
+#define UFBXW_CPP_THREADS_NUM_ADDRS 3
 
 typedef struct ufbxw_cpp_threads_addr {
 	std::condition_variable cv;
@@ -69,6 +69,7 @@ typedef struct {
 typedef struct {
 	ufbxw_cpp_threads_slot slots[UFBXW_CPP_THREADS_NUM_SLOTS];
 	std::vector<std::thread> threads;
+	size_t num_threads = 0;
 } ufbxw_cpp_threads_ctx;
 
 static uint32_t ufbxw_cpp_threads_slot_from_ptr(const void *ptr)
@@ -87,8 +88,7 @@ static_assert(sizeof(std::atomic_uint32_t) == sizeof(uint32_t), "std::atomic_uin
 
 static void ufbxw_cpp_threads_run_fn(ufbxw_thread_pool_context ctx, uint32_t thread_id)
 {
-	// TODO
-	// ufbxw_thread_pool_blocking_run_tasks(ctx, thread_id, SIZE_MAX);
+	ufbxw_thread_pool_blocking_run_tasks(ctx, thread_id, SIZE_MAX);
 }
 
 static bool ufbxw_cpp_threads_thread_pool_init_fn(void *user, ufbxw_thread_pool_context ctx)
@@ -100,24 +100,23 @@ static bool ufbxw_cpp_threads_thread_pool_init_fn(void *user, ufbxw_thread_pool_
 		opts = &default_opts;
 	}
 
-	size_t total_threads = opts->num_threads ? opts->num_threads : (size_t)std::thread::hardware_concurrency();
-	if (total_threads <= 1) {
-		return false;
-	}
-
-	// Count the main thread as a thread
-	const size_t num_threads = total_threads - 1;
-
 	std::unique_ptr<ufbxw_cpp_threads_ctx> tc { new ufbxw_cpp_threads_ctx() };
 	if (!tc) return false;
 
-	tc->threads.reserve(total_threads);
-	for (size_t i = 0; i < total_threads; i++) {
-		tc->threads.emplace_back(ufbxw_cpp_threads_run_fn, ctx, (uint32_t)i);
-	}
+	tc->num_threads = opts->num_threads ? opts->num_threads : (size_t)std::thread::hardware_concurrency();
 
 	ufbxw_thread_pool_set_user_ptr(ctx, tc.release());
 	return true;
+}
+
+static void ufbxw_cpp_threads_thread_pool_start_fn(void *user, ufbxw_thread_pool_context ctx)
+{
+	ufbxw_cpp_threads_ctx *tc = (ufbxw_cpp_threads_ctx*)ufbxw_thread_pool_get_user_ptr(ctx);
+
+	tc->threads.reserve(tc->num_threads);
+	for (size_t i = 0; i < tc->num_threads; i++) {
+		tc->threads.emplace_back(ufbxw_cpp_threads_run_fn, ctx, (uint32_t)i);
+	}
 }
 
 static ufbxw_cpp_threads_addr *ufbxw_cpp_threads_add_addr(ufbxw_cpp_threads_slot &slot, uintptr_t ptr)
@@ -202,6 +201,8 @@ extern "C" {
 ufbxw_cpp_threads_abi void ufbxw_cpp_threads_setup(struct ufbxw_thread_pool *pool, const ufbxw_cpp_threads_opts *opts)
 {
 	pool->init_fn = &ufbxw_cpp_threads_thread_pool_init_fn;
+	pool->start_fn = &ufbxw_cpp_threads_thread_pool_start_fn;
+	pool->run_fn = NULL;
 	pool->wait_fn = &ufbxw_cpp_threads_thread_pool_wait_fn;
 	pool->notify_fn = &ufbxw_cpp_threads_thread_pool_notify_fn;
 	pool->free_fn = &ufbxw_cpp_threads_thread_pool_free_fn;

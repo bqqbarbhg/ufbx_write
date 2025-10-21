@@ -22,6 +22,22 @@ std::vector<ufbxwt_unit_test*> collect_tests()
 
 int main(int argc, char **argv)
 {
+    const char *test_filter = nullptr;
+    const char *test_group = nullptr;
+
+	for (int i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "-t") || !strcmp(argv[i], "--test")) {
+			if (++i < argc) {
+				test_filter = argv[i];
+			}
+		}
+		if (!strcmp(argv[i], "-g") || !strcmp(argv[i], "--group")) {
+			if (++i < argc) {
+				test_group = argv[i];
+			}
+		}
+	}
+
     std::vector<ufbxwt_unit_test*> tests = collect_tests();
 
     std::sort(tests.begin(), tests.end(), [](ufbxwt_unit_test *a, ufbxwt_unit_test *b) {
@@ -34,6 +50,13 @@ int main(int argc, char **argv)
     uint32_t num_ran = 0;
     
     for (const ufbxwt_unit_test *test : tests) {
+        if (test_filter && strcmp(test->name, test_filter) != 0) {
+            continue;
+        }
+        if (test_group && strcmp(test->category, test_group) != 0) {
+            continue;
+        }
+
 		num_ran++;
         try {
 			printf("%s: ", test->name);

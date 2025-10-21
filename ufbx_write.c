@@ -602,6 +602,7 @@ typedef ufbxw_task_run_result ufbxwi_run_task_fn(void *user, ufbxwi_run_task_mod
 typedef struct {
 	bool enabled;
 
+	ufbxw_thread_pool_start_fn *start_fn;
 	ufbxw_thread_pool_run_fn *run_fn;
 	ufbxw_thread_pool_wait_fn *wait_fn;
 	ufbxw_thread_pool_notify_fn *notify_fn;
@@ -625,11 +626,23 @@ static bool ufbxwi_thread_pool_init(ufbxwi_thread_pool *tp, const ufbxw_thread_p
 
 	tp->enabled = true;
 	tp->run_fn = pool->run_fn;
+	tp->start_fn = pool->start_fn;
 	tp->wait_fn = pool->wait_fn;
 	tp->notify_fn = pool->notify_fn;
 	tp->free_fn = pool->free_fn;
 	tp->user = pool->user;
 	return true;
+}
+
+static void ufbxwi_thread_pool_start(ufbxwi_thread_pool *tp, ufbxwi_run_task_fn *run_task_fn, void *run_task_user)
+{
+	tp->run_task_fn = run_task_fn;
+	tp->run_task_user = run_task_user;
+
+	ufbxw_thread_pool_context ctx = (ufbxw_thread_pool_context)tp;
+	if (tp->start_fn) {
+		tp->start_fn(tp->user, ctx);
+	}
 }
 
 static void ufbxwi_thread_pool_free(ufbxwi_thread_pool *tp)
@@ -1137,7 +1150,17 @@ static ufbxwi_noinline void ufbxwi_free_allocator(ufbxwi_allocator *ator)
 	}
 }
 
+static void *ufbxwi_alloc_zero_size(ufbxwi_allocator *ator, size_t size, size_t n)
+{
+	void *ptr = ufbxwi_alloc_size(ator, size, n, NULL);
+	if (ptr) {
+		memset(ptr, 0, size * n);
+	}
+	return ptr;
+}
+
 #define ufbxwi_alloc(ator, type, n) ufbxwi_maybe_null((type*)ufbxwi_alloc_size((ator), sizeof(type), (n), NULL))
+#define ufbxwi_alloc_zero(ator, type, n) ufbxwi_maybe_null((type*)ufbxwi_alloc_zero_size((ator), sizeof(type), (n)))
 
 #endif
 
@@ -1309,6 +1332,16 @@ typedef uint32_t ufbxwi_task_id;
 typedef bool ufbxwi_task_fn(void *user, void *thread_ctx);
 
 typedef void *ufbxwi_create_thread_ctx_fn(void *user);
+typedef void ufbxwi_free_thread_ctx_fn(void *user, void *thread_ctx);
+
+typedef struct {
+	ufbxwi_create_thread_ctx_fn *create_thread_ctx_fn;
+	ufbxwi_free_thread_ctx_fn *free_thread_ctx_fn;
+	void *thread_ctx_user;
+
+	uint32_t max_tasks;
+	uint32_t max_threads;
+} ufbxwi_task_queue_opts;
 
 typedef struct {
 	ufbxwi_task_fn *fn;
@@ -1330,7 +1363,8 @@ typedef struct {
 	ufbxwi_thread_pool *thread_pool;
 
 	ufbxwi_create_thread_ctx_fn *create_thread_ctx_fn;
-	void *create_thread_ctx_user;
+	ufbxwi_free_thread_ctx_fn *free_thread_ctx_fn;
+	void *thread_ctx_user;
 
 	ufbxwi_task_slot *slots;
 	size_t num_slots;
@@ -1349,12 +1383,9 @@ typedef struct {
 
 	uint32_t num_thread_contexts;
 	ufbxwi_thread_context *thread_contexts;
-} ufbxwi_task_queue;
 
-typedef struct {
-	uint32_t max_tasks;
-	uint32_t max_threads;
-} ufbxwi_task_queue_opts;
+	size_t num_threads;
+} ufbxwi_task_queue;
 
 static ufbxwi_thread_context *ufbxwi_get_thread_context(ufbxwi_task_queue *tq, uint32_t thread_id_hint)
 {
@@ -1371,7 +1402,7 @@ static ufbxwi_thread_context *ufbxwi_get_thread_context(ufbxwi_task_queue *tq, u
 		ufbxwi_thread_context *tc = &tq->thread_contexts[(id + scan) % num_contexts];
 		if (ufbxwi_atomic_cas(&tc->thread_id, 0, id)) {
 			if (!tc->thread_ctx) {
-				tc->thread_ctx = tq->create_thread_ctx_fn(tq->create_thread_ctx_user);
+				tc->thread_ctx = tq->create_thread_ctx_fn(tq->thread_ctx_user);
 			}
 			return tc;
 		}
@@ -1414,18 +1445,60 @@ static bool ufbxwi_task_complete(ufbxwi_task_queue *tq, ufbxwi_task_id task_id, 
     return completed;
 }
 
+static ufbxw_task_run_result ufbxwi_task_queue_run_task_imp(ufbxwi_task_queue *tq, void *thread_ctx, ufbxwi_run_task_mode mode, size_t max_count)
+{
+	for (size_t i = 0; i < max_count; i++) {
+		if (mode == UFBXWI_RUN_TASK_TRY) {
+			if (!ufbxwi_semaphore_try_wait(tq->thread_pool, &tq->task_sema)) {
+				return UFBXW_TASK_RUN_RESULT_NO_TASKS;
+			}
+		} else {
+			ufbxwi_semaphore_wait(tq->thread_pool, &tq->task_sema);
+		}
+
+		if (tq->completed) {
+			return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
+		}
+
+		uint32_t task_id = ufbxwi_atomic_add(&tq->run_index, 1);
+		ufbxwi_task_complete(tq, task_id, thread_ctx);
+	}
+	return UFBXW_TASK_RUN_RESULT_COMPLETED;
+}
+
+static ufbxw_task_run_result ufbxwi_task_queue_run_task(void *user, ufbxwi_run_task_mode mode, uint32_t thread_id_hint, size_t max_count)
+{
+	ufbxwi_task_queue *tq = (ufbxwi_task_queue*)user;
+	if (tq->completed) {
+		return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
+	}
+
+	ufbxwi_thread_context *tc = ufbxwi_get_thread_context(tq, thread_id_hint);
+	if (!tc) {
+		return UFBXW_TASK_RUN_RESULT_FAILED;
+	}
+
+	ufbxw_task_run_result result = ufbxwi_task_queue_run_task_imp(tq, tc->thread_ctx, mode, max_count);
+	ufbxwi_return_thread_context(tq, tc);
+
+	return result;
+}
+
 static bool ufbxwi_task_queue_init(ufbxwi_task_queue *tq, ufbxwi_thread_pool *tp, ufbxwi_allocator *ator, const ufbxwi_task_queue_opts *opts)
 {
 	tq->enabled = true;
 
 	tq->thread_pool = tp;
+	tq->create_thread_ctx_fn = opts->create_thread_ctx_fn;
+	tq->free_thread_ctx_fn = opts->free_thread_ctx_fn;
+	tq->thread_ctx_user = opts->thread_ctx_user;
 
 	size_t num_slots = opts->max_tasks;
 	if (num_slots == 0) {
 		num_slots = 0x1000;
 	}
 
-	tq->slots = ufbxwi_alloc(ator, ufbxwi_task_slot, num_slots);
+	tq->slots = ufbxwi_alloc_zero(ator, ufbxwi_task_slot, num_slots);
 	if (!tq->slots) return false;
 
 	tq->num_slots = num_slots;
@@ -1437,19 +1510,14 @@ static bool ufbxwi_task_queue_init(ufbxwi_task_queue *tq, ufbxwi_thread_pool *tp
 
 	tq->write_index = 1;
 
-	size_t max_threads = opts->max_threads;
-	if (max_threads == 0) {
-		max_threads = 64;
-	}
-	if (max_threads >= 0x1000) {
-		max_threads = 0x1000;
-	}
-
-	uint32_t num_thread_contexts = (uint32_t)max_threads * 2;
-	tq->thread_contexts = ufbxwi_alloc(ator, ufbxwi_thread_context, num_thread_contexts);
+	const uint32_t max_threads = 64;
+	const uint32_t num_thread_contexts = max_threads * 2;
+	tq->thread_contexts = ufbxwi_alloc_zero(ator, ufbxwi_thread_context, num_thread_contexts);
 	if (!tq->thread_contexts) return false;
 
 	tq->num_thread_contexts = num_thread_contexts;
+
+	ufbxwi_thread_pool_start(tp, &ufbxwi_task_queue_run_task, tq);
 
 	return true;
 }
@@ -1477,51 +1545,25 @@ static ufbxwi_task_id ufbxwi_task_push(ufbxwi_task_queue *tq, const ufbxwi_task 
 	return task_id;
 }
 
-static ufbxw_task_run_result ufbxwi_task_try_run(ufbxwi_task_queue *tq, void *context)
+static void ufbxwi_task_queue_free(ufbxwi_task_queue *tq, void *context)
 {
-	if (tq->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
-
-	for (;;) {
-		if (ufbxwi_semaphore_try_wait(tq->thread_pool, &tq->task_sema)) {
-			if (tq->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
-
-			uint32_t task_id = ufbxwi_atomic_add(&tq->run_index, 1);
-			if (ufbxwi_task_complete(tq, task_id, context)) {
-				return UFBXW_TASK_RUN_RESULT_COMPLETED;
-			}
-		} else {
-			return UFBXW_TASK_RUN_RESULT_NO_TASKS;
-		}
-	}
-}
-
-static ufbxw_task_run_result ufbxwi_task_blocking_run(ufbxwi_task_queue *tq, void *context)
-{
-	if (tq->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
-
-	for (;;) {
-		ufbxwi_semaphore_wait(tq->thread_pool, &tq->task_sema);
-		if (tq->completed) return UFBXW_TASK_RUN_RESULT_ALL_FINISHED;
-
-		uint32_t task_id = ufbxwi_atomic_add(&tq->run_index, 1);
-		if (ufbxwi_task_complete(tq, task_id, context)) {
-			return UFBXW_TASK_RUN_RESULT_COMPLETED;
-		}
-	}
-}
-
-static void ufbxwi_task_queue_close(ufbxwi_task_queue *tq, void *context)
-{
-	if (!tq->completed) {
-		tq->completed = true;
-		ufbxwi_semaphore_notify(tq->thread_pool, &tq->task_sema, UINT32_MAX / 2);
-	}
-
 	// Wait that all tasks are completed
 	// TODO: This could be optimized
 	const uint32_t task_start = tq->write_index >= tq->num_slots ? tq->write_index - tq->num_slots : 0;
 	for (uint32_t task_id = task_start; task_id < tq->write_index; task_id++) {
 		ufbxwi_task_complete(tq, task_id, context);
+	}
+
+	if (!tq->completed) {
+		tq->completed = true;
+		ufbxwi_semaphore_notify(tq->thread_pool, &tq->task_sema, UINT32_MAX / 2);
+	}
+
+	ufbxwi_for(ufbxwi_thread_context, tc, tq->thread_contexts, tq->num_thread_contexts) {
+		if (tc->thread_ctx) {
+			tq->free_thread_ctx_fn(tq->thread_ctx_user, tc->thread_ctx);
+			tc->thread_ctx = NULL;
+		}
 	}
 }
 

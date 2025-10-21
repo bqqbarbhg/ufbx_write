@@ -1037,6 +1037,7 @@ ufbxw_abi bool ufbxw_open_file_write(ufbxw_write_stream *stream, const char *pat
 typedef uintptr_t ufbxw_thread_pool_context;
 
 typedef bool ufbxw_thread_pool_init_fn(void *user, ufbxw_thread_pool_context ctx);
+typedef void ufbxw_thread_pool_start_fn(void *user, ufbxw_thread_pool_context ctx);
 typedef void ufbxw_thread_pool_run_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t count);
 typedef void ufbxw_thread_pool_wait_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t *p_value, uint32_t ref_value);
 typedef void ufbxw_thread_pool_notify_fn(void *user, ufbxw_thread_pool_context ctx, uint32_t *p_value, uint32_t wake_count);
@@ -1047,6 +1048,7 @@ typedef void ufbxw_thread_pool_free_fn(void *user, ufbxw_thread_pool_context ctx
 // See functions above for more information.
 typedef struct ufbxw_thread_pool {
 	ufbxw_thread_pool_init_fn *init_fn;     // < Optional
+	ufbxw_thread_pool_start_fn *start_fn;   // < Optional
 	ufbxw_thread_pool_run_fn *run_fn;       // < Optional
 	ufbxw_thread_pool_wait_fn *wait_fn;     // < Required
 	ufbxw_thread_pool_notify_fn *notify_fn; // < Required

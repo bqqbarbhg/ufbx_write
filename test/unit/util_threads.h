@@ -12,9 +12,12 @@ struct ufbxwt_thread_pool
 	ufbxw_thread_pool pool;
 	ufbxwi_thread_pool tp;
 
-	ufbxwt_thread_pool()
+	ufbxwt_thread_pool(size_t num_threads=0)
 	{
-		ufbxw_cpp_threads_setup(&pool, nullptr);
+		ufbxw_cpp_threads_opts opts = { };
+		opts.num_threads = num_threads;
+
+		ufbxw_cpp_threads_setup(&pool, &opts);
 		ufbxwi_thread_pool_init(&tp, &pool);
 	}
 
