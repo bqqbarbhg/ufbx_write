@@ -1462,8 +1462,8 @@ static bool ufbxwi_task_complete(ufbxwi_task_queue *tq, ufbxwi_task_id task_id, 
             tq->failed = true;
             ufbxwi_mutex_unlock(tq->thread_pool, &tq->fail_mutex);
         }
+		ufbxwi_atomic_store(&slot->generation, generation + 1);
     }
-    ufbxwi_atomic_store(&slot->generation, generation + 1);
     ufbxwi_mutex_unlock(tq->thread_pool, &slot->mutex);
     return completed;
 }
