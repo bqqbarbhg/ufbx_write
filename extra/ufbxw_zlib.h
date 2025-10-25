@@ -47,6 +47,7 @@ ufbxw_zlib_abi void ufbxw_zlib_setup(struct ufbxw_deflate *deflate, const ufbxw_
 #endif
 
 #include <stdlib.h>
+#include <string.h>
 
 static size_t ufbxw_zlib_begin(void *user, size_t input_size)
 {

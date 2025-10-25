@@ -12,23 +12,23 @@ static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr
 	ufbxwt_assert_fail_imp(file, line, expr);
 }
 
-#include "../ufbx_write.h"
-#include "ufbx/ufbx.h"
+#include "../../ufbx_write.h"
+#include "../ufbx/ufbx.h"
 
 #ifdef UFBXWT_HAS_LIBDEFLATE
-	#include "../extra/ufbxw_libdeflate.h"
+	#include "../../extra/ufbxw_libdeflate.h"
 #endif
 
 #ifdef UFBXWT_HAS_ZLIB
-	#include "../extra/ufbxw_zlib.h"
+	#include "../../extra/ufbxw_zlib.h"
 #endif
 
 #ifdef UFBXWT_HAS_FMTLIB
-	#include "../extra/ufbxw_fmtlib.h"
+	#include "../../extra/ufbxw_fmtlib.h"
 #endif
 
 #ifdef UFBXWT_HAS_TO_CHARS
-	#include "../extra/ufbxw_to_chars.h"
+	#include "../../extra/ufbxw_to_chars.h"
 #endif
 
 #define ufbxwt_arraycount(arr) (sizeof(arr) / sizeof(*(arr)))
@@ -110,6 +110,9 @@ char g_log_buf[16*1024];
 uint32_t g_log_pos;
 
 char g_hint[8*1024];
+
+uint32_t g_file_version;
+const char *g_file_format;
 
 void ufbxwt_logf(const char *fmt, ...)
 {
@@ -290,8 +293,6 @@ void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr)
 
 bool g_fuzz = false;
 bool g_allow_scene_error = false;
-uint32_t g_file_version;
-const char *g_file_format;
 
 bool ufbxwt_check_scene_error_imp(ufbxw_scene *scene, const char *file, int line)
 {
