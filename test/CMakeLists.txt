@@ -15,11 +15,9 @@ target_sources(ufbx_write PRIVATE ${SRC_UFBX_WRITE})
 
 add_subdirectory(ufbx)
 add_subdirectory(extra)
+add_subdirectory(util)
 add_subdirectory(test)
 add_subdirectory(unit)
-
-target_link_libraries(ufbxw_test PRIVATE ufbx_write ufbx ufbxw_extra)
-target_link_libraries(ufbxw_unit PRIVATE ufbx_write ufbx ufbxw_extra)
 
 if (MSVC)
     add_compile_options(/W4 /WX)
