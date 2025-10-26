@@ -79,4 +79,6 @@ endif()
 
 target_sources(ufbxw_extra PRIVATE ${SRC_EXTRA})
 
+target_link_libraries(ufbxw_extra PRIVATE ufbx_write)
+
 set_property(TARGET ufbxw_extra PROPERTY CXX_STANDARD 17)
