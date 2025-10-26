@@ -1591,7 +1591,6 @@ static void ufbxwi_task_queue_free(ufbxwi_task_queue *tq, void *context)
 	// Wait that all tasks are completed
 	// TODO: This could be optimized
 	// TODO: We might not even need to do this
-#if 0
 	uint32_t task_start = tq->write_index >= tq->num_slots ? tq->write_index - tq->num_slots : 0;
 	if (task_start == 0) {
 		task_start = 1;
@@ -1599,7 +1598,6 @@ static void ufbxwi_task_queue_free(ufbxwi_task_queue *tq, void *context)
 	for (uint32_t task_id = task_start; task_id < tq->write_index; task_id++) {
 		ufbxwi_task_complete(tq, task_id, context);
 	}
-#endif
 
 	if (!tq->completed) {
 		tq->completed = true;
