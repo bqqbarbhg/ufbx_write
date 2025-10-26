@@ -15,6 +15,12 @@ static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr
 		if (!(cond)) ufbxwt_assert_fail(__FILE__, __LINE__, #cond); \
 	} while (0)
 
+static ufbxw_vec2 to_ufbxw_vec2(ufbx_vec2 v)
+{
+	ufbxw_vec2 r = { v.x, v.y };
+	return r;
+}
+
 static ufbxw_vec3 to_ufbxw_vec3(ufbx_vec3 v)
 {
 	ufbxw_vec3 r = { v.x, v.y, v.z };
@@ -138,6 +144,42 @@ int main(int argc, char **argv)
 
 		ufbxw_mesh_set_vertices(out_scene, out_mesh, vertices);
 		ufbxw_mesh_set_polygons(out_scene, out_mesh, vertex_indices, face_offsets);
+
+		if (in_mesh->vertex_normal.exists) {
+			ufbxw_vec3_buffer normals = ufbxw_create_vec3_buffer(out_scene, in_mesh->num_indices);
+
+			{
+				ufbxw_vec3_list normals_data = ufbxw_edit_vec3_buffer(out_scene, normals);
+				for (size_t i = 0; i < in_mesh->num_indices; i++) {
+					normals_data.data[i] = to_ufbxw_vec3(ufbx_get_vertex_vec3(&in_mesh->vertex_normal, i));
+				}
+			}
+
+			ufbxw_mesh_set_normals(out_scene, out_mesh, normals, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
+		}
+
+		for (size_t uv_set = 0; uv_set < in_mesh->uv_sets.count; uv_set++) {
+			ufbx_uv_set set = in_mesh->uv_sets.data[uv_set];
+
+			ufbxw_vec2_buffer uv_values = ufbxw_create_vec2_buffer(out_scene, set.vertex_uv.values.count);
+			ufbxw_int_buffer uv_indices = ufbxw_create_int_buffer(out_scene, set.vertex_uv.indices.count);
+
+			{
+				ufbxw_vec2_list values_data = ufbxw_edit_vec2_buffer(out_scene, uv_values);
+				for (size_t i = 0; i < set.vertex_uv.values.count; i++) {
+					values_data.data[i] = to_ufbxw_vec2(set.vertex_uv.values.data[i]);
+				}
+			}
+
+			{
+				ufbxw_int_list indices_data = ufbxw_edit_int_buffer(out_scene, uv_indices);
+				for (size_t i = 0; i < set.vertex_uv.indices.count; i++) {
+					indices_data.data[i] = (int32_t)set.vertex_uv.indices.data[i];
+				}
+			}
+
+			ufbxw_mesh_set_uvs_indexed(out_scene, out_mesh, (int32_t)uv_set, uv_values, uv_indices, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
+		}
 
 		mesh_ids[mesh_ix] = out_mesh;
 	}
