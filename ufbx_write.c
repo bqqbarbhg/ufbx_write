@@ -6761,6 +6761,7 @@ typedef struct {
 	// Actual file offset of this chunk
 	bool has_file_offset;
 	uint64_t file_offset;
+	size_t total_size;
 
 	// Number of unresolved relocs within this chunk
 	uint32_t num_unresolved_relocs;
@@ -6817,10 +6818,15 @@ typedef struct {
 
 	ufbxwi_write_chunk *current_chunk;
 	ufbxwi_write_chunk_ptr_list chunks;
+	ufbxwi_write_chunk_ptr_list chunks_to_flush;
 
 	size_t preferred_buffer_size;
 
 	ufbxw_write_stream stream;
+
+	// Chunk flushing
+	size_t chunk_layout_index;
+	uint64_t chunk_layout_file_offset;
 
 	ufbxwi_write_reloc_list relocs;
 	ufbxwi_uint32_list free_reloc_ids;
@@ -6907,10 +6913,8 @@ static ufbxwi_noinline void ufbxwi_write_queue_init(ufbxwi_write_queue *wq, ufbx
 	wq->buffer_pos = initial_buffer->pos;
 	wq->buffer_end = initial_buffer->end;
 
-	ufbxwi_write_chunk *initial_chunk = ufbxwi_alloc(wq->ator, ufbxwi_write_chunk, 1);
+	ufbxwi_write_chunk *initial_chunk = ufbxwi_alloc_zero(wq->ator, ufbxwi_write_chunk, 1);
 	ufbxwi_check(initial_chunk);
-
-	memset(initial_chunk, 0, sizeof(ufbxwi_write_chunk));
 
 	initial_chunk->data.data = wq->buffer_pos;
 	initial_chunk->data.size = 0;
@@ -6966,34 +6970,62 @@ static void ufbxwi_write_queue_resolve_reloc(ufbxwi_write_queue *wq, uint32_t re
 	ufbxwi_check(ufbxwi_list_push_copy(wq->ator, &wq->free_reloc_ids, uint32_t, &reloc_id));
 }
 
-static ufbxwi_noinline bool ufbxwi_write_queue_try_flush_chunks(ufbxwi_write_queue *wq)
+static ufbxwi_noinline bool ufbxwi_write_queue_layout_chunks(ufbxwi_write_queue *wq, bool wait)
 {
-	// TODO(wq): Something not stupid
-	for (size_t i = 0; i < wq->chunks.count; i++) {
-		ufbxwi_write_chunk *chunk = wq->chunks.data[i];
-		if (!chunk) continue;
+	static int SERIAL;
+	++SERIAL;
+	SERIAL = SERIAL;
 
-		if (chunk->pending_relocs.count > 0 && chunk->has_file_offset) {
+	while (wq->chunk_layout_index < wq->chunks.count) {
+		ufbxwi_write_chunk *chunk = wq->chunks.data[wq->chunk_layout_index];
+
+		// Complete a pending task
+		if (chunk->task) {
+			if (wait) {
+				ufbxwi_task_complete(wq->task_queue, chunk->task, wq->main_ctx);
+			} else {
+				if (!ufbxwi_task_get_completed(wq->task_queue, chunk->task)) {
+					break;
+				}
+			}
+			chunk->task = 0;
+		}
+
+		// Layout the chunk into a file offset
+		if (!chunk->has_file_offset) {
+			chunk->file_offset = wq->chunk_layout_file_offset;
+			chunk->has_file_offset = true;
+		} else {
+			ufbxw_assert(chunk->file_offset == wq->chunk_layout_file_offset);
+		}
+		wq->chunk_layout_file_offset += chunk->total_size;
+
+		// Apply any relocations
+		if (chunk->pending_relocs.count > 0) {
 			ufbxwi_for_list(uint32_t, p_reloc_id, chunk->pending_relocs) {
 				ufbxwi_write_queue_resolve_reloc(wq, *p_reloc_id);
 			}
 			ufbxwi_list_free(wq->ator, &chunk->pending_relocs);
 		}
+
+		// Queue the chunk for flushing
+		ufbxwi_check(ufbxwi_list_push_copy(wq->ator, &wq->chunks_to_flush, ufbxwi_write_chunk*, &chunk), false);
+
+		wq->chunk_layout_index++;
 	}
 
-	// TODO(wq): Something not stupid
-	const size_t num_prev_chunks = wq->chunks.count;
-	size_t num_new_chunks = 0;
-	for (size_t i = 0; i < num_prev_chunks; i++) {
-		ufbxwi_write_chunk *chunk = wq->chunks.data[i];
+	return true;
+}
 
-		if (chunk->task) {
-			if (ufbxwi_task_get_completed(wq->task_queue, chunk->task)) {
-				chunk->task = 0;
-			} else {
-				continue;
-			}
-		}
+static ufbxwi_noinline bool ufbxwi_write_queue_flush_chunks(ufbxwi_write_queue *wq, bool wait)
+{
+	ufbxwi_check(ufbxwi_write_queue_layout_chunks(wq, wait), false);
+
+	const size_t num_prev_chunks = wq->chunks_to_flush.count;
+	size_t num_new_chunks = 0;
+
+	for (size_t i = 0; i < num_prev_chunks; i++) {
+		ufbxwi_write_chunk *chunk = wq->chunks_to_flush.data[i];
 
 		if (chunk->num_unresolved_relocs == 0 && chunk->has_file_offset) {
 			ufbxwi_write_chunk_part *part = &chunk->data;
@@ -7013,11 +7045,12 @@ static ufbxwi_noinline bool ufbxwi_write_queue_try_flush_chunks(ufbxwi_write_que
 			} while (part);
 
 			// TODO(wq): Free chunk (or pool it)
+
 		} else {
-			wq->chunks.data[num_new_chunks++] = chunk;
+			wq->chunks_to_flush.data[num_new_chunks++] = chunk;
 		}
 	}
-	wq->chunks.count = num_new_chunks;
+	wq->chunks_to_flush.count = num_new_chunks;
 
 	return true;
 }
@@ -7031,16 +7064,18 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, siz
 
 	size_t size = ufbxwi_to_size(wq->buffer_pos - wq->buffer_begin);
 	prev_chunk->data.size = size;
+	prev_chunk->total_size = size;
+
 	buffer->pos = wq->buffer_pos;
 
-	bool has_file_offset = prev_chunk->has_file_offset;
-	uint64_t file_offset = prev_chunk->file_offset + size;
-
-	if (prev_chunk->data.size > 0) {
-		ufbxwi_check(ufbxwi_list_push_copy(wq->ator, &wq->chunks, ufbxwi_write_chunk*, &prev_chunk), false);
+	uint64_t file_offset = UINT64_MAX;
+	if (prev_chunk->has_file_offset) {
+		file_offset = prev_chunk->file_offset + size;
 	}
 
-	ufbxwi_check(ufbxwi_write_queue_try_flush_chunks(wq), false);
+	ufbxwi_check(ufbxwi_list_push_copy(wq->ator, &wq->chunks, ufbxwi_write_chunk*, &prev_chunk), false);
+
+	ufbxwi_check(ufbxwi_write_queue_flush_chunks(wq, false), false);
 
 	// Check if we can reuse the buffer of the current chunk
 	size_t buffer_left = ufbxwi_to_size(buffer->end - buffer->pos);
@@ -7060,9 +7095,9 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, siz
 	new_chunk->data.buffer = buffer;
 	new_chunk->data.data = buffer->pos;
 
-	if (has_file_offset) {
-		new_chunk->has_file_offset = true;
+	if (file_offset != UINT64_MAX) {
 		new_chunk->file_offset = file_offset;
+		new_chunk->has_file_offset = true;
 	}
 
 	wq->current_chunk = new_chunk;
@@ -7075,23 +7110,8 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, siz
 
 static ufbxwi_noinline bool ufbxwi_write_queue_finish(ufbxwi_write_queue *wq)
 {
-	// TODO(wq): This could probably be neater
-
-	// Flush whatever is buffered currently
 	ufbxwi_check(ufbxwi_write_queue_flush(wq, 0), false);
-
-	// Complete all the tasks
-	const size_t num_chunks = wq->chunks.count;
-	for (size_t i = 0; i < num_chunks; i++) {
-		ufbxwi_write_chunk *chunk = wq->chunks.data[i];
-		if (chunk->task) {
-			ufbxwi_task_complete(wq->task_queue, chunk->task, wq->main_ctx);
-		}
-	}
-
-	// Flushing should succeed now
-	ufbxwi_check(ufbxwi_write_queue_try_flush_chunks(wq), false);
-
+	ufbxwi_check(ufbxwi_write_queue_flush_chunks(wq, true), false);
 	return true;
 }
 
@@ -7174,6 +7194,7 @@ static ufbxwi_forceinline void ufbxwi_queue_write_commit_in_chunk(ufbxwi_write_q
 		ufbxwi_write_chunk_part *const part = chunk->last_part;
 		part->buffer->pos += length;
 		part->size = length;
+		chunk->total_size += length;
 		ufbxwi_write_queue_return_buffer(wq, part->buffer);
 	}
 }
@@ -7193,6 +7214,7 @@ static ufbxwi_noinline bool ufbxwi_queue_write_slow(ufbxwi_write_queue *wq, cons
 			return false;
 		}
 
+		wq->chunk_layout_file_offset += length;
 		wq->current_chunk->file_offset += length;
 	} else {
 		// Generic buffered write path
@@ -8062,7 +8084,10 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 
 	if (encoding == 1) {
 		ufbxwi_buffer_input input = ufbxwi_get_buffer_input(&sc->buffers, buffer_id);
+		// ufbxwi_deflate_buffer(&sc->main_thread_ctx, sc->write_queue.current_chunk, &input);
 		ufbxwi_deflate_buffer(&sc->main_thread_ctx, NULL, &input);
+
+		ufbxwi_write_queue_flush(&sc->write_queue, 0);
 
 	} else {
 		if (data_size > UINT32_MAX) {
@@ -8162,11 +8187,9 @@ static void ufbxwi_binary_write_footer(ufbxwi_save_context *sc, const char *crea
 	ufbxwi_write(sc, footer_magic, sizeof(footer_magic));
 
 	// Calculate the file offset, we must know the file offset at this point.
-	ufbxw_assert(sc->write_queue.current_chunk->has_file_offset);
-
-	const uint64_t chunk_file_offset = sc->write_queue.current_chunk->file_offset;
-	const size_t offset_in_chunk = ufbxwi_to_size(sc->write_queue.buffer_pos - sc->write_queue.buffer_begin);
-	const uint64_t file_offset = chunk_file_offset + offset_in_chunk;
+	ufbxwi_write_queue_layout_chunks(&sc->write_queue, true);
+	const uint32_t offset_in_chunk = (uint32_t)(sc->write_queue.buffer_pos - sc->write_queue.buffer_begin);
+	const uint64_t file_offset = sc->write_queue.chunk_layout_file_offset + offset_in_chunk;
 
 	// Align to 16 bytes, always insert at least a single zero
 	size_t align = (size_t)(16 - (file_offset % 16));
@@ -9322,6 +9345,11 @@ static void ufbxwi_save_root(ufbxwi_save_context *sc)
 
 	// Binary footer
 	if (!sc->ascii) {
+		// We need to make sure all the chunks are flushed
+		if (!sc->write_queue.current_chunk->has_file_offset) {
+			ufbxwi_write_queue_finish(&sc->write_queue);
+		}
+
 		ufbxwi_binary_write_footer(sc, creation_time);
 	}
 }
