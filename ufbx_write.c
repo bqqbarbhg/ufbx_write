@@ -1559,7 +1559,7 @@ static bool ufbxwi_task_queue_init(ufbxwi_task_queue *tq, ufbxwi_thread_pool *tp
 	return true;
 }
 
-static ufbxwi_task_id ufbxwi_task_push(ufbxwi_task_queue *tq, const ufbxwi_task *task, void *context)
+static ufbxwi_task_id ufbxwi_task_push(ufbxwi_task_queue *tq, ufbxwi_task_fn *fn, void *user, void *context)
 {
 	ufbxwi_dev_assert(tq->enabled);
 
@@ -1572,7 +1572,8 @@ static ufbxwi_task_id ufbxwi_task_push(ufbxwi_task_queue *tq, const ufbxwi_task 
 
 	const uint32_t slot_ix = task_id % tq->num_slots;
 	ufbxwi_task_slot *slot = &tq->slots[slot_ix];
-	slot->task = *task;
+	slot->task.fn = fn;
+	slot->task.user = user;
 
 	ufbxwi_semaphore_notify(tq->thread_pool, &tq->task_sema, 1);
 
@@ -8058,6 +8059,19 @@ static bool ufbxwi_deflate_buffer(ufbxwi_save_thread_context *tc, ufbxwi_write_c
 	return true;
 }
 
+typedef struct {
+	ufbxwi_write_chunk *chunk;
+	ufbxwi_buffer_input input;
+} ufbxwi_deflate_task;
+
+static bool ufbxwi_deflate_task_fn(void *user, void *thread_ctx)
+{
+	ufbxwi_save_thread_context *tc = (ufbxwi_save_thread_context*)thread_ctx;
+	ufbxwi_deflate_task *task = (ufbxwi_deflate_task*)user;
+	ufbxwi_check(ufbxwi_deflate_buffer(tc, task->chunk, &task->input), false);
+	ufbxwi_free(tc->ator, task);
+	return true;
+}
 
 static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *tag, ufbxw_buffer_id buffer_id)
 {
@@ -8100,13 +8114,23 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 	if (encoding == 1) {
 		ufbxwi_buffer_input input = ufbxwi_get_buffer_input(&sc->buffers, buffer_id);
 
-#if 1
-		ufbxwi_write_chunk *arr_chunk = ufbxwi_write_queue_reserve_chunk(&sc->write_queue);
-		ufbxwi_deflate_buffer(&sc->main_thread_ctx, arr_chunk, &input);
-#else
-		ufbxwi_deflate_buffer(&sc->main_thread_ctx, NULL, &input);
-#endif
+		// TODO: Threshold for size
+		bool run_in_task = sc->task_queue.enabled;
 
+		if (run_in_task) {
+			ufbxwi_write_chunk *chunk = ufbxwi_write_queue_reserve_chunk(&sc->write_queue);
+			ufbxwi_check(chunk);
+
+			ufbxwi_deflate_task *task = ufbxwi_alloc_zero(&sc->thread_ator, ufbxwi_deflate_task, 1);
+			ufbxwi_check(task);
+
+			task->chunk = chunk;
+			task->input = input;
+
+			chunk->task = ufbxwi_task_push(&sc->task_queue, &ufbxwi_deflate_task_fn, task, &sc->main_thread_ctx);
+		} else {
+			ufbxwi_deflate_buffer(&sc->main_thread_ctx, NULL, &input);
+		}
 	} else {
 		if (data_size > UINT32_MAX) {
 			ufbxwi_failf(&sc->error, UFBXW_ERROR_ARRAY_TOO_BIG, "array is too big for FBX (%zu bytes, max 2^32 bytes)", data_size);

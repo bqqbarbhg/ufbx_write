@@ -38,16 +38,14 @@ struct ufbxwt_task_queue
 	ufbxwi_task_id run(F f) {
 		F *func = new F(std::move(f));
 
-		ufbxwi_task task = { };
-		task.fn = [](void *user, void *ctx) {
+		ufbxwi_task_fn *fn = [](void *user, void *ctx) {
 			F *func = (F*)user;
 			(*func)(*(ThreadContext*)ctx);
 			delete func;
 			return true;
 		};
-		task.user = func;
 
-		return ufbxwi_task_push(&tq, &task, &main_context);
+		return ufbxwi_task_push(&tq, fn, func, &main_context);
 	}
 
 	void complete(ufbxwi_task_id task_id) {
