@@ -6970,10 +6970,6 @@ static void ufbxwi_write_queue_resolve_reloc(ufbxwi_write_queue *wq, uint32_t re
 
 static ufbxwi_noinline bool ufbxwi_write_queue_layout_chunks(ufbxwi_write_queue *wq, bool wait)
 {
-	static int SERIAL;
-	++SERIAL;
-	SERIAL = SERIAL;
-
 	while (wq->chunk_layout_index < wq->chunks.count) {
 		ufbxwi_write_chunk *chunk = wq->chunks.data[wq->chunk_layout_index];
 
@@ -7028,8 +7024,9 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush_chunks(ufbxwi_write_queue *
 		if (chunk->num_unresolved_relocs == 0 && chunk->has_file_offset) {
 			ufbxwi_write_chunk_part *part = &chunk->data;
 
+			uint64_t file_offset = chunk->file_offset;
 			do {
-				bool write_ok = wq->stream.write_fn(wq->stream.user, chunk->file_offset, part->data, part->size);
+				bool write_ok = wq->stream.write_fn(wq->stream.user, file_offset, part->data, part->size);
 				if (!write_ok) {
 					ufbxwi_fail(wq->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
 					return false;
@@ -7039,6 +7036,7 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush_chunks(ufbxwi_write_queue *
 
 				// TODO(wq): Free the part (or pool it)
 
+				file_offset += part->size;
 				part = part->next;
 			} while (part);
 
@@ -7073,6 +7071,7 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, siz
 
 	ufbxwi_check(ufbxwi_list_push_copy(wq->ator, &wq->chunks, ufbxwi_write_chunk*, &prev_chunk), false);
 
+	// TODO(wq): Don't flush so eagerly
 	ufbxwi_check(ufbxwi_write_queue_flush_chunks(wq, false), false);
 
 	// Check if we can reuse the buffer of the current chunk
@@ -7086,9 +7085,8 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, siz
 	}
 
 	// TODO(wq): Pool these?
-	ufbxwi_write_chunk *new_chunk = ufbxwi_alloc(wq->ator, ufbxwi_write_chunk, 1);
+	ufbxwi_write_chunk *new_chunk = ufbxwi_alloc_zero(wq->ator, ufbxwi_write_chunk, 1);
 	ufbxwi_check(new_chunk, false);
-	memset(new_chunk, 0, sizeof(ufbxwi_write_chunk));
 
 	new_chunk->data.buffer = buffer;
 	new_chunk->data.data = buffer->pos;
@@ -7104,6 +7102,25 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, siz
 	wq->buffer_end = buffer->end;
 
 	return true;
+}
+
+static ufbxwi_noinline ufbxwi_write_chunk *ufbxwi_write_queue_reserve_chunk(ufbxwi_write_queue *wq)
+{
+	// Flush the current chunk
+	ufbxwi_check(ufbxwi_write_queue_flush(wq, 0), NULL);
+
+	// Reset the current file offset
+	ufbxwi_write_chunk *cur_chunk = wq->current_chunk;
+	cur_chunk->has_file_offset = false;
+	cur_chunk->file_offset = 0;
+
+	// Create and push an empty chunk
+	ufbxwi_write_chunk *new_chunk = ufbxwi_alloc_zero(wq->ator, ufbxwi_write_chunk, 1);
+	ufbxwi_check(new_chunk, NULL);
+
+	ufbxwi_check(ufbxwi_list_push_copy(wq->ator, &wq->chunks, ufbxwi_write_chunk*, &new_chunk), NULL);
+
+	return new_chunk;
 }
 
 static ufbxwi_noinline bool ufbxwi_write_queue_finish(ufbxwi_write_queue *wq)
@@ -8082,10 +8099,13 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 
 	if (encoding == 1) {
 		ufbxwi_buffer_input input = ufbxwi_get_buffer_input(&sc->buffers, buffer_id);
-		// ufbxwi_deflate_buffer(&sc->main_thread_ctx, sc->write_queue.current_chunk, &input);
-		ufbxwi_deflate_buffer(&sc->main_thread_ctx, NULL, &input);
 
-		ufbxwi_write_queue_flush(&sc->write_queue, 0);
+#if 1
+		ufbxwi_write_chunk *arr_chunk = ufbxwi_write_queue_reserve_chunk(&sc->write_queue);
+		ufbxwi_deflate_buffer(&sc->main_thread_ctx, arr_chunk, &input);
+#else
+		ufbxwi_deflate_buffer(&sc->main_thread_ctx, NULL, &input);
+#endif
 
 	} else {
 		if (data_size > UINT32_MAX) {

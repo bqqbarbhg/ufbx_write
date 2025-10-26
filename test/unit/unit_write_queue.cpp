@@ -108,3 +108,47 @@ UFBXWT_UNIT_TEST(write_queue_direct)
 	}
 }
 
+static void ufbxwt_chunk_write(ufbxwi_write_queue *wq, ufbxwi_write_chunk *chunk, const void *data, size_t size)
+{
+	ufbxwi_mutable_void_span span = ufbxwi_queue_write_reserve_at_least_in_chunk(wq, chunk, size);
+	memcpy(span.data, data, size);
+	ufbxwi_queue_write_commit_in_chunk(wq, chunk, size);
+}
+
+UFBXWT_UNIT_TEST(write_queue_deferred)
+{
+	ufbxwt_thread_pool tp;
+	ufbxwt_error error { tp.tp };
+	ufbxwt_allocator ator { tp.tp, error.error };
+	ufbxwt_task_queue<ufbxwt_empty_context> tq { tp.tp, ator.ator, 1, 10 };
+
+	ufbxwt_vector_stream stream;
+
+	ufbxwi_write_queue wq = { };
+	ufbxwi_write_queue_init(&wq, &ator.ator, &error.error, &tq.tq, &tq.main_context, stream.stream(), 128);
+
+	ufbxwi_queue_write(&wq, "A", 1);
+
+	ufbxwi_write_chunk *chunk_b = ufbxwi_write_queue_reserve_chunk(&wq);
+	ufbxwt_chunk_write(&wq, chunk_b, "B", 1);
+
+	ufbxwi_write_chunk *chunk_c = ufbxwi_write_queue_reserve_chunk(&wq);
+	ufbxwt_chunk_write(&wq, chunk_c, "C", 1);
+
+	ufbxwi_queue_write(&wq, "D", 1);
+
+	ufbxwi_write_chunk *chunk_ef = ufbxwi_write_queue_reserve_chunk(&wq);
+	ufbxwt_chunk_write(&wq, chunk_ef, "E", 1);
+	ufbxwt_chunk_write(&wq, chunk_ef, "F", 1);
+
+	ufbxwi_queue_write(&wq, "G", 1);
+
+	ufbxwi_write_queue_finish(&wq);
+	ufbxwi_write_queue_free(&wq);
+
+	const char ref[] = "ABCDEFG";
+	for (size_t i = 0; i < sizeof(ref) - 1; i++) {
+		ufbxwt_assert(stream.buffer[i] == ref[i]);
+	}
+}
+
