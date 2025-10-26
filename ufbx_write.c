@@ -1606,15 +1606,15 @@ static void ufbxwi_task_queue_free(ufbxwi_task_queue *tq, void *context)
 		ufbxwi_semaphore_notify(tq->thread_pool, &tq->task_sema, UINT32_MAX / 2);
 	}
 
+	if (tq->user_pool.free_fn) {
+		tq->user_pool.free_fn(tq->user_pool.user, (ufbxw_thread_pool_context)tq);
+	}
+
 	ufbxwi_for(ufbxwi_thread_context, tc, tq->thread_contexts, tq->num_thread_contexts) {
 		if (tc->thread_ctx) {
 			tq->free_thread_ctx_fn(tq->thread_ctx_user, tc->thread_ctx);
 			tc->thread_ctx = NULL;
 		}
-	}
-
-	if (tq->user_pool.free_fn) {
-		tq->user_pool.free_fn(tq->user_pool.user, (ufbxw_thread_pool_context)tq);
 	}
 }
 
