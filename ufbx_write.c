@@ -6883,6 +6883,8 @@ static ufbxwi_noinline void ufbxwi_write_queue_return_buffer(ufbxwi_write_queue 
 
 static ufbxwi_noinline void ufbxwi_write_queue_free_buffer(ufbxwi_write_queue *wq, ufbxwi_write_buffer *buffer)
 {
+	if (!buffer) return;
+
 	ufbxwi_mutex_lock_if_enabled(wq->thread_pool, &wq->buffer_mutex);
 
 	if (--buffer->refcount == 0) {
@@ -7614,7 +7616,7 @@ typedef union {
 	double data_double[UFBXWI_ASCII_LINE_MAX_SCALARS];
 } ufbxwi_line_buffer;
 
-static ufbxwi_noinline bool ufbxwi_ascii_dom_write_array_data(ufbxwi_save_thread_context *tc, ufbxwi_write_chunk *chunk, const ufbxwi_buffer_input *input, ufbxwi_buffer_type scalar_type)
+static ufbxwi_noinline bool ufbxwi_ascii_write_array_data(ufbxwi_save_thread_context *tc, ufbxwi_write_chunk *chunk, const ufbxwi_buffer_input *input, ufbxwi_buffer_type scalar_type)
 {
 	ufbxwi_buffer_type type = input->type;
 	ufbxwi_buffer_type_info type_info = ufbxwi_buffer_type_infos[type];
@@ -7687,6 +7689,21 @@ static ufbxwi_noinline bool ufbxwi_ascii_dom_write_array_data(ufbxwi_save_thread
 	return true;
 }
 
+typedef struct {
+	ufbxwi_write_chunk *chunk;
+	ufbxwi_buffer_input input;
+	ufbxwi_buffer_type scalar_type;
+} ufbxwi_ascii_array_task;
+
+static bool ufbxwi_ascii_array_task_fn(void *user, void *thread_ctx)
+{
+	ufbxwi_save_thread_context *tc = (ufbxwi_save_thread_context*)thread_ctx;
+	ufbxwi_ascii_array_task *task = (ufbxwi_ascii_array_task*)user;
+	ufbxwi_check(ufbxwi_ascii_write_array_data(tc, task->chunk, &task->input, task->scalar_type), false);
+	ufbxwi_free(tc->ator, task);
+	return true;
+}
+
 static void ufbxwi_ascii_dom_write_array(ufbxwi_save_context *sc, const char *tag, ufbxw_buffer_id buffer_id)
 {
 	ufbxwi_buffer *buffer = ufbxwi_get_buffer(&sc->buffers, buffer_id);
@@ -7715,8 +7732,26 @@ static void ufbxwi_ascii_dom_write_array(ufbxwi_save_context *sc, const char *ta
 		scalar_type = UFBXWI_BUFFER_TYPE_INT;
 	}
 
+	// TODO: Threshold for size
+	bool run_in_task = sc->task_queue.enabled;
+
 	ufbxwi_buffer_input input = ufbxwi_get_buffer_input(&sc->buffers, buffer_id);
-	ufbxwi_ascii_dom_write_array_data(&sc->main_thread_ctx, NULL, &input, scalar_type);
+
+	if (run_in_task) {
+		ufbxwi_write_chunk *chunk = ufbxwi_write_queue_reserve_chunk(&sc->write_queue);
+		ufbxwi_check(chunk);
+
+		ufbxwi_ascii_array_task *task = ufbxwi_alloc_zero(&sc->thread_ator, ufbxwi_ascii_array_task, 1);
+		ufbxwi_check(task);
+
+		task->chunk = chunk;
+		task->input = input;
+		task->scalar_type = scalar_type;
+
+		chunk->task = ufbxwi_task_push(&sc->task_queue, &ufbxwi_ascii_array_task_fn, task, &sc->main_thread_ctx);
+	} else {
+		ufbxwi_ascii_write_array_data(&sc->main_thread_ctx, NULL, &input, scalar_type);
+	}
 
 	sc->depth--;
 
