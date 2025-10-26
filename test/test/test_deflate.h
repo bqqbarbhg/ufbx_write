@@ -76,48 +76,65 @@ static void ufbxwt_deflate_test(const char *name, ufbxw_scene *scene, const ufbx
 
 	static const ufbxw_save_format formats[] = { UFBXW_SAVE_FORMAT_ASCII, UFBXW_SAVE_FORMAT_BINARY };
 
-	for (int format_ix = 0; format_ix < ufbxwt_arraycount(formats); format_ix++) {
-		for (int deflate_ix = 0; deflate_ix < UFBXWT_DEFLATE_IMPL_COUNT; deflate_ix++) {
-			for (int version_ix = 0; version_ix < ufbxwt_arraycount(versions); version_ix++) {
+	for (int thread_ix = 0; thread_ix < UFBXWT_THREAD_IMPL_COUNT; thread_ix++) {
+		for (int format_ix = 0; format_ix < ufbxwt_arraycount(formats); format_ix++) {
+			for (int deflate_ix = 0; deflate_ix < UFBXWT_DEFLATE_IMPL_COUNT; deflate_ix++) {
+				for (int version_ix = 0; version_ix < ufbxwt_arraycount(versions); version_ix++) {
 
-				ufbxw_save_opts save_opts = { 0 };
-				if (opts) {
-					save_opts = *opts;
+					ufbxw_save_opts save_opts = { 0 };
+					if (opts) {
+						save_opts = *opts;
+					}
+
+					save_opts.version = versions[version_ix];
+					save_opts.format = formats[format_ix];
+
+					save_opts.threaded_min_deflate_bytes = 1;
+
+					ufbxwt_deflate_impl deflate_impl = (ufbxwt_deflate_impl)deflate_ix;
+					ufbxwt_thread_impl thread_impl = (ufbxwt_thread_impl)thread_ix;
+					const char *format = save_opts.format == UFBXW_SAVE_FORMAT_ASCII ? "ascii" : "binary";
+
+					if (g_file_version && save_opts.version != g_file_version) continue;
+					if (g_file_format && strcmp(format, g_file_format) != 0) continue;
+
+					if (save_opts.format == UFBXW_SAVE_FORMAT_ASCII && deflate_impl != UFBXWT_DEFLATE_IMPL_NONE) {
+						continue;
+					}
+
+					if (thread_impl != UFBXWT_THREAD_IMPL_NONE && deflate_impl == UFBXWT_DEFLATE_IMPL_NONE) {
+						continue;
+					}
+
+					if (!ufbxwt_deflate_setup(&save_opts.deflate, deflate_impl)) {
+						continue;
+					}
+
+					if (!ufbxwt_thread_setup(&save_opts.thread_sync, &save_opts.thread_pool, thread_impl)) {
+						continue;
+					}
+
+					const char *deflate = ufbxwt_deflate_impl_name(deflate_impl);
+					const char *thread = ufbxwt_thread_impl_name(thread_impl);
+					ufbxwt_logf("format: %s, version: %u, deflate: %s, thread: %s", format, save_opts.version, deflate, thread);
+
+					memset(result, 0, result_size);
+
+					ufbxw_error save_error;
+					bool save_ok = ufbxw_save_stream(scene, &ws, &save_opts, &save_error);
+					if (save_error.type != UFBXW_ERROR_NONE) {
+						ufbxwt_log_error(&save_error);
+					}
+					ufbxwt_assert(save_ok);
+
+					ufbx_error load_error;
+					ufbx_scene *loaded_scene = ufbx_load_memory(result, result_size, NULL, &load_error);
+					if (load_error.type != UFBX_ERROR_NONE) {
+						ufbxwt_log_uerror(&load_error);
+					}
+					ufbxwt_assert(loaded_scene);
+					ufbx_free_scene(loaded_scene);
 				}
-
-				save_opts.version = versions[version_ix];
-				save_opts.format = formats[format_ix];
-
-				ufbxwt_deflate_impl deflate_impl = (ufbxwt_deflate_impl)deflate_ix;
-				const char *format = save_opts.format == UFBXW_SAVE_FORMAT_ASCII ? "ascii" : "binary";
-
-				if (save_opts.format == UFBXW_SAVE_FORMAT_ASCII && deflate_impl != UFBXWT_DEFLATE_IMPL_NONE) {
-					continue;
-				}
-
-				if (!ufbxwt_deflate_setup(&save_opts.deflate, deflate_impl)) {
-					continue;
-				}
-
-				const char *deflate = ufbxwt_deflate_impl_name(deflate_impl);
-				ufbxwt_logf("format: %s, version: %u, deflate: %s", format, save_opts.version, deflate);
-
-				memset(result, 0, result_size);
-
-				ufbxw_error save_error;
-				bool save_ok = ufbxw_save_stream(scene, &ws, &save_opts, &save_error);
-				if (save_error.type != UFBXW_ERROR_NONE) {
-					ufbxwt_log_error(&save_error);
-				}
-				ufbxwt_assert(save_ok);
-
-				ufbx_error load_error;
-				ufbx_scene *loaded_scene = ufbx_load_memory(result, result_size, NULL, &load_error);
-				if (load_error.type != UFBX_ERROR_NONE) {
-					ufbxwt_log_uerror(&load_error);
-				}
-				ufbxwt_assert(loaded_scene);
-				ufbx_free_scene(loaded_scene);
 			}
 		}
 	}

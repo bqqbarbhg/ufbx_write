@@ -12,24 +12,10 @@ static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr
 	ufbxwt_assert_fail_imp(file, line, expr);
 }
 
-#include "../ufbx_write.h"
-#include "ufbx/ufbx.h"
+#include "../../ufbx_write.h"
+#include "../ufbx/ufbx.h"
 
-#ifdef UFBXWT_HAS_LIBDEFLATE
-	#include "../extra/ufbxw_libdeflate.h"
-#endif
-
-#ifdef UFBXWT_HAS_ZLIB
-	#include "../extra/ufbxw_zlib.h"
-#endif
-
-#ifdef UFBXWT_HAS_FMTLIB
-	#include "../extra/ufbxw_fmtlib.h"
-#endif
-
-#ifdef UFBXWT_HAS_TO_CHARS
-	#include "../extra/ufbxw_to_chars.h"
-#endif
+#include "../util/ufbxwt_util.h"
 
 #define ufbxwt_arraycount(arr) (sizeof(arr) / sizeof(*(arr)))
 
@@ -111,6 +97,9 @@ uint32_t g_log_pos;
 
 char g_hint[8*1024];
 
+uint32_t g_file_version;
+const char *g_file_format;
+
 void ufbxwt_logf(const char *fmt, ...)
 {
 	va_list args;
@@ -177,28 +166,6 @@ void ufbxwt_log_error(const ufbxw_error *err)
 }
 
 #include "testing_utils.h"
-
-typedef enum {
-	UFBXWT_DEFLATE_IMPL_NONE,
-	UFBXWT_DEFLATE_IMPL_LIBDEFLATE,
-	UFBXWT_DEFLATE_IMPL_ZLIB,
-
-	UFBXWT_DEFLATE_IMPL_COUNT,
-} ufbxwt_deflate_impl;
-
-typedef enum {
-	UFBXWT_ASCII_FORMAT_IMPL_DEFAULT,
-	UFBXWT_ASCII_FORMAT_IMPL_FMTLIB,
-	UFBXWT_ASCII_FORMAT_IMPL_TO_CHARS,
-
-	UFBXWT_ASCII_FORMAT_IMPL_COUNT,
-} ufbxwt_ascii_format_impl;
-
-bool ufbxwt_deflate_setup(ufbxw_deflate *deflate, ufbxwt_deflate_impl impl);
-const char *ufbxwt_deflate_impl_name(ufbxwt_deflate_impl impl);
-
-bool ufbxwt_ascii_format_setup(ufbxw_ascii_formatter *formatter, ufbxwt_ascii_format_impl impl);
-const char *ufbxwt_ascii_format_name(ufbxwt_ascii_format_impl impl);
 
 bool ufbxwt_check_scene_error_imp(ufbxw_scene *scene, const char *file, int line);
 void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, ufbxwt_diff_error *err), void (*check_fn)(ufbx_scene *scene, ufbxwt_diff_error *err), const ufbxw_scene_opts *user_opts, uint32_t flags);
@@ -290,8 +257,6 @@ void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr)
 
 bool g_fuzz = false;
 bool g_allow_scene_error = false;
-uint32_t g_file_version;
-const char *g_file_format;
 
 bool ufbxwt_check_scene_error_imp(ufbxw_scene *scene, const char *file, int line)
 {
@@ -317,80 +282,6 @@ static void ufbxwt_error_callback(void *user, const ufbxw_error *error)
 {
 	ufbxwt_log_error(error);
 	ufbxwt_assert(0 && "error");
-}
-
-bool ufbxwt_deflate_setup(ufbxw_deflate *deflate, ufbxwt_deflate_impl impl)
-{
-	switch (impl) {
-	case UFBXWT_DEFLATE_IMPL_NONE:
-		return true;
-
-	case UFBXWT_DEFLATE_IMPL_LIBDEFLATE:
-		#if UFBXWT_HAS_LIBDEFLATE
-			ufbxw_libdeflate_setup(deflate, NULL);
-			return true;
-		#endif
-		return false;
-
-	case UFBXWT_DEFLATE_IMPL_ZLIB:
-		#if UFBXWT_HAS_LIBDEFLATE
-			ufbxw_zlib_setup(deflate, NULL);
-			return true;
-		#endif
-		return false;
-
-	default:
-		ufbxwt_assert(false);
-		break;
-	}
-	return false;
-}
-
-const char *ufbxwt_deflate_impl_name(ufbxwt_deflate_impl impl)
-{
-	switch (impl) {
-	case UFBXWT_DEFLATE_IMPL_NONE: return "none";
-	case UFBXWT_DEFLATE_IMPL_LIBDEFLATE: return "libdeflate";
-	case UFBXWT_DEFLATE_IMPL_ZLIB: return "zlib";
-	default: return "";
-	}
-}
-
-bool ufbxwt_ascii_format_setup(ufbxw_ascii_formatter *formatter, ufbxwt_ascii_format_impl impl)
-{
-	switch (impl) {
-	case UFBXWT_ASCII_FORMAT_IMPL_DEFAULT:
-		return true;
-
-	case UFBXWT_ASCII_FORMAT_IMPL_FMTLIB:
-		#if UFBXWT_HAS_FMTLIB
-			ufbxw_fmtlib_setup(formatter);
-			return true;
-		#endif
-		return false;
-
-	case UFBXWT_ASCII_FORMAT_IMPL_TO_CHARS:
-		#if UFBXWT_HAS_TO_CHARS
-			ufbxw_to_chars_setup(formatter);
-			return true;
-		#endif
-		return false;
-
-	default:
-		ufbxwt_assert(false);
-		break;
-	}
-	return false;
-}
-
-const char *ufbxwt_ascii_format_name(ufbxwt_ascii_format_impl impl)
-{
-	switch (impl) {
-	case UFBXWT_ASCII_FORMAT_IMPL_DEFAULT: return "default";
-	case UFBXWT_ASCII_FORMAT_IMPL_FMTLIB: return "fmtlib";
-	case UFBXWT_ASCII_FORMAT_IMPL_TO_CHARS: return "to_chars";
-	default: return "";
-	}
 }
 
 void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, ufbxwt_diff_error *err), void (*check_fn)(ufbx_scene *scene, ufbxwt_diff_error *err), const ufbxw_scene_opts *user_opts, uint32_t flags)

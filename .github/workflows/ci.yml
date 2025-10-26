@@ -24,7 +24,10 @@ jobs:
       - name: Compile tests
         run: cmake --build build-test -j 4
       - name: Run tests
-        run: build-test/ufbxw_test --verbose
+        run: build-test/test/ufbxw_test --verbose
+      - name: Run unit tests
+        run: build-test/unit/ufbxw_unit --verbose
+
   ci_cpp:
     runs-on: ubuntu-latest
     steps:
