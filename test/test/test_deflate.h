@@ -89,6 +89,8 @@ static void ufbxwt_deflate_test(const char *name, ufbxw_scene *scene, const ufbx
 					save_opts.version = versions[version_ix];
 					save_opts.format = formats[format_ix];
 
+					save_opts.threaded_min_deflate_bytes = 1;
+
 					ufbxwt_deflate_impl deflate_impl = (ufbxwt_deflate_impl)deflate_ix;
 					ufbxwt_thread_impl thread_impl = (ufbxwt_thread_impl)thread_ix;
 					const char *format = save_opts.format == UFBXW_SAVE_FORMAT_ASCII ? "ascii" : "binary";

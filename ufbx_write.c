@@ -7732,12 +7732,23 @@ static void ufbxwi_ascii_dom_write_array(ufbxwi_save_context *sc, const char *ta
 		scalar_type = UFBXWI_BUFFER_TYPE_INT;
 	}
 
-	// TODO: Threshold for size
-	bool run_in_task = sc->task_queue.enabled;
-
 	ufbxwi_buffer_input input = ufbxwi_get_buffer_input(&sc->buffers, buffer_id);
 
-	if (run_in_task) {
+	size_t thread_threshold = 0;
+	switch (type_info.scalar_type) {
+	case UFBXWI_BUFFER_TYPE_INT:
+	case UFBXWI_BUFFER_TYPE_LONG:
+		thread_threshold = sc->opts.threaded_min_ascii_ints;
+		break;
+	case UFBXWI_BUFFER_TYPE_REAL:
+	case UFBXWI_BUFFER_TYPE_FLOAT:
+		thread_threshold = sc->opts.threaded_min_ascii_floats;
+		break;
+	default:
+		ufbxwi_unreachable("bad scalar type");
+	}
+
+	if (sc->task_queue.enabled && input.count >= thread_threshold) {
 		ufbxwi_write_chunk *chunk = ufbxwi_write_queue_reserve_chunk(&sc->write_queue);
 		ufbxwi_check(chunk);
 
@@ -8108,10 +8119,7 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 	if (encoding == 1) {
 		ufbxwi_buffer_input input = ufbxwi_get_buffer_input(&sc->buffers, buffer_id);
 
-		// TODO: Threshold for size
-		bool run_in_task = sc->task_queue.enabled;
-
-		if (run_in_task) {
+		if (sc->task_queue.enabled && data_size >= sc->opts.threaded_min_deflate_bytes) {
 			ufbxwi_write_chunk *chunk = ufbxwi_write_queue_reserve_chunk(&sc->write_queue);
 			ufbxwi_check(chunk);
 
@@ -9528,6 +9536,17 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 	}
 	if (!sc->opts.ascii_formatter.format_double_fn) {
 		sc->opts.ascii_formatter.format_double_fn = &ufbxwi_default_ascii_format_double;
+	}
+
+	// TODO: Determine these somehow
+	if (sc->opts.threaded_min_deflate_bytes == 0) {
+		sc->opts.threaded_min_deflate_bytes = 512;
+	}
+	if (sc->opts.threaded_min_ascii_floats == 0) {
+		sc->opts.threaded_min_ascii_floats = 128;
+	}
+	if (sc->opts.threaded_min_ascii_ints == 0) {
+		sc->opts.threaded_min_ascii_ints = 256;
 	}
 
 	// TODO(threads): Better checking

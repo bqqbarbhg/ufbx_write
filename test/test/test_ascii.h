@@ -30,6 +30,10 @@ static void ufbxwt_ascii_format_test(const char *name, ufbxw_scene *scene, const
 
 					save_opts.version = 7500;
 					save_opts.format = formats[format_ix];
+
+					save_opts.threaded_min_ascii_floats = 1;
+					save_opts.threaded_min_ascii_ints = 1;
+
 					const char *float_name = "";
 					switch (float_ix) {
 					case 0:

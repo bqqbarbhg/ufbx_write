@@ -1210,6 +1210,11 @@ typedef struct ufbxw_save_opts {
 	// Buffer size to use for writing streaming output.
 	size_t buffer_size;
 
+	// Limits for threading
+	size_t threaded_min_deflate_bytes;
+	size_t threaded_min_ascii_floats;
+	size_t threaded_min_ascii_ints;
+
 	uint32_t _end_zero;
 } ufbxw_save_opts;
 
