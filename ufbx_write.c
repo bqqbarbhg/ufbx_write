@@ -3178,6 +3178,92 @@ static void ufbxwi_refer_buffers(ufbxwi_buffer_pool *dst, const ufbxwi_buffer_po
 	}
 }
 
+typedef struct {
+	ufbxwi_buffer_type type;
+	size_t count;
+
+	const void *data;
+	ufbxwi_stream_fn stream_fn;
+	void *stream_user;
+
+} ufbxwi_buffer_input;
+
+static ufbxwi_buffer_input ufbxwi_get_buffer_input(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
+{
+	ufbxwi_buffer_input result = { UFBXWI_BUFFER_TYPE_NONE };
+
+	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
+	ufbxwi_check(buffer, result);
+
+	result.type = ufbxwi_buffer_id_type(id);
+	result.count = buffer->count;
+	result.data = ufbxwi_buffer_get_data(pool, id);
+
+	if (buffer->state == UFBXWI_BUFFER_STATE_STREAM) {
+		result.stream_fn = buffer->data.stream.fn;
+		result.stream_user = buffer->data.stream.user;
+	}
+	return result;
+}
+
+static size_t ufbxwi_buffer_input_read_to(const ufbxwi_buffer_input *input, void *dst, size_t dst_count, size_t offset)
+{
+	ufbxwi_buffer_type type = input->type;
+	size_t type_size = ufbxwi_buffer_type_infos[type].size;
+	if (dst_count == 0) return 0;
+
+	ufbxw_assert(offset + dst_count <= input->count);
+
+	if (input->data) {
+		memcpy(dst, (char*)input->data + offset * type_size, dst_count * type_size);
+		return dst_count;
+	}
+
+	for (size_t off = 0; off < dst_count; ) {
+		void *dst_off = (char*)dst + off * type_size;
+		size_t off_count = dst_count - off;
+		size_t num_read = ufbxwi_buffer_stream_read(dst_off, off_count, offset + off, type, input->stream_fn, input->stream_user);
+		if (num_read == 0 || num_read == SIZE_MAX) return off;
+		ufbxw_assert(num_read <= dst_count);
+		off += num_read;
+	}
+
+	return dst_count;
+}
+
+static ufbxwi_void_span ufbxwi_buffer_input_read(const ufbxwi_buffer_input *input, void *temp, size_t temp_size, size_t offset)
+{
+	ufbxwi_buffer_type type = input->type;
+	size_t type_size = ufbxwi_buffer_type_infos[type].size;
+
+	ufbxw_assert(offset <= input->count);
+
+	ufbxwi_void_span result = { NULL, 0 };
+
+	ufbxw_assert(temp_size >= type_size);
+	size_t temp_count = temp_size / type_size;
+
+	if (input->data) {
+		result.data = (char*)input->data + offset * type_size;
+		result.count = input->count - offset;
+	} else {
+		size_t off = 0;
+		while (off < temp_count) {
+			void *dst_off = (char*)temp + off * type_size;
+			size_t dst_count = temp_count - off;
+			size_t num_read = ufbxwi_buffer_stream_read(dst_off, dst_count, offset + off, type, input->stream_fn, input->stream_user);
+			// TODO: Report error
+			if (num_read == 0 || num_read == SIZE_MAX) break;
+			ufbxw_assert(num_read <= dst_count);
+			off += num_read;
+		}
+		result.data = temp;
+		result.count = off;
+	}
+
+	return result;
+}
+
 static ufbxwi_forceinline ufbxw_int_buffer ufbxwi_to_user_int_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id) { ufbxw_int_buffer b = { ufbxwi_to_user_buffer(pool, id) }; return b; }
 static ufbxwi_forceinline ufbxw_long_buffer ufbxwi_to_user_long_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id) { ufbxw_long_buffer b = { ufbxwi_to_user_buffer(pool, id) }; return b; }
 static ufbxwi_forceinline ufbxw_real_buffer ufbxwi_to_user_real_buffer(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id) { ufbxw_real_buffer b = { ufbxwi_to_user_buffer(pool, id) }; return b; }
@@ -7528,9 +7614,9 @@ typedef union {
 	double data_double[UFBXWI_ASCII_LINE_MAX_SCALARS];
 } ufbxwi_line_buffer;
 
-static ufbxwi_noinline void ufbxwi_ascii_dom_write_array_data(ufbxwi_save_context *sc, ufbxwi_buffer *buffer, ufbxwi_buffer_type scalar_type)
+static ufbxwi_noinline bool ufbxwi_ascii_dom_write_array_data(ufbxwi_save_thread_context *tc, ufbxwi_write_chunk *chunk, const ufbxwi_buffer_input *input, ufbxwi_buffer_type scalar_type)
 {
-	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer->id);
+	ufbxwi_buffer_type type = input->type;
 	ufbxwi_buffer_type_info type_info = ufbxwi_buffer_type_infos[type];
 
 	ufbxwi_line_buffer line_temp_buffer;
@@ -7540,13 +7626,16 @@ static ufbxwi_noinline void ufbxwi_ascii_dom_write_array_data(ufbxwi_save_contex
 
 	size_t scalar_size = ufbxwi_buffer_type_infos[scalar_type].size;
 
-	size_t scalars_left = buffer->count * type_info.components;
+	size_t scalars_left = input->count * type_info.components;
+
+	ufbxw_ascii_formatter formatter = tc->opts->ascii_formatter;
+	ufbxw_ascii_float_format float_format = tc->opts->ascii_float_format;
 
 	size_t offset = 0;
-	while (offset < buffer->count) {
-		size_t max_read_size = (buffer->count - offset) * type_info.size;
+	while (offset < input->count) {
+		size_t max_read_size = (input->count - offset) * type_info.size;
 		size_t read_size = ufbxwi_min_sz(max_read_size, line_elems);
-		ufbxwi_void_span span = ufbxwi_buffer_read(&sc->buffers, buffer->id, &line_temp_buffer, read_size, offset);
+		ufbxwi_void_span span = ufbxwi_buffer_input_read(input, &line_temp_buffer, read_size, offset);
 		size_t span_scalars = span.count * type_info.components;
 
 		for (size_t begin = 0; begin < span_scalars; ) {
@@ -7554,31 +7643,31 @@ static ufbxwi_noinline void ufbxwi_ascii_dom_write_array_data(ufbxwi_save_contex
 			const void *src = (const char*)span.data + begin * scalar_size;
 
 			size_t dst_size = src_count * 28 + 1;
-			ufbxwi_mutable_void_span dst_span = ufbxwi_write_reserve_at_least(sc, dst_size);
+			ufbxwi_mutable_void_span dst_span = ufbxwi_queue_write_reserve_at_least_in_chunk(tc->write_queue, chunk, dst_size);
 			char *dst = (char*)dst_span.data;
-			ufbxwi_check(dst);
+			ufbxwi_check(dst, false);
 
 			size_t result_length = 0;
 			switch (scalar_type) {
 			case UFBXWI_BUFFER_TYPE_INT:
-				result_length = sc->opts.ascii_formatter.format_int_fn(sc->opts.ascii_formatter.user, dst, dst_size, (const int32_t*)src, src_count);
+				result_length = formatter.format_int_fn(formatter.user, dst, dst_size, (const int32_t*)src, src_count);
 				break;
 			case UFBXWI_BUFFER_TYPE_LONG:
-				result_length = sc->opts.ascii_formatter.format_long_fn(sc->opts.ascii_formatter.user, dst, dst_size, (const int64_t*)src, src_count);
+				result_length = formatter.format_long_fn(formatter.user, dst, dst_size, (const int64_t*)src, src_count);
 				break;
 			case UFBXWI_BUFFER_TYPE_FLOAT:
-				result_length = sc->opts.ascii_formatter.format_float_fn(sc->opts.ascii_formatter.user, dst, dst_size, (const float*)src, src_count, sc->opts.ascii_float_format);
+				result_length = formatter.format_float_fn(formatter.user, dst, dst_size, (const float*)src, src_count, float_format);
 				break;
 			case UFBXWI_BUFFER_TYPE_REAL: // TODO: real=float
-				result_length = sc->opts.ascii_formatter.format_double_fn(sc->opts.ascii_formatter.user, dst, dst_size, (const double*)src, src_count, sc->opts.ascii_float_format);
+				result_length = formatter.format_double_fn(formatter.user, dst, dst_size, (const double*)src, src_count, float_format);
 				break;
 			default:
 				ufbxwi_unreachable("bad scalar type");
 			}
 
 			if (result_length == 0 || result_length == SIZE_MAX) {
-				ufbxwi_fail(&sc->error, UFBXW_ERROR_ASCII_FORMAT, "failed to format ASCII numbers");
-				return;
+				ufbxwi_fail(tc->error, UFBXW_ERROR_ASCII_FORMAT, "failed to format ASCII numbers");
+				return false;
 			}
 
 			scalars_left -= src_count;
@@ -7589,11 +7678,13 @@ static ufbxwi_noinline void ufbxwi_ascii_dom_write_array_data(ufbxwi_save_contex
 			} else {
 				dst[result_length++] = '\n';
 			}
-			ufbxwi_write_commit(sc, result_length);
+			ufbxwi_queue_write_commit_in_chunk(tc->write_queue, chunk, result_length);
 		}
 
 		offset += span.count;
 	}
+
+	return true;
 }
 
 static void ufbxwi_ascii_dom_write_array(ufbxwi_save_context *sc, const char *tag, ufbxw_buffer_id buffer_id)
@@ -7624,7 +7715,8 @@ static void ufbxwi_ascii_dom_write_array(ufbxwi_save_context *sc, const char *ta
 		scalar_type = UFBXWI_BUFFER_TYPE_INT;
 	}
 
-	ufbxwi_ascii_dom_write_array_data(sc, buffer, scalar_type);
+	ufbxwi_buffer_input input = ufbxwi_get_buffer_input(&sc->buffers, buffer_id);
+	ufbxwi_ascii_dom_write_array_data(&sc->main_thread_ctx, NULL, &input, scalar_type);
 
 	sc->depth--;
 
@@ -7798,59 +7890,6 @@ static ufbxw_deflate_advance_result ufbxwi_deflate_advance(ufbxwi_save_thread_co
 	}
 
 	return result;
-}
-
-typedef struct {
-	ufbxwi_buffer_type type;
-	size_t count;
-
-	const void *data;
-	ufbxwi_stream_fn stream_fn;
-	void *stream_user;
-
-} ufbxwi_buffer_input;
-
-static ufbxwi_buffer_input ufbxwi_get_buffer_input(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
-{
-	ufbxwi_buffer_input result = { UFBXWI_BUFFER_TYPE_NONE };
-
-	ufbxwi_buffer *buffer = ufbxwi_get_buffer(pool, id);
-	ufbxwi_check(buffer, result);
-
-	result.type = ufbxwi_buffer_id_type(id);
-	result.count = buffer->count;
-	result.data = ufbxwi_buffer_get_data(pool, id);
-
-	if (buffer->state == UFBXWI_BUFFER_STATE_STREAM) {
-		result.stream_fn = buffer->data.stream.fn;
-		result.stream_user = buffer->data.stream.user;
-	}
-	return result;
-}
-
-static size_t ufbxwi_buffer_input_read_to(const ufbxwi_buffer_input *input, void *dst, size_t dst_count, size_t offset)
-{
-	ufbxwi_buffer_type type = input->type;
-	size_t type_size = ufbxwi_buffer_type_infos[type].size;
-	if (dst_count == 0) return 0;
-
-	ufbxw_assert(offset + dst_count <= input->count);
-
-	if (input->data) {
-		memcpy(dst, (char*)input->data + offset * type_size, dst_count * type_size);
-		return dst_count;
-	}
-
-	for (size_t off = 0; off < dst_count; ) {
-		void *dst_off = (char*)dst + off * type_size;
-		size_t off_count = dst_count - off;
-		size_t num_read = ufbxwi_buffer_stream_read(dst_off, off_count, offset + off, type, input->stream_fn, input->stream_user);
-		if (num_read == 0 || num_read == SIZE_MAX) return off;
-		ufbxw_assert(num_read <= dst_count);
-		off += num_read;
-	}
-
-	return dst_count;
 }
 
 static bool ufbxwi_deflate_init(ufbxwi_save_thread_context *tc)
