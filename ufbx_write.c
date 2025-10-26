@@ -3190,91 +3190,6 @@ typedef struct {
 	const void *pos, *end;
 } ufbxwi_void_iterator;
 
-typedef struct {
-	const int32_t *pos, *end;
-} ufbxwi_int_interator;
-
-static ufbxwi_noinline bool ufbxwi_start_stream(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
-{
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(pool, id);
-	if (!buf) return false;
-
-	if (buf->state != UFBXWI_BUFFER_STATE_STREAM) {
-		switch (buf->state) {
-		case UFBXWI_BUFFER_STATE_NONE:
-			break;
-		case UFBXWI_BUFFER_STATE_OWNED:
-			buf->stream_data = buf->data.owned.data;
-			break;
-		case UFBXWI_BUFFER_STATE_EXTERNAL:
-			buf->stream_data = (void*)buf->data.external.data;
-			break;
-		case UFBXWI_BUFFER_STATE_STREAM:
-			ufbxwi_unreachable("not a stream");
-			break;
-		}
-
-		buf->stream_count = (uint32_t)buf->count;
-		return true;
-	}
-
-	ufbxw_assert(!buf->stream_data);
-
-	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(id);
-	size_t type_size = ufbxwi_buffer_type_infos[type].size;
-	size_t buffer_size = 16 * 1024;
-	uint32_t capacity = (uint32_t)(buffer_size / type_size);
-
-	// TODO: Pool these
-	void *data = ufbxwi_alloc_size(pool->ator, type_size, capacity, NULL);
-	ufbxwi_check(data, false);
-
-	buf->stream_data = data;
-	buf->stream_capacity = capacity;
-	buf->stream_count = 0;
-	return true;
-}
-
-static ufbxwi_noinline ufbxwi_void_iterator ufbxwi_advance_stream_imp(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id, const void *pos)
-{
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(pool, id);
-	ufbxwi_void_iterator it = { NULL, 0 };
-	if (!buf) return it;
-
-	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(id);
-	size_t type_size = ufbxwi_buffer_type_infos[type].size;
-	char *stream_data = (char*)buf->stream_data;
-
-	if (pos) {
-		size_t read_offset = ufbxwi_to_size((char*)pos - stream_data);
-		ufbxw_assert(read_offset % type_size == 0);
-		size_t read_count = read_offset / type_size;
-		ufbxw_assert(read_count >= buf->stream_read_count && read_count <= buf->stream_count);
-		buf->stream_read_count = (uint32_t)read_count;
-	}
-
-	if (buf->state == UFBXWI_BUFFER_STATE_STREAM && buf->stream_read_count == buf->stream_count) {
-		buf->stream_offset += buf->stream_read_count;
-
-		size_t to_read = ufbxwi_min_sz(buf->stream_capacity, buf->count - buf->stream_offset);
-		size_t num_read = ufbxwi_buffer_read_to(pool, id, buf->stream_data, to_read, buf->stream_offset);
-		buf->stream_read_count = 0;
-		buf->stream_count = (uint32_t)num_read;
-	}
-
-	it.pos = stream_data + buf->stream_read_count * type_size;
-	it.end = stream_data + buf->stream_count * type_size;
-	return it;
-}
-
-#define ufbxwi_advance_stream(m_pool, m_id, m_iterator) do { \
-		ufbxwi_void_iterator mi_it = ufbxwi_advance_stream_imp((m_pool), (m_id), (m_iterator).pos); \
-		(m_iterator).pos = mi_it.pos; \
-		(m_iterator).end = mi_it.end; \
-	} while(0)
-
-#define ufbxwi_commit_stream(m_pool, m_id, m_iterator) ufbxwi_advance_stream_imp((m_pool), (m_id), (m_iterator).pos)
-
 #endif
 
 // -- Prop types
@@ -7921,6 +7836,11 @@ static size_t ufbxwi_buffer_input_read_to(const ufbxwi_buffer_input *input, void
 
 	ufbxw_assert(offset + dst_count <= input->count);
 
+	if (input->data) {
+		memcpy(dst, (char*)input->data + offset * type_size, dst_count * type_size);
+		return dst_count;
+	}
+
 	for (size_t off = 0; off < dst_count; ) {
 		void *dst_off = (char*)dst + off * type_size;
 		size_t off_count = dst_count - off;
@@ -8552,9 +8472,14 @@ static bool ufbxwi_less_mesh_attribute_ptr_set(void *user, const void *va, const
 }
 
 typedef struct {
-	ufbxwi_buffer_pool *buffers;
-	ufbxw_buffer_id indices;
-	ufbxw_buffer_id face_offsets;
+	ufbxwi_buffer_input indices;
+	ufbxwi_buffer_input face_offsets;
+
+	uint32_t face_offset_tmp_pos;
+	uint32_t face_offset_tmp_length;
+	uint32_t face_offset_buffer_offset;
+
+	int32_t face_offset_tmp[64];
 } ufbxwi_polygon_vertex_index_stream;
 
 static void ufbxwi_deleter_free(void *user, void *data)
@@ -8567,27 +8492,33 @@ static size_t ufbxwi_stream_polygon_vertex_index(void *user, int32_t *dst, size_
 {
 	ufbxwi_polygon_vertex_index_stream *stream = (ufbxwi_polygon_vertex_index_stream*)user;
 
-	size_t num_read = ufbxwi_buffer_read_to(stream->buffers, stream->indices, dst, dst_size, offset);
+	size_t num_read = ufbxwi_buffer_input_read_to(&stream->indices, dst, dst_size, offset);
 	int32_t min_index = (int32_t)offset;
 	int32_t max_index = (int32_t)(offset + num_read);
 
-	ufbxwi_int_interator face_offsets = { 0 };
 	for (;;) {
-		if (face_offsets.pos == face_offsets.end) {
-			ufbxwi_advance_stream(stream->buffers, stream->face_offsets, face_offsets);
-			if (face_offsets.pos == face_offsets.end) break;
+		if (stream->face_offset_tmp_pos == stream->face_offset_tmp_length) {
+			const size_t left = stream->face_offsets.count - stream->face_offset_buffer_offset;
+			if (left == 0) break;
+
+			const size_t to_read = ufbxwi_min_sz(left, ufbxwi_arraycount(stream->face_offset_tmp));
+			size_t read_count = ufbxwi_buffer_input_read_to(&stream->face_offsets, &stream->face_offset_tmp, to_read, stream->face_offset_buffer_offset);
+			// TODO: Failure
+			ufbxw_assert(read_count == to_read);
+
+			stream->face_offset_buffer_offset += read_count;
+			stream->face_offset_tmp_pos = 0;
+			stream->face_offset_tmp_length = read_count;
 		}
 
-		int32_t ix = *face_offsets.pos - 1;
+		int32_t ix = stream->face_offset_tmp[stream->face_offset_tmp_pos] - 1;
 		if (ix >= max_index) break;
-		face_offsets.pos++;
+		stream->face_offset_tmp_pos++;
 
 		if (ix >= 0) {
 			dst[ix - min_index] = ~dst[ix - min_index];
 		}
 	}
-
-	ufbxwi_commit_stream(stream->buffers, stream->face_offsets, face_offsets);
 
 	return num_read;
 }
@@ -8598,13 +8529,10 @@ static ufbxw_buffer_id ufbxwi_create_polygon_vertex_index_stream(ufbxwi_buffer_p
 	ufbxwi_check(stream, 0);
 	memset(stream, 0, sizeof(ufbxwi_polygon_vertex_index_stream));
 
-	stream->buffers = buffers;
-	stream->indices = indices.id;
-	stream->face_offsets = face_offsets.id;
+	stream->indices = ufbxwi_get_buffer_input(buffers, indices.id);
+	stream->face_offsets = ufbxwi_get_buffer_input(buffers, face_offsets.id);
 
-	size_t index_count = ufbxwi_get_buffer_size(buffers, indices.id);
-
-	ufbxwi_start_stream(buffers, face_offsets.id);
+	size_t index_count = stream->indices.count;
 
 	ufbxwi_stream_fn stream_fn;
 	stream_fn.int_fn = &ufbxwi_stream_polygon_vertex_index;

@@ -31,6 +31,10 @@ static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr
 	#include "../../extra/ufbxw_to_chars.h"
 #endif
 
+#ifdef UFBXWT_HAS_CPP_THREADS
+	#include "../../extra/ufbxw_cpp_threads.h"
+#endif
+
 #define ufbxwt_arraycount(arr) (sizeof(arr) / sizeof(*(arr)))
 
 // -- Thread local
@@ -197,11 +201,21 @@ typedef enum {
 	UFBXWT_ASCII_FORMAT_IMPL_COUNT,
 } ufbxwt_ascii_format_impl;
 
+typedef enum {
+	UFBXWT_THREAD_IMPL_NONE,
+	UFBXWT_THREAD_IMPL_CPP_THREADS,
+
+	UFBXWT_THREAD_IMPL_COUNT,
+} ufbxwt_thread_impl;
+
 bool ufbxwt_deflate_setup(ufbxw_deflate *deflate, ufbxwt_deflate_impl impl);
 const char *ufbxwt_deflate_impl_name(ufbxwt_deflate_impl impl);
 
 bool ufbxwt_ascii_format_setup(ufbxw_ascii_formatter *formatter, ufbxwt_ascii_format_impl impl);
 const char *ufbxwt_ascii_format_name(ufbxwt_ascii_format_impl impl);
+
+bool ufbxwt_thread_setup(ufbxw_thread_sync *sync, ufbxw_thread_pool *pool, ufbxwt_thread_impl impl);
+const char *ufbxwt_thread_impl_name(ufbxwt_thread_impl impl);
 
 bool ufbxwt_check_scene_error_imp(ufbxw_scene *scene, const char *file, int line);
 void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, ufbxwt_diff_error *err), void (*check_fn)(ufbx_scene *scene, ufbxwt_diff_error *err), const ufbxw_scene_opts *user_opts, uint32_t flags);
@@ -390,6 +404,36 @@ const char *ufbxwt_ascii_format_name(ufbxwt_ascii_format_impl impl)
 	case UFBXWT_ASCII_FORMAT_IMPL_DEFAULT: return "default";
 	case UFBXWT_ASCII_FORMAT_IMPL_FMTLIB: return "fmtlib";
 	case UFBXWT_ASCII_FORMAT_IMPL_TO_CHARS: return "to_chars";
+	default: return "";
+	}
+}
+
+bool ufbxwt_thread_setup(ufbxw_thread_sync *sync, ufbxw_thread_pool *pool, ufbxwt_thread_impl impl)
+{
+	switch (impl) {
+	case UFBXWT_THREAD_IMPL_NONE:
+		return true;
+
+	case UFBXWT_THREAD_IMPL_CPP_THREADS:
+		#if UFBXWT_HAS_LIBDEFLATE
+			ufbxw_cpp_threads_setup_sync(sync);
+			ufbxw_cpp_threads_setup_pool(pool);
+			return true;
+		#endif
+		return false;
+
+	default:
+		ufbxwt_assert(false);
+		break;
+	}
+	return false;
+}
+
+const char *ufbxwt_thread_impl_name(ufbxwt_thread_impl impl)
+{
+	switch (impl) {
+	case UFBXWT_THREAD_IMPL_NONE: return "none";
+	case UFBXWT_THREAD_IMPL_CPP_THREADS: return "cpp_threads";
 	default: return "";
 	}
 }
