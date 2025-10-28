@@ -7642,6 +7642,10 @@ static ufbxwi_noinline bool ufbxwi_ascii_write_array_data(ufbxwi_save_thread_con
 	ufbxw_ascii_formatter formatter = tc->opts->ascii_formatter;
 	ufbxw_ascii_float_format float_format = tc->opts->ascii_float_format;
 
+	char *dst_start = NULL;
+	char *dst_pos = NULL;
+	char *dst_end = NULL;
+
 	size_t offset = 0;
 	while (offset < input->count) {
 		size_t max_read_size = (input->count - offset) * type_info.size;
@@ -7654,23 +7658,32 @@ static ufbxwi_noinline bool ufbxwi_ascii_write_array_data(ufbxwi_save_thread_con
 			const void *src = (const char*)span.data + begin * scalar_size;
 
 			size_t dst_size = src_count * 28 + 1;
-			ufbxwi_mutable_void_span dst_span = ufbxwi_queue_write_reserve_at_least_in_chunk(tc->write_queue, chunk, dst_size);
-			char *dst = (char*)dst_span.data;
-			ufbxwi_check(dst, false);
+
+			if (ufbxwi_to_size(dst_end - dst_pos) < dst_size) {
+				if (dst_pos > dst_start) {
+					ufbxwi_queue_write_commit_in_chunk(tc->write_queue, chunk, ufbxwi_to_size(dst_pos - dst_start));
+				}
+
+				ufbxwi_mutable_void_span dst_span = ufbxwi_queue_write_reserve_at_least_in_chunk(tc->write_queue, chunk, dst_size);
+				ufbxwi_check(dst_span.data, false);
+
+				dst_pos = dst_start = (char*)dst_span.data;
+				dst_end = dst_start + dst_span.count;
+			}
 
 			size_t result_length = 0;
 			switch (scalar_type) {
 			case UFBXWI_BUFFER_TYPE_INT:
-				result_length = formatter.format_int_fn(formatter.user, dst, dst_size, (const int32_t*)src, src_count);
+				result_length = formatter.format_int_fn(formatter.user, dst_pos, dst_size, (const int32_t*)src, src_count);
 				break;
 			case UFBXWI_BUFFER_TYPE_LONG:
-				result_length = formatter.format_long_fn(formatter.user, dst, dst_size, (const int64_t*)src, src_count);
+				result_length = formatter.format_long_fn(formatter.user, dst_pos, dst_size, (const int64_t*)src, src_count);
 				break;
 			case UFBXWI_BUFFER_TYPE_FLOAT:
-				result_length = formatter.format_float_fn(formatter.user, dst, dst_size, (const float*)src, src_count, float_format);
+				result_length = formatter.format_float_fn(formatter.user, dst_pos, dst_size, (const float*)src, src_count, float_format);
 				break;
 			case UFBXWI_BUFFER_TYPE_REAL: // TODO: real=float
-				result_length = formatter.format_double_fn(formatter.user, dst, dst_size, (const double*)src, src_count, float_format);
+				result_length = formatter.format_double_fn(formatter.user, dst_pos, dst_size, (const double*)src, src_count, float_format);
 				break;
 			default:
 				ufbxwi_unreachable("bad scalar type");
@@ -7685,14 +7698,18 @@ static ufbxwi_noinline bool ufbxwi_ascii_write_array_data(ufbxwi_save_thread_con
 			begin += src_count;
 
 			if (scalars_left == 0) {
-				dst[result_length - 1] = '\n';
+				dst_pos[result_length - 1] = '\n';
 			} else {
-				dst[result_length++] = '\n';
+				dst_pos[result_length++] = '\n';
 			}
-			ufbxwi_queue_write_commit_in_chunk(tc->write_queue, chunk, result_length);
+			dst_pos += result_length;
 		}
 
 		offset += span.count;
+	}
+
+	if (dst_pos > dst_start) {
+		ufbxwi_queue_write_commit_in_chunk(tc->write_queue, chunk, ufbxwi_to_size(dst_pos - dst_start));
 	}
 
 	return true;
