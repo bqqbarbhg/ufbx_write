@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.15)
 
 project(ufbxw_tests)
 
+option(USE_ASAN "Enable address sanitizer" OFF)
+
 add_library(ufbx_write)
 
 set(SRC_UFBX_WRITE
@@ -10,6 +12,11 @@ set(SRC_UFBX_WRITE
     ../misc/ufbxw.natvis
     ../misc/ufbxwi.natvis
 )
+
+if(USE_ASAN)
+    add_compile_options("-fsanitize=address")
+    add_link_options("-fsanitize=address")
+endif()
 
 target_sources(ufbx_write PRIVATE ${SRC_UFBX_WRITE})
 
