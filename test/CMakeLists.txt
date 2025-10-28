@@ -13,6 +13,13 @@ set(SRC_UFBX_WRITE
     ../misc/ufbxwi.natvis
 )
 
+if(MSVC)
+    string(REPLACE "/Ob1" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /Ob2")
+    string(REPLACE "/Ob1" "" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+    set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /Ob2")
+endif()
+
 if(USE_ASAN)
     add_compile_options("-fsanitize=address")
     add_link_options("-fsanitize=address")
