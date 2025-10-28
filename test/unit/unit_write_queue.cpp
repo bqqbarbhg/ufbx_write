@@ -7,6 +7,7 @@
 #define UFBXWI_FEATURE_ALLOCATOR 1
 #define UFBXWI_FEATURE_LIST 1
 #define UFBXWI_FEATURE_TASK_QUEUE 1
+#define UFBXWI_FEATURE_BUFFER 1
 #define UFBXWI_FEATURE_WRITE_QUEUE 1
 #include "../../ufbx_write.c"
 

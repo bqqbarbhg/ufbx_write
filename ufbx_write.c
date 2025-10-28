@@ -2594,7 +2594,7 @@ uint32_t ufbxwi_hash_token(ufbxwi_token token)
 
 // -- Buffers
 
-#ifdef UFBXWI_FEATURE_STRING_POOL
+#ifdef UFBXWI_FEATURE_BUFFER
 
 #define ufbxwi_empty_int_buffer ((ufbxw_int_buffer){NULL,0})
 #define ufbxwi_empty_vec3_buffer ((ufbxw_vec3_buffer){0})
@@ -6775,6 +6775,9 @@ typedef struct {
 	// Pointer to the last part
 	ufbxwi_write_chunk_part *last_part;
 
+	// Potential buffer associated with this chunk.
+	ufbxw_buffer_id buffer_id;
+
 } ufbxwi_write_chunk;
 
 typedef enum {
@@ -6808,6 +6811,7 @@ typedef struct {
 	ufbxwi_error *error;
 	ufbxwi_task_queue *task_queue;
 	ufbxwi_thread_pool *thread_pool;
+	ufbxwi_buffer_pool *buffer_pool;
 	void *main_ctx;
 
 	// Fast access pointers for the current buffer
@@ -6986,6 +6990,11 @@ static ufbxwi_noinline bool ufbxwi_write_queue_layout_chunks(ufbxwi_write_queue 
 					break;
 				}
 			}
+
+			if (chunk->buffer_id) {
+				ufbxwi_free_buffer(wq->buffer_pool, chunk->buffer_id);
+			}
+
 			chunk->task = 0;
 		}
 
@@ -7759,9 +7768,11 @@ static void ufbxwi_ascii_dom_write_array(ufbxwi_save_context *sc, const char *ta
 		task->input = input;
 		task->scalar_type = scalar_type;
 
+		chunk->buffer_id = buffer_id;
 		chunk->task = ufbxwi_task_push(&sc->task_queue, &ufbxwi_ascii_array_task_fn, task, &sc->main_thread_ctx);
 	} else {
 		ufbxwi_ascii_write_array_data(&sc->main_thread_ctx, NULL, &input, scalar_type);
+		ufbxwi_free_buffer(&sc->buffers, buffer_id);
 	}
 
 	sc->depth--;
@@ -8129,9 +8140,11 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 			task->chunk = chunk;
 			task->input = input;
 
+			chunk->buffer_id = buffer_id;
 			chunk->task = ufbxwi_task_push(&sc->task_queue, &ufbxwi_deflate_task_fn, task, &sc->main_thread_ctx);
 		} else {
 			ufbxwi_deflate_buffer(&sc->main_thread_ctx, NULL, &input);
+			ufbxwi_free_buffer(&sc->buffers, buffer_id);
 		}
 	} else {
 		if (data_size > UINT32_MAX) {
@@ -8170,6 +8183,8 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 
 		} break;
 		}
+
+		ufbxwi_free_buffer(&sc->buffers, buffer_id);
 	}
 
 	ufbxwi_write_queue_finish_reloc(&sc->write_queue, relocs.reloc_value_size, 0);
@@ -8320,8 +8335,6 @@ static void ufbxwi_dom_array(ufbxwi_save_context *sc, const char *tag, ufbxw_buf
 	} else {
 		ufbxwi_binary_dom_write_array(sc, tag, buffer);
 	}
-
-	ufbxwi_free_buffer(&sc->buffers, buffer);
 }
 
 enum {
@@ -8607,9 +8620,8 @@ static size_t ufbxwi_stream_polygon_vertex_index(void *user, int32_t *dst, size_
 
 static ufbxw_buffer_id ufbxwi_create_polygon_vertex_index_stream(ufbxwi_buffer_pool *buffers, ufbxw_int_buffer indices, ufbxw_int_buffer face_offsets)
 {
-	ufbxwi_polygon_vertex_index_stream *stream = ufbxwi_alloc(buffers->ator, ufbxwi_polygon_vertex_index_stream, 1);
+	ufbxwi_polygon_vertex_index_stream *stream = ufbxwi_alloc_zero(buffers->ator, ufbxwi_polygon_vertex_index_stream, 1);
 	ufbxwi_check(stream, 0);
-	memset(stream, 0, sizeof(ufbxwi_polygon_vertex_index_stream));
 
 	stream->indices = ufbxwi_get_buffer_input(buffers, indices.id);
 	stream->face_offsets = ufbxwi_get_buffer_input(buffers, face_offsets.id);
@@ -9585,6 +9597,9 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 		ufbxwi_write_queue_init(&sc->write_queue, &sc->ator, &sc->error, NULL, &sc->main_thread_ctx, *stream, buffer_size);
 	}
 
+	// HACK: Hook the write queue to the buffer pool, as write chunks may temporarily own a buffer that
+	// needs to be returned on the main thread.
+	sc->write_queue.buffer_pool = &sc->buffers;
 
 	ufbxwi_save_init(sc);
 	ufbxwi_save_root(sc);
