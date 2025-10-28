@@ -7025,7 +7025,7 @@ static ufbxwi_noinline bool ufbxwi_write_queue_layout_chunks(ufbxwi_write_queue 
 				if (wait) {
 					// If we are blocking flush the pending chunks before waiting on the task.
 					ufbxwi_check(ufbxwi_write_queue_flush_chunks_imp(wq), false);
-					ufbxwi_task_complete(wq->task_queue, chunk->task, &wq->main_ctx);
+					ufbxwi_task_complete(wq->task_queue, chunk->task, wq->main_ctx);
 				} else {
 					break;
 				}
