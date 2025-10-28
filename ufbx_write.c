@@ -6976,6 +6976,44 @@ static void ufbxwi_write_queue_resolve_reloc(ufbxwi_write_queue *wq, uint32_t re
 	ufbxwi_check(ufbxwi_list_push_copy(wq->ator, &wq->free_reloc_ids, uint32_t, &reloc_id));
 }
 
+static ufbxwi_noinline bool ufbxwi_write_queue_flush_chunks_imp(ufbxwi_write_queue *wq)
+{
+	const size_t num_prev_chunks = wq->chunks_to_flush.count;
+	size_t num_new_chunks = 0;
+
+	for (size_t i = 0; i < num_prev_chunks; i++) {
+		ufbxwi_write_chunk *chunk = wq->chunks_to_flush.data[i];
+
+		if (chunk->num_unresolved_relocs == 0 && chunk->has_file_offset) {
+			ufbxwi_write_chunk_part *part = &chunk->data;
+
+			uint64_t file_offset = chunk->file_offset;
+			do {
+				bool write_ok = wq->stream.write_fn(wq->stream.user, file_offset, part->data, part->size);
+				if (!write_ok) {
+					ufbxwi_fail(wq->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
+					return false;
+				}
+
+				ufbxwi_write_queue_free_buffer(wq, part->buffer);
+
+				// TODO(wq): Free the part (or pool it)
+
+				file_offset += part->size;
+				part = part->next;
+			} while (part);
+
+			// TODO(wq): Free chunk (or pool it)
+
+		} else {
+			wq->chunks_to_flush.data[num_new_chunks++] = chunk;
+		}
+	}
+	wq->chunks_to_flush.count = num_new_chunks;
+
+	return true;
+}
+
 static ufbxwi_noinline bool ufbxwi_write_queue_layout_chunks(ufbxwi_write_queue *wq, bool wait)
 {
 	while (wq->chunk_layout_index < wq->chunks.count) {
@@ -6983,10 +7021,12 @@ static ufbxwi_noinline bool ufbxwi_write_queue_layout_chunks(ufbxwi_write_queue 
 
 		// Complete a pending task
 		if (chunk->task) {
-			if (wait) {
-				ufbxwi_task_complete(wq->task_queue, chunk->task, wq->main_ctx);
-			} else {
-				if (!ufbxwi_task_get_completed(wq->task_queue, chunk->task)) {
+			if (!ufbxwi_task_get_completed(wq->task_queue, chunk->task)) {
+				if (wait) {
+					// If we are blocking flush the pending chunks before waiting on the task.
+					ufbxwi_check(ufbxwi_write_queue_flush_chunks_imp(wq), false);
+					ufbxwi_task_complete(wq->task_queue, chunk->task, &wq->main_ctx);
+				} else {
 					break;
 				}
 			}
@@ -7027,40 +7067,7 @@ static ufbxwi_noinline bool ufbxwi_write_queue_layout_chunks(ufbxwi_write_queue 
 static ufbxwi_noinline bool ufbxwi_write_queue_flush_chunks(ufbxwi_write_queue *wq, bool wait)
 {
 	ufbxwi_check(ufbxwi_write_queue_layout_chunks(wq, wait), false);
-
-	const size_t num_prev_chunks = wq->chunks_to_flush.count;
-	size_t num_new_chunks = 0;
-
-	for (size_t i = 0; i < num_prev_chunks; i++) {
-		ufbxwi_write_chunk *chunk = wq->chunks_to_flush.data[i];
-
-		if (chunk->num_unresolved_relocs == 0 && chunk->has_file_offset) {
-			ufbxwi_write_chunk_part *part = &chunk->data;
-
-			uint64_t file_offset = chunk->file_offset;
-			do {
-				bool write_ok = wq->stream.write_fn(wq->stream.user, file_offset, part->data, part->size);
-				if (!write_ok) {
-					ufbxwi_fail(wq->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
-					return false;
-				}
-
-				ufbxwi_write_queue_free_buffer(wq, part->buffer);
-
-				// TODO(wq): Free the part (or pool it)
-
-				file_offset += part->size;
-				part = part->next;
-			} while (part);
-
-			// TODO(wq): Free chunk (or pool it)
-
-		} else {
-			wq->chunks_to_flush.data[num_new_chunks++] = chunk;
-		}
-	}
-	wq->chunks_to_flush.count = num_new_chunks;
-
+	ufbxwi_check(ufbxwi_write_queue_flush_chunks_imp(wq), false);
 	return true;
 }
 
