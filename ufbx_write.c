@@ -1437,7 +1437,7 @@ static void ufbxwi_return_thread_context(ufbxwi_task_queue *tq, ufbxwi_thread_co
 	ufbxwi_atomic_store(&tc->thread_id, 0);
 }
 
-static bool ufbxwi_task_complete(ufbxwi_task_queue *tq, ufbxwi_task_id task_id, void *thread_ctx)
+static bool ufbxwi_task_complete(ufbxwi_task_queue *tq, ufbxwi_task_id task_id, void *thread_ctx, bool blocking)
 {
 	ufbxwi_dev_assert(tq->enabled);
 
@@ -1445,12 +1445,19 @@ static bool ufbxwi_task_complete(ufbxwi_task_queue *tq, ufbxwi_task_id task_id, 
     const uint32_t generation = task_id / tq->num_slots;
     ufbxwi_task_slot *slot = &tq->slots[slot_ix];
 
-	bool completed = false;
     if (ufbxwi_atomic_load_acquire(&slot->generation) > generation) {
-        return completed;
+        return false;
     }
 
-    ufbxwi_mutex_lock(tq->thread_pool, &slot->mutex);
+	if (blocking) {
+		ufbxwi_mutex_lock(tq->thread_pool, &slot->mutex);
+	} else {
+		if (!ufbxwi_mutex_try_lock(tq->thread_pool, &slot->mutex)) {
+			return false;
+		}
+	}
+
+	bool completed = false;
     if (ufbxwi_atomic_load_relaxed(&slot->generation) == generation) {
         if (tq->failed) {
             // Skip task
@@ -1494,7 +1501,7 @@ static ufbxw_task_run_result ufbxwi_task_queue_run_task_imp(ufbxwi_task_queue *t
 		}
 
 		uint32_t task_id = ufbxwi_atomic_add(&tq->run_index, 1);
-		ufbxwi_task_complete(tq, task_id, thread_ctx);
+		ufbxwi_task_complete(tq, task_id, thread_ctx, false);
 	}
 	return UFBXW_TASK_RUN_RESULT_COMPLETED;
 }
@@ -1567,7 +1574,7 @@ static ufbxwi_task_id ufbxwi_task_push(ufbxwi_task_queue *tq, ufbxwi_task_fn *fn
 
 	// Wait until the previous task in this slot is completed.
 	if (task_id >= tq->num_slots) {
-		ufbxwi_task_complete(tq, task_id - tq->num_slots, context);
+		ufbxwi_task_complete(tq, task_id - tq->num_slots, context, true);
 	}
 
 	const uint32_t slot_ix = task_id % tq->num_slots;
@@ -1597,7 +1604,7 @@ static void ufbxwi_task_queue_free(ufbxwi_task_queue *tq, void *context)
 		task_start = 1;
 	}
 	for (uint32_t task_id = task_start; task_id < tq->write_index; task_id++) {
-		ufbxwi_task_complete(tq, task_id, context);
+		ufbxwi_task_complete(tq, task_id, context, true);
 	}
 
 	if (!tq->completed) {
@@ -7025,7 +7032,7 @@ static ufbxwi_noinline bool ufbxwi_write_queue_layout_chunks(ufbxwi_write_queue 
 				if (wait) {
 					// If we are blocking flush the pending chunks before waiting on the task.
 					ufbxwi_check(ufbxwi_write_queue_flush_chunks_imp(wq), false);
-					ufbxwi_task_complete(wq->task_queue, chunk->task, wq->main_ctx);
+					ufbxwi_task_complete(wq->task_queue, chunk->task, wq->main_ctx, true);
 				} else {
 					break;
 				}
