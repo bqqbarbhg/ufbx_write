@@ -10364,25 +10364,18 @@ ufbxw_abi void ufbxw_node_set_translation(ufbxw_scene *scene, ufbxw_node node, u
 	data->lcl_translation = translation;
 }
 
-ufbxw_abi void ufbxw_node_set_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
-{
-	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check_element(scene, node.id, data);
-	data->lcl_rotation = rotation;
-}
-
-ufbxw_abi void ufbxw_node_set_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 scaling)
-{
-	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check_element(scene, node.id, data);
-	data->lcl_scaling = scaling;
-}
-
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_translation(ufbxw_scene *scene, ufbxw_node node)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
 	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
 	return data->lcl_translation;
+}
+
+ufbxw_abi void ufbxw_node_set_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->lcl_rotation = rotation;
 }
 
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation(ufbxw_scene *scene, ufbxw_node node)
@@ -10392,11 +10385,208 @@ ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation(ufbxw_scene *scene, ufbxw_node node
 	return data->lcl_rotation;
 }
 
+ufbxw_abi void ufbxw_node_set_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 scaling)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->lcl_scaling = scaling;
+}
+
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling(ufbxw_scene *scene, ufbxw_node node)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
 	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
 	return data->lcl_scaling;
+}
+
+ufbxw_abi void ufbxw_node_set_rotation_order(ufbxw_scene *scene, ufbxw_node node, ufbxw_rotation_order order)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->rotation_order = (int32_t)order;
+}
+
+ufbxw_abi ufbxw_rotation_order ufbxw_node_get_rotation_order(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, UFBXW_ROTATION_ORDER_XYZ);
+	return (ufbxw_rotation_order)data->rotation_order;
+}
+
+ufbxw_abi void ufbxw_node_set_rotation_quat(ufbxw_scene *scene, ufbxw_node node, ufbxw_quat rotation, ufbxw_rotation_order order)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->lcl_rotation = ufbxw_quat_to_euler(rotation, order);
+	data->rotation_order = (int32_t)order;
+}
+
+ufbxw_abi void ufbxw_node_set_inherit_type(ufbxw_scene *scene, ufbxw_node node, ufbxw_inherit_type order)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->inherit_type = (int32_t)order;
+}
+
+ufbxw_abi ufbxw_inherit_type ufbxw_node_get_inherit_type(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, UFBXW_INHERIT_TYPE_NORMAL);
+	return (ufbxw_inherit_type)data->inherit_type;
+}
+
+ufbxw_abi void ufbxw_node_set_pre_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->pre_rotation = rotation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_pre_rotation(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->pre_rotation;
+}
+
+ufbxw_abi void ufbxw_node_set_post_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->post_rotation = rotation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_post_rotation(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->post_rotation;
+}
+
+ufbxw_abi void ufbxw_node_set_rotation_offset(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->rotation_offset = rotation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation_offset(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->rotation_offset;
+}
+
+ufbxw_abi void ufbxw_node_set_rotation_pivot(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->rotation_pivot = rotation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation_pivot(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->rotation_pivot;
+}
+
+ufbxw_abi void ufbxw_node_set_scaling_offset(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 scaling)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->scaling_offset = scaling;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling_offset(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->scaling_offset;
+}
+
+ufbxw_abi void ufbxw_node_set_scaling_pivot(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 scaling)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->scaling_pivot = scaling;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling_pivot(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->scaling_pivot;
+}
+
+ufbxw_abi void ufbxw_node_set_geometric_translation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 geometric_translation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->geometric_translation = geometric_translation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_geometric_translation(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->geometric_translation;
+}
+
+ufbxw_abi void ufbxw_node_set_geometric_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 geometric_rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->geometric_rotation = geometric_rotation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_geometric_rotation(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->geometric_rotation;
+}
+
+ufbxw_abi void ufbxw_node_set_geometric_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 geometric_scaling)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->geometric_scaling = geometric_scaling;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_geometric_scaling(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->geometric_scaling;
+}
+
+ufbxw_abi void ufbxw_node_set_visibility(ufbxw_scene *scene, ufbxw_node node, bool visible)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->visibility = visible ? 1.0f : 0.0f;
+}
+
+ufbxw_abi bool ufbxw_node_get_visibility(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	return data->visibility > 0.0f;
+}
+
+ufbxw_abi void ufbxw_node_set_visibility_inheritance(ufbxw_scene *scene, ufbxw_node node, bool inherit)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->visibility_inheritance = inherit;
+}
+
+ufbxw_abi bool ufbxw_node_get_visibility_inheritance(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	return data->visibility_inheritance;
 }
 
 ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_translation(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer)
@@ -11035,6 +11225,16 @@ ufbxw_abi ufbxw_anim_curve ufbxw_anim_get_curve(ufbxw_scene *scene, ufbxw_anim_p
 	} else {
 		return ufbxw_null_anim_curve;
 	}
+}
+
+ufbxw_abi void ufbxw_anim_set_default_value(ufbxw_scene *scene, ufbxw_anim_prop anim, size_t index, ufbxw_real value)
+{
+	ufbxwi_anim_prop *p = ufbxwi_get_anim_prop(scene, anim);
+	if (index >= 4) {
+		ufbxwi_failf(&scene->error, UFBXW_ERROR_INDEX_OUT_OF_BOUNDS, "index (%zu) out of bounds (4)", index);
+		return;
+	}
+	p->defaults[index] = value;
 }
 
 ufbxw_abi void ufbxw_anim_add_keyframe_real(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_ktime time, ufbxw_real value, uint32_t type)

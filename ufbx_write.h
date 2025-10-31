@@ -144,6 +144,12 @@ typedef enum ufbxw_rotation_order {
 	UFBXW_ROTATION_ORDER_SPHERIC,
 } ufbxw_rotation_order;
 
+typedef enum ufbxw_inherit_mode {
+	UFBXW_INHERIT_TYPE_NORMAL,
+	UFBXW_INHERIT_TYPE_IGNORE_PARENT_SCALE,
+	UFBXW_INHERIT_TYPE_COMPONENTWISE_SCALE,
+} ufbxw_inherit_type;
+
 typedef struct ufbxw_scene ufbxw_scene;
 
 typedef enum ufbxw_element_type {
@@ -748,25 +754,121 @@ ufbxw_abi ufbxw_anim_prop ufbxw_animate_prop_len(ufbxw_scene *scene, ufbxw_id id
 ufbxw_abi ufbxw_node ufbxw_create_node(ufbxw_scene *scene);
 ufbxw_abi ufbxw_node ufbxw_as_node(ufbxw_id id);
 
+// -- Children
+
 ufbxw_abi void ufbxw_node_set_parent(ufbxw_scene *scene, ufbxw_node node, ufbxw_node parent);
 ufbxw_abi ufbxw_node ufbxw_node_get_parent(ufbxw_scene *scene, ufbxw_node node);
 ufbxw_abi size_t ufbxw_node_get_num_children(ufbxw_scene *scene, ufbxw_node node);
 ufbxw_abi ufbxw_node ufbxw_node_get_child(ufbxw_scene *scene, ufbxw_node node, size_t index);
 
-ufbxw_abi void ufbxw_node_set_translation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 translation);
-ufbxw_abi void ufbxw_node_set_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation);
-ufbxw_abi void ufbxw_node_set_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 scaling);
+// -- Local transformation of the node
 
+// Local translation.
+// FBX property: `Lcl Translation`.
+ufbxw_abi void ufbxw_node_set_translation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 translation);
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_translation(ufbxw_scene *scene, ufbxw_node node);
+
+// Local rotation in Euler angles (degrees).
+// Rotation order is controlled by `rotation_order`.
+// FBX property: `Lcl Rotation`.
+ufbxw_abi void ufbxw_node_set_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation);
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation(ufbxw_scene *scene, ufbxw_node node);
+
+// Local scaling of the node.
+// FBX property: `Lcl Scaling`.
+ufbxw_abi void ufbxw_node_set_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 scaling);
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling(ufbxw_scene *scene, ufbxw_node node);
+
+// Order which `rotation` is applied in.
+// FBX property: `RotationOrder`.
+ufbxw_abi void ufbxw_node_set_rotation_order(ufbxw_scene *scene, ufbxw_node node, ufbxw_rotation_order order);
+ufbxw_abi ufbxw_rotation_order ufbxw_node_get_rotation_order(ufbxw_scene *scene, ufbxw_node node);
+
+// Set the rotation as a quaternion.
+ufbxw_abi void ufbxw_node_set_rotation_quat(ufbxw_scene *scene, ufbxw_node node, ufbxw_quat rotation, ufbxw_rotation_order order);
+
+// -- Advanced transform
+
+// Controls how transformations are inherited to from the parent.
+// See `ufbxw_inherit_type` for more information.
+// FBX property: `InheritType`.
+ufbxw_abi void ufbxw_node_set_inherit_type(ufbxw_scene *scene, ufbxw_node node, ufbxw_inherit_type order);
+ufbxw_abi ufbxw_inherit_type ufbxw_node_get_inherit_type(ufbxw_scene *scene, ufbxw_node node);
+
+// Rotation applied before the main `rotation`.
+// FBX property: `PreRotation`.
+ufbxw_abi void ufbxw_node_set_pre_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation);
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_pre_rotation(ufbxw_scene *scene, ufbxw_node node);
+
+// Rotation applied after the main `rotation`.
+// FBX property: `PostRotation`.
+ufbxw_abi void ufbxw_node_set_post_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation);
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_post_rotation(ufbxw_scene *scene, ufbxw_node node);
+
+// Offset applied before `rotation`.
+// FBX property: `RotationOffset`.
+ufbxw_abi void ufbxw_node_set_rotation_offset(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 offset);
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation_offset(ufbxw_scene *scene, ufbxw_node node);
+
+// Pivot around which `rotation` is applied.
+// FBX property: `RotationOffset`.
+ufbxw_abi void ufbxw_node_set_rotation_pivot(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 pivot);
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation_pivot(ufbxw_scene *scene, ufbxw_node node);
+
+// Offset applied before `scaling`.
+// FBX property: `ScalingOffset`.
+ufbxw_abi void ufbxw_node_set_scaling_offset(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 offset);
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling_offset(ufbxw_scene *scene, ufbxw_node node);
+
+// Pivot relative to which `scaling` is applied.
+// FBX property: `ScalingOffset`.
+ufbxw_abi void ufbxw_node_set_scaling_pivot(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 pivot);
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling_pivot(ufbxw_scene *scene, ufbxw_node node);
+
+// -- Geometric transform
+//
+// This transform is only applied to the geometry or other attributes, and is not inherited to children.
+
+// Geometric translation only applied to the geometry, and not inherited to children.
+// FBX property: `GeometricTranslation`.
+ufbxw_abi void ufbxw_node_set_geometric_translation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 geometric_translation);
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_geometric_translation(ufbxw_scene *scene, ufbxw_node node);
+
+// Geometric rotation only applied to the geometry, and not inherited to children.
+// Rotation order is always `UFBXW_ROTATION_ORDER_XYZ`.
+// FBX property: `GeometricRotation`.
+ufbxw_abi void ufbxw_node_set_geometric_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 geometric_rotation);
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_geometric_rotation(ufbxw_scene *scene, ufbxw_node node);
+
+// Geometric scaling only applied to the geometry, and not inherited to children.
+// FBX property: `GeometricScaling`.
+ufbxw_abi void ufbxw_node_set_geometric_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 geometric_scaling);
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_geometric_scaling(ufbxw_scene *scene, ufbxw_node node);
+
+// -- Visibility
+
+// Controls whether the node should be visible.
+// FBX property: `Visibility`.
+ufbxw_abi void ufbxw_node_set_visibility(ufbxw_scene *scene, ufbxw_node node, bool visible);
+ufbxw_abi bool ufbxw_node_get_visibility(ufbxw_scene *scene, ufbxw_node node);
+
+// Controls whether the node should inherit the visibility of its parent.
+// FBX property: `Visibility Inheritance`.
+ufbxw_abi void ufbxw_node_set_visibility_inheritance(ufbxw_scene *scene, ufbxw_node node, bool inherit);
+ufbxw_abi bool ufbxw_node_get_visibility_inheritance(ufbxw_scene *scene, ufbxw_node node);
+
+// -- Animation
 
 ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_translation(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer);
 ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer);
 ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer);
 
+// -- Transform helpers
+
 ufbxw_abi ufbxw_transform ufbxw_node_get_local_transform(ufbxw_scene *scene, ufbxw_node node);
 ufbxw_abi ufbxw_matrix ufbxw_node_get_global_transform(ufbxw_scene *scene, ufbxw_node node);
+
+// -- Attributes
 
 ufbxw_abi void ufbxw_node_set_attribute(ufbxw_scene *scene, ufbxw_node node, ufbxw_id attrib);
 
@@ -918,6 +1020,7 @@ ufbxw_abi void ufbxw_anim_layer_set_stack(ufbxw_scene *scene, ufbxw_anim_layer l
 // -- Animation property
 
 ufbxw_abi ufbxw_anim_curve ufbxw_anim_get_curve(ufbxw_scene *scene, ufbxw_anim_prop anim, size_t index);
+ufbxw_abi void ufbxw_anim_set_default_value(ufbxw_scene *scene, ufbxw_anim_prop anim, size_t index, ufbxw_real value);
 
 ufbxw_abi void ufbxw_anim_add_keyframe_real(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_ktime time, ufbxw_real value, uint32_t type);
 ufbxw_abi void ufbxw_anim_add_keyframe_vec2(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_ktime time, ufbxw_vec2 value, uint32_t type);
