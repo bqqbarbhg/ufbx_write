@@ -33,6 +33,7 @@ add_subdirectory(util)
 add_subdirectory(test)
 add_subdirectory(unit)
 add_subdirectory(roundtrip)
+add_subdirectory(compare_fbx)
 
 if (MSVC)
     add_compile_options(/W4 /WX)

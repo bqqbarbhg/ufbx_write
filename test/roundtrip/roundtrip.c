@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr) {
 	fprintf(stderr, "assert fail: %s (%s:%u)\n", expr, file, line);
@@ -33,6 +34,8 @@ static ufbxw_vec3 to_ufbxw_euler(ufbx_quat v)
 	return to_ufbxw_vec3(euler);
 }
 
+static const ufbx_vec3 one_vec3 = { 1.0f, 1.0f, 1.0f };
+
 int main(int argc, char **argv)
 {
 	const char *output_path = NULL;
@@ -42,6 +45,9 @@ int main(int argc, char **argv)
 	ufbxwt_deflate_impl deflate_impl = UFBXWT_DEFLATE_IMPL_NONE;
 	ufbxwt_ascii_format_impl ascii_impl = UFBXWT_ASCII_FORMAT_IMPL_DEFAULT;
 	ufbxwt_thread_impl thread_impl = UFBXWT_THREAD_IMPL_NONE;
+
+	bool advanced_transform = false;
+	bool bake_animation = false;
 
 	for (int i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "-f")) {
@@ -88,6 +94,10 @@ int main(int argc, char **argv)
 				}
 				ufbxwt_assert(thread_impl != UFBXWT_THREAD_IMPL_COUNT);
 			}
+		} else if (!strcmp(argv[i], "--advanced-transform")) {
+			advanced_transform = true;
+		} else if (!strcmp(argv[i], "--bake-animation")) {
+			bake_animation = true;
 		} else {
 			ufbxwt_assert(input_path == NULL);
 			input_path = argv[i];
@@ -108,14 +118,22 @@ int main(int argc, char **argv)
 		exit(2);
 	}
 
-	ufbxw_scene *out_scene = ufbxw_create_scene(NULL);
+	ufbxw_scene_opts out_opts = { 0 };
+	out_opts.no_default_anim_stack = true;
+	out_opts.no_default_anim_layer = true;
+	ufbxw_scene *out_scene = ufbxw_create_scene(&out_opts);
 
 	ufbxw_mesh *mesh_ids = (ufbxw_mesh*)calloc(in_scene->meshes.count, sizeof(ufbxw_mesh));
 	ufbxw_node *node_ids = (ufbxw_node*)calloc(in_scene->nodes.count, sizeof(ufbxw_node));
+	ufbxw_anim_stack *anim_stack_ids = (ufbxw_anim_stack*)calloc(in_scene->anim_stacks.count, sizeof(ufbxw_anim_stack));
+	ufbxw_anim_layer *anim_layer_ids = (ufbxw_anim_layer*)calloc(in_scene->anim_layers.count, sizeof(ufbxw_anim_layer));
+	ufbxw_id *element_ids = (ufbxw_id*)calloc(in_scene->elements.count, sizeof(ufbxw_id));
 
 	for (size_t mesh_ix = 0; mesh_ix < in_scene->meshes.count; mesh_ix++) {
 		ufbx_mesh *in_mesh = in_scene->meshes.data[mesh_ix];
 		ufbxw_mesh out_mesh = ufbxw_create_mesh(out_scene);
+		mesh_ids[mesh_ix] = out_mesh;
+		element_ids[in_mesh->element_id] = out_mesh.id;
 
 		ufbxw_vec3_buffer vertices = ufbxw_create_vec3_buffer(out_scene, in_mesh->vertices.count);
 		ufbxw_int_buffer vertex_indices = ufbxw_create_int_buffer(out_scene, in_mesh->vertex_indices.count);
@@ -180,30 +198,143 @@ int main(int argc, char **argv)
 
 			ufbxw_mesh_set_uvs_indexed(out_scene, out_mesh, (int32_t)uv_set, uv_values, uv_indices, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
 		}
-
-		mesh_ids[mesh_ix] = out_mesh;
 	}
 
 	for (size_t node_ix = 0; node_ix < in_scene->nodes.count; node_ix++) {
 		ufbx_node *in_node = in_scene->nodes.data[node_ix];
 		ufbxw_node out_node = ufbxw_create_node(out_scene);
+		node_ids[node_ix] = out_node;
+		element_ids[in_node->element_id] = out_node.id;
 
 		ufbxw_set_name(out_scene, out_node.id, in_node->name.data);
 
-		ufbxw_node_set_translation(out_scene, out_node, to_ufbxw_vec3(in_node->local_transform.translation));
-		ufbxw_node_set_rotation(out_scene, out_node, to_ufbxw_euler(in_node->local_transform.rotation));
-		ufbxw_node_set_scaling(out_scene, out_node, to_ufbxw_vec3(in_node->local_transform.scale));
+		ufbxw_node_set_inherit_type(out_scene, out_node, (ufbxw_inherit_type)in_node->inherit_mode);
+
+		if (in_node->parent) {
+			ufbxw_node_set_parent(out_scene, out_node, node_ids[in_node->parent->typed_id]);
+		}
+
+		if (advanced_transform) {
+			ufbxw_node_set_translation(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "Lcl Translation", ufbx_zero_vec3)));
+			ufbxw_node_set_rotation(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "Lcl Rotation", ufbx_zero_vec3)));
+			ufbxw_node_set_scaling(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "Lcl Scaling", one_vec3)));
+			ufbxw_node_set_rotation_order(out_scene, out_node, (ufbxw_rotation_order)in_node->rotation_order);
+
+			ufbxw_node_set_pre_rotation(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "PreRotation", ufbx_zero_vec3)));
+			ufbxw_node_set_post_rotation(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "PostRotation", ufbx_zero_vec3)));
+			ufbxw_node_set_rotation_offset(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "RotationOffset", ufbx_zero_vec3)));
+			ufbxw_node_set_rotation_pivot(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "RotationPivot", ufbx_zero_vec3)));
+			ufbxw_node_set_scaling_offset(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "ScalingOffset", ufbx_zero_vec3)));
+			ufbxw_node_set_scaling_pivot(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "ScalingPivot", ufbx_zero_vec3)));
+
+			if (in_node->has_geometry_transform) {
+				ufbxw_node_set_geometric_translation(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "GeometricTranslation", ufbx_zero_vec3)));
+				ufbxw_node_set_geometric_rotation(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "GeometricRotation", ufbx_zero_vec3)));
+				ufbxw_node_set_geometric_scaling(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "GeometricScaling", one_vec3)));
+			}
+		} else {
+			ufbxw_node_set_translation(out_scene, out_node, to_ufbxw_vec3(in_node->local_transform.translation));
+			ufbxw_node_set_rotation(out_scene, out_node, to_ufbxw_euler(in_node->local_transform.rotation));
+			ufbxw_node_set_scaling(out_scene, out_node, to_ufbxw_vec3(in_node->local_transform.scale));
+
+			if (in_node->has_geometry_transform) {
+				ufbxw_node_set_geometric_translation(out_scene, out_node, to_ufbxw_vec3(in_node->geometry_transform.translation));
+				ufbxw_node_set_geometric_rotation(out_scene, out_node, to_ufbxw_euler(in_node->geometry_transform.rotation));
+				ufbxw_node_set_geometric_scaling(out_scene, out_node, to_ufbxw_vec3(in_node->geometry_transform.scale));
+			}
+		}
 
 		if (in_node->mesh) {
 			ufbxw_mesh_add_instance(out_scene, mesh_ids[in_node->mesh->typed_id], out_node);
 		}
+	}
 
-		node_ids[node_ix] = out_node;
+	for (size_t layer_ix = 0; layer_ix < in_scene->anim_layers.count; layer_ix++) {
+		ufbx_anim_layer *in_layer = in_scene->anim_layers.data[layer_ix];
+		ufbxw_anim_layer out_layer = ufbxw_create_anim_layer(out_scene, ufbxw_null_anim_stack);
+		anim_layer_ids[layer_ix] = out_layer;
+		element_ids[in_layer->element_id] = out_layer.id;
+
+		for (size_t prop_ix = 0; prop_ix < in_layer->anim_props.count; prop_ix++) {
+			ufbx_anim_prop *in_prop = &in_layer->anim_props.data[prop_ix];
+
+			ufbxw_id dst_id = element_ids[in_prop->element->element_id];
+			ufbxwt_assert(dst_id != 0);
+			ufbxw_anim_prop out_anim = ufbxw_animate_prop(out_scene, dst_id, in_prop->prop_name.data, out_layer);
+
+			ufbx_anim_value *in_value = in_prop->anim_value;
+			for (size_t curve_ix = 0; curve_ix < 3; curve_ix++) {
+				ufbx_anim_curve *in_curve = in_prop->anim_value->curves[curve_ix];
+				ufbxw_anim_curve out_curve = ufbxw_anim_get_curve(out_scene, out_anim, curve_ix);
+				if (!out_curve.id) continue;
+
+				ufbxw_anim_set_default_value(out_scene, out_anim, curve_ix, in_value->default_value.v[curve_ix]);
+
+				if (in_curve) {
+					for (size_t key_ix = 0; key_ix < in_curve->keyframes.count; key_ix++) {
+						ufbx_keyframe in_key = in_curve->keyframes.data[key_ix];
+						ufbxw_keyframe_real out_key = { 0 };
+
+						out_key.flags = UFBXW_KEYFRAME_LINEAR;
+						out_key.time = (ufbxw_ktime)round(in_key.time * UFBXW_KTIME_SECOND);
+						out_key.value = in_key.value;
+
+						ufbx_keyframe *prev_key = key_ix > 0 ? &in_curve->keyframes.data[key_ix - 1] : NULL;
+						ufbx_keyframe *next_key = key_ix > 0 ? &in_curve->keyframes.data[key_ix + 1] : NULL;
+
+						switch (in_key.interpolation) {
+						case UFBX_INTERPOLATION_CONSTANT_PREV:
+							out_key.flags = UFBXW_KEYFRAME_CONSTANT;
+							break;
+						case UFBX_INTERPOLATION_CONSTANT_NEXT:
+							out_key.flags = UFBXW_KEYFRAME_CONSTANT_NEXT;
+							break;
+						case UFBX_INTERPOLATION_LINEAR:
+							out_key.flags = UFBXW_KEYFRAME_LINEAR;
+							break;
+						case UFBX_INTERPOLATION_CUBIC:
+							out_key.flags = UFBXW_KEYFRAME_CUBIC_USER_BROKEN;
+							if (prev_key) {
+								out_key.slope_left = in_key.left.dy;
+								out_key.weight_left = in_key.left.dx / (in_key.time - prev_key->time);
+							}
+							if (next_key) {
+								out_key.slope_right = in_key.left.dy;
+								out_key.weight_right = in_key.right.dx / (next_key->time - in_key.time);
+							}
+							break;
+						}
+
+						ufbxw_anim_curve_add_keyframe_key(out_scene, out_curve, out_key);
+					}
+				}
+			}
+		}
+
+	}
+
+	for (size_t stack_ix = 0; stack_ix < in_scene->anim_stacks.count; stack_ix++) {
+		ufbx_anim_stack *in_stack = in_scene->anim_stacks.data[stack_ix];
+		ufbxw_anim_stack out_stack = ufbxw_create_anim_stack(out_scene);
+		anim_stack_ids[stack_ix] = out_stack;
+		element_ids[in_stack->element_id] = out_stack.id;
+
+		ufbxw_set_name(out_scene, out_stack.id, in_stack->name.data);
+
+		for (size_t layer_ix = 0; layer_ix < in_stack->layers.count; layer_ix++) {
+			ufbxw_anim_layer out_layer = anim_layer_ids[in_stack->layers.data[layer_ix]->typed_id];
+			ufbxw_anim_layer_set_stack(out_scene, out_layer, out_stack);
+		}
 	}
 
 	free(mesh_ids);
 	free(node_ids);
+	free(anim_stack_ids);
+	free(anim_layer_ids);
+	free(element_ids);
 	ufbx_free_scene(in_scene);
+
+	ufbxw_prepare_scene(out_scene, NULL);
 
 	ufbxw_save_opts save_opts = { 0 };
 	if (!strcmp(format, "ascii")) {
