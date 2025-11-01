@@ -49,6 +49,6 @@ struct ufbxwt_task_queue
 	}
 
 	void complete(ufbxwi_task_id task_id) {
-		ufbxwi_task_complete(&tq, task_id, &main_context);
+		ufbxwi_task_complete(&tq, task_id, &main_context, true);
 	}
 };
