@@ -3595,6 +3595,10 @@ typedef struct {
 
 	ufbxw_real intensity;
 	ufbxw_vec3 color;
+	int32_t decay_type;
+	int32_t light_type;
+	ufbxw_real inner_angle;
+	ufbxw_real outer_angle;
 } ufbxwi_light;
 
 typedef struct {
@@ -4085,16 +4089,16 @@ static const ufbxwi_prop_desc ufbxwi_blend_channel_props[] = {
 
 static const ufbxwi_prop_desc ufbxwi_light_props[] = {
 	{ UFBXWI_Color, UFBXW_PROP_TYPE_COLOR, ufbxwi_field(ufbxwi_light, color), ufbxwi_default(vec3_1), UFBXW_PROP_FLAG_ANIMATABLE },
-	{ UFBXWI_LightType, UFBXW_PROP_TYPE_ENUM, },
+	{ UFBXWI_LightType, UFBXW_PROP_TYPE_ENUM, ufbxwi_field(ufbxwi_light, light_type) },
 	{ UFBXWI_CastLightOnObject, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 	{ UFBXWI_DrawVolumetricLight, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 	{ UFBXWI_DrawGroundProjection, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 	{ UFBXWI_DrawFrontFacingVolumetricLight, UFBXW_PROP_TYPE_BOOL, },
 	{ UFBXWI_Intensity, UFBXW_PROP_TYPE_NUMBER, ufbxwi_field(ufbxwi_light, intensity), ufbxwi_default(double_100), UFBXW_PROP_FLAG_ANIMATABLE },
-	{ UFBXWI_InnerAngle, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
-	{ UFBXWI_OuterAngle, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_45), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_InnerAngle, UFBXW_PROP_TYPE_NUMBER, ufbxwi_field(ufbxwi_light, inner_angle), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_OuterAngle, UFBXW_PROP_TYPE_NUMBER, ufbxwi_field(ufbxwi_light, outer_angle), ufbxwi_default(double_45), UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_Fog, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_50), 0, UFBXW_PROP_FLAG_ANIMATABLE },
-	{ UFBXWI_DecayType, UFBXW_PROP_TYPE_ENUM, },
+	{ UFBXWI_DecayType, UFBXW_PROP_TYPE_ENUM, ufbxwi_field(ufbxwi_light, decay_type) },
 	{ UFBXWI_DecayStart, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_FileName, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_empty) },
 	{ UFBXWI_EnableNearAttenuation, UFBXW_PROP_TYPE_BOOL, },
@@ -4809,6 +4813,7 @@ static bool ufbxwi_init_light(ufbxw_scene *scene, void *data)
 	ufbxwi_light *light = (ufbxwi_light*)data;
 	light->color = ufbxwi_one_vec3;
 	light->intensity = (ufbxw_real)100.0;
+	light->outer_angle = (ufbxw_real)45.0;
 	return true;
 }
 
@@ -10764,11 +10769,81 @@ ufbxw_abi void ufbxw_light_set_color(ufbxw_scene *scene, ufbxw_light light, ufbx
 	ld->color = color;
 }
 
+ufbxw_abi ufbxw_vec3 ufbxw_light_get_color(ufbxw_scene *scene, ufbxw_light light)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld, ufbxw_zero_vec3);
+	return ld->color;
+}
+
 ufbxw_abi void ufbxw_light_set_intensity(ufbxw_scene *scene, ufbxw_light light, ufbxw_real intensity)
 {
 	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
 	ufbxwi_check_element(scene, light.id, ld);
 	ld->intensity = intensity;
+}
+
+ufbxw_abi ufbxw_real ufbxw_light_get_intensity(ufbxw_scene *scene, ufbxw_light light)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld, 0.0f);
+	return ld->intensity;
+}
+
+ufbxw_abi void ufbxw_light_set_decay(ufbxw_scene *scene, ufbxw_light light, ufbxw_light_decay decay)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld);
+	ld->decay_type = (int32_t)decay;
+}
+
+ufbxw_abi ufbxw_light_decay ufbxw_light_get_decay(ufbxw_scene *scene, ufbxw_light light)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld, (ufbxw_light_decay)0);
+	return (ufbxw_light_decay)ld->decay_type;
+}
+
+ufbxw_abi void ufbxw_light_set_type(ufbxw_scene *scene, ufbxw_light light, ufbxw_light_type type)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld);
+	ld->light_type = (int32_t)type;
+}
+
+ufbxw_abi ufbxw_light_type ufbxw_light_get_type(ufbxw_scene *scene, ufbxw_light light)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld, (ufbxw_light_type)0);
+	return (ufbxw_light_type)ld->light_type;
+}
+
+ufbxw_abi void ufbxw_light_set_inner_angle(ufbxw_scene *scene, ufbxw_light light, ufbxw_real value)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld);
+	ld->inner_angle = value;
+}
+
+ufbxw_abi ufbxw_real ufbxw_light_get_inner_angle(ufbxw_scene *scene, ufbxw_light light)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld, 0.0f);
+	return ld->inner_angle;
+}
+
+ufbxw_abi void ufbxw_light_set_outer_angle(ufbxw_scene *scene, ufbxw_light light, ufbxw_real value)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld);
+	ld->outer_angle = value;
+}
+
+ufbxw_abi ufbxw_real ufbxw_light_get_outer_angle(ufbxw_scene *scene, ufbxw_light light)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld, 0.0f);
+	return ld->outer_angle;
 }
 
 ufbxw_abi ufbxw_camera ufbxw_create_camera(ufbxw_scene *scene, ufbxw_node node)

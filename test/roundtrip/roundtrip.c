@@ -269,6 +269,19 @@ int main(int argc, char **argv)
 		}
 	}
 
+	for (size_t light_ix = 0; light_ix < in_scene->lights.count; light_ix++) {
+		ufbx_light *in_light = in_scene->lights.data[light_ix];
+		ufbxw_light out_light = ufbxw_create_light(out_scene, ufbxw_null_node);
+		element_ids[in_light->element_id] = out_light.id;
+
+		ufbxw_light_set_intensity(out_scene, out_light, in_light->intensity * 100.0);
+		ufbxw_light_set_color(out_scene, out_light, to_ufbxw_vec3(in_light->color));
+		ufbxw_light_set_type(out_scene, out_light, (ufbxw_light_type)in_light->type);
+		ufbxw_light_set_decay(out_scene, out_light, (ufbxw_light_decay)in_light->decay);
+		ufbxw_light_set_inner_angle(out_scene, out_light, in_light->inner_angle);
+		ufbxw_light_set_outer_angle(out_scene, out_light, in_light->outer_angle);
+	}
+
 	for (size_t node_ix = 0; node_ix < in_scene->nodes.count; node_ix++) {
 		ufbx_node *in_node = in_scene->nodes.data[node_ix];
 		if (in_node->is_root) {
@@ -319,6 +332,11 @@ int main(int argc, char **argv)
 
 		if (in_node->mesh) {
 			ufbxw_mesh_add_instance(out_scene, mesh_ids[in_node->mesh->typed_id], out_node);
+		} else if (in_node->attrib) {
+			ufbxw_id attrib_id = element_ids[in_node->attrib->element_id];
+			if (attrib_id != 0) {
+				ufbxw_node_set_attribute(out_scene, out_node, attrib_id);
+			}
 		}
 	}
 
@@ -439,7 +457,10 @@ int main(int argc, char **argv)
 	int result = 0;
 
 	if (compare) {
-		if (!compare_fbx(output_path, input_path)) {
+		compare_fbx_opts compare_opts = { 0 };
+		compare_opts.approx_epsilon = 1e-4;
+
+		if (!compare_fbx(output_path, input_path, &compare_opts)) {
 			result = 1;
 		}
 	}

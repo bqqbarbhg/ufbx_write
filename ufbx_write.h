@@ -979,8 +979,36 @@ typedef enum ufbxw_light_decay {
 
 ufbxw_abi ufbxw_light ufbxw_create_light(ufbxw_scene *scene, ufbxw_node node);
 
+// Color of the light.
+// FBX property: `Color`.
 ufbxw_abi void ufbxw_light_set_color(ufbxw_scene *scene, ufbxw_light light, ufbxw_vec3 color);
+ufbxw_abi ufbxw_vec3 ufbxw_light_get_color(ufbxw_scene *scene, ufbxw_light light);
+
+// Intensity of the light.
+// Usually multiplied by `100.0` to conventional values.
+// FBX property: `Intensity`.
 ufbxw_abi void ufbxw_light_set_intensity(ufbxw_scene *scene, ufbxw_light light, ufbxw_real intensity);
+ufbxw_abi ufbxw_real ufbxw_light_get_intensity(ufbxw_scene *scene, ufbxw_light light);
+
+// Decay type of the light.
+// FBX property: `DecayType`.
+ufbxw_abi void ufbxw_light_set_decay(ufbxw_scene *scene, ufbxw_light light, ufbxw_light_decay decay);
+ufbxw_abi ufbxw_light_decay ufbxw_light_get_decay(ufbxw_scene *scene, ufbxw_light light);
+
+// Type of the light.
+// FBX property: `LightType`.
+ufbxw_abi void ufbxw_light_set_type(ufbxw_scene *scene, ufbxw_light light, ufbxw_light_type type);
+ufbxw_abi ufbxw_light_type ufbxw_light_get_type(ufbxw_scene *scene, ufbxw_light light);
+
+// Spotlight inner angle.
+// FBX property: `InnerAngle`.
+ufbxw_abi void ufbxw_light_set_inner_angle(ufbxw_scene *scene, ufbxw_light light, ufbxw_real value);
+ufbxw_abi ufbxw_real ufbxw_light_get_inner_angle(ufbxw_scene *scene, ufbxw_light light);
+
+// Spotlight outer angle.
+// FBX property: `OuterAngle`.
+ufbxw_abi void ufbxw_light_set_outer_angle(ufbxw_scene *scene, ufbxw_light light, ufbxw_real value);
+ufbxw_abi ufbxw_real ufbxw_light_get_outer_angle(ufbxw_scene *scene, ufbxw_light light);
 
 // TODO: Spot lights etc.
 

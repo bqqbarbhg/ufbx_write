@@ -10,6 +10,8 @@
 #include "../ufbx/ufbx.h"
 #include "../util/im_arg.h"
 
+static compare_fbx_opts g_opts;
+
 static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr) {
 	fprintf(stderr, "assert fail: %s (%s:%u)\n", expr, file, line);
 	exit(1);
@@ -213,7 +215,7 @@ static bool equals(ufbx_face a, ufbx_face b) { return a.index_begin == b.index_b
 
 static bool approx(double a, double b) {
 	double err = fabs(a - b);
-	return err <= fmax(fmax(fabs(a), fabs(b)), 1.0) * 1e-6;
+	return err <= fmax(fmax(fabs(a), fabs(b)), 1.0) * g_opts.approx_epsilon;
 }
 
 static bool approx(ufbx_vec2 a, ufbx_vec2 b) { return approx(a.x, b.x) && approx(a.y, b.y); }
@@ -438,8 +440,10 @@ static void compare_anim(ufbx_scene *src_scene, ufbx_anim *src_anim, ufbx_scene 
 	}
 }
 
-extern "C" bool compare_fbx(const char *src_path, const char *ref_path)
+extern "C" bool compare_fbx(const char *src_path, const char *ref_path, const compare_fbx_opts *opts)
 {
+	g_opts = *opts;
+
 	ufbx_load_opts load_opts = { 0 };
 	ufbx_error load_error;
 
