@@ -8943,6 +8943,7 @@ static void ufbxwi_save_anim_curve_keys(ufbxwi_save_context *sc, ufbxwi_element 
 		prev_prev_ix = prev_ix;
 	}
 
+	ufbxw_assert(attr_count <= max_attrs);
 	ufbxw_buffer_id buf_flags = ufbxwi_create_external_buffer(&sc->buffers, UFBXWI_BUFFER_TYPE_INT, key_flags, attr_count, 0);
 	ufbxw_buffer_id buf_attrs = ufbxwi_create_external_buffer(&sc->buffers, UFBXWI_BUFFER_TYPE_KEY_ATTR, key_attrs, attr_count, 0);
 	ufbxw_buffer_id buf_refcounts = ufbxwi_create_external_buffer(&sc->buffers, UFBXWI_BUFFER_TYPE_INT, key_refcounts, attr_count, 0);
