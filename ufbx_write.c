@@ -3499,6 +3499,7 @@ typedef struct {
 	ufbxw_int_buffer vertex_indices;
 	ufbxw_int_buffer face_offsets;
 	ufbxw_int_buffer polygon_vertex_index;
+	ufbxw_int_buffer edges;
 
 	ufbxwi_mesh_attribute_list attributes;
 
@@ -6314,8 +6315,8 @@ static const ufbxwi_mesh_attribute_info ufbxwi_mesh_attribute_infos[] = {
 	{ NULL }, // Invalid
 	{ "LayerElementNormal", "Normals", NULL, 102, 1, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
 	{ "LayerElementUV", "UV", "UVIndex", 101, 5, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC2 | UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES },
-	{ "LayerElementTangent", "Tangent", NULL, 102, 3, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
-	{ "LayerElementBinormal", "Binormal", NULL, 102, 2, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
+	{ "LayerElementTangent", "Tangents", NULL, 102, 3, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
+	{ "LayerElementBinormal", "Binormals", NULL, 102, 2, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
 	{ "LayerElementColor", "Colors", "ColorIndex", 101, 4, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC4 | UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES },
 	{ "LayerElementSmoothing", "Smoothing", "", 102, 6, UFBXWI_MESH_ATTRIBUTE_TYPE_INT | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES },
 	{ "LayerElementMaterial", NULL, "Materials", 101, 7, UFBXWI_MESH_ATTRIBUTE_TYPE_NONE | UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES },
@@ -8682,6 +8683,8 @@ static void ufbxwi_save_mesh_data(ufbxwi_save_context *sc, ufbxwi_element *eleme
 		ufbxwi_dom_array(sc, "PolygonVertexIndex", index_buffer);
 	}
 
+	ufbxwi_dom_array(sc, "Edges", mesh->edges.id);
+
 	ufbxwi_dom_value(sc, "GeometryVersion", "I", 124);
 
 	ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_attributes, ufbxwi_mesh_attribute*, mesh->attributes.count));
@@ -10571,7 +10574,7 @@ ufbxw_abi void ufbxw_node_set_visibility(ufbxw_scene *scene, ufbxw_node node, bo
 ufbxw_abi bool ufbxw_node_get_visibility(ufbxw_scene *scene, ufbxw_node node)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check_element(scene, node.id, data);
+	ufbxwi_check_element(scene, node.id, data, false);
 	return data->visibility > 0.0f;
 }
 
@@ -10585,7 +10588,7 @@ ufbxw_abi void ufbxw_node_set_visibility_inheritance(ufbxw_scene *scene, ufbxw_n
 ufbxw_abi bool ufbxw_node_get_visibility_inheritance(ufbxw_scene *scene, ufbxw_node node)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check_element(scene, node.id, data);
+	ufbxwi_check_element(scene, node.id, data, false);
 	return data->visibility_inheritance;
 }
 
@@ -10847,6 +10850,14 @@ ufbxw_abi void ufbxw_mesh_set_face_material(ufbxw_scene *scene, ufbxw_mesh mesh,
 	desc.indices = material_indices.id;
 	desc.mapping = UFBXW_ATTRIBUTE_MAPPING_POLYGON;
 	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_MATERIAL, 0, &desc);
+}
+
+ufbxw_abi void ufbxw_mesh_set_fbx_edges(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer edges)
+{
+	ufbxwi_mesh *md = ufbxwi_get_mesh(scene, mesh);
+	ufbxwi_check_element(scene, mesh.id, md);
+
+	ufbxwi_set_buffer_from_user(&scene->buffers, &md->edges.id, edges.id);
 }
 
 ufbxw_abi void ufbxw_mesh_set_attribute(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const ufbxw_mesh_attribute_desc *desc)

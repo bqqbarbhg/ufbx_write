@@ -119,9 +119,6 @@ def create_dataset_task(root_dir, root, filename, heavy, allow_unknown, last_sup
     extra_files = []
     if not skip:
         models = list(gather_case_models(path, flag_separator))
-        if not models:
-            raise RuntimeError(f"No models found for {path}")
-
         extra_files = [os.path.join(root, ex) for ex in desc.get("extra-files", [])]
 
     yield TestCase(

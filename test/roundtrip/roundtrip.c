@@ -30,6 +30,12 @@ static ufbxw_vec3 to_ufbxw_vec3(ufbx_vec3 v)
 	return r;
 }
 
+static ufbxw_vec4 to_ufbxw_vec4(ufbx_vec4 v)
+{
+	ufbxw_vec4 r = { v.x, v.y, v.z, v.w };
+	return r;
+}
+
 static ufbxw_vec3 to_ufbxw_euler(ufbx_quat v)
 {
 	ufbx_vec3 euler = ufbx_quat_to_euler(v, UFBX_ROTATION_ORDER_XYZ);
@@ -37,6 +43,68 @@ static ufbxw_vec3 to_ufbxw_euler(ufbx_quat v)
 }
 
 static const ufbx_vec3 one_vec3 = { 1.0f, 1.0f, 1.0f };
+
+static ufbxw_int_buffer to_ufbxw_int_buffer(ufbxw_scene *scene, ufbx_int32_list src)
+{
+	ufbxw_int_buffer buffer = ufbxw_create_int_buffer(scene, src.count);
+	ufbxw_int_list dst = ufbxw_edit_int_buffer(scene, buffer);
+	memcpy(dst.data, src.data, src.count * sizeof(int32_t));
+	return buffer;
+}
+
+static ufbxw_int_buffer to_ufbxw_uint_buffer(ufbxw_scene *scene, ufbx_uint32_list src)
+{
+	ufbxw_int_buffer buffer = ufbxw_create_int_buffer(scene, src.count);
+	ufbxw_int_list dst = ufbxw_edit_int_buffer(scene, buffer);
+	memcpy(dst.data, src.data, src.count * sizeof(int32_t));
+	return buffer;
+}
+
+static ufbxw_real_buffer to_ufbxw_real_buffer(ufbxw_scene *scene, ufbx_real_list src)
+{
+	ufbxw_real_buffer buffer = ufbxw_create_real_buffer(scene, src.count);
+	ufbxw_real_list dst = ufbxw_edit_real_buffer(scene, buffer);
+	ufbxwt_assert(sizeof(ufbx_real) == sizeof(ufbxw_real));
+	memcpy(dst.data, src.data, src.count * sizeof(ufbx_real));
+	return buffer;
+}
+
+static ufbxw_vec2_buffer to_ufbxw_vec2_buffer(ufbxw_scene *scene, ufbx_vec2_list src)
+{
+	ufbxw_vec2_buffer buffer = ufbxw_create_vec2_buffer(scene, src.count);
+	ufbxw_vec2_list dst = ufbxw_edit_vec2_buffer(scene, buffer);
+	ufbxwt_assert(sizeof(ufbx_vec2) == sizeof(ufbxw_vec2));
+	memcpy(dst.data, src.data, src.count * sizeof(ufbx_vec2));
+	return buffer;
+}
+
+static ufbxw_vec3_buffer to_ufbxw_vec3_buffer(ufbxw_scene *scene, ufbx_vec3_list src)
+{
+	ufbxw_vec3_buffer buffer = ufbxw_create_vec3_buffer(scene, src.count);
+	ufbxw_vec3_list dst = ufbxw_edit_vec3_buffer(scene, buffer);
+	ufbxwt_assert(sizeof(ufbx_vec3) == sizeof(ufbxw_vec3));
+	memcpy(dst.data, src.data, src.count * sizeof(ufbx_vec3));
+	return buffer;
+}
+
+static ufbxw_vec4_buffer to_ufbxw_vec4_buffer(ufbxw_scene *scene, ufbx_vec4_list src)
+{
+	ufbxw_vec4_buffer buffer = ufbxw_create_vec4_buffer(scene, src.count);
+	ufbxw_vec4_list dst = ufbxw_edit_vec4_buffer(scene, buffer);
+	ufbxwt_assert(sizeof(ufbx_vec4) == sizeof(ufbxw_vec4));
+	memcpy(dst.data, src.data, src.count * sizeof(ufbx_vec4));
+	return buffer;
+}
+
+static ufbxw_vec3_buffer to_ufbxw_vec3_buffer_by_index(ufbxw_scene *scene, ufbx_vertex_vec3 src)
+{
+	ufbxw_vec3_buffer values = ufbxw_create_vec3_buffer(scene, src.indices.count);
+	ufbxw_vec3_list data = ufbxw_edit_vec3_buffer(scene, values);
+	for (size_t i = 0; i < src.indices.count; i++) {
+		data.data[i] = to_ufbxw_vec3(ufbx_get_vertex_vec3(&src, i));
+	}
+	return values;
+}
 
 int main(int argc, char **argv)
 {
@@ -140,23 +208,9 @@ int main(int argc, char **argv)
 		mesh_ids[mesh_ix] = out_mesh;
 		element_ids[in_mesh->element_id] = out_mesh.id;
 
-		ufbxw_vec3_buffer vertices = ufbxw_create_vec3_buffer(out_scene, in_mesh->vertices.count);
-		ufbxw_int_buffer vertex_indices = ufbxw_create_int_buffer(out_scene, in_mesh->vertex_indices.count);
+		ufbxw_vec3_buffer vertices = to_ufbxw_vec3_buffer(out_scene, in_mesh->vertices);
+		ufbxw_int_buffer vertex_indices = to_ufbxw_uint_buffer(out_scene, in_mesh->vertex_indices);
 		ufbxw_int_buffer face_offsets = ufbxw_create_int_buffer(out_scene, in_mesh->faces.count);
-
-		{
-			ufbxw_vec3_list vertex_data = ufbxw_edit_vec3_buffer(out_scene, vertices);
-			for (size_t i = 0; i < in_mesh->vertices.count; i++) {
-				vertex_data.data[i] = to_ufbxw_vec3(in_mesh->vertices.data[i]);
-			}
-		}
-
-		{
-			ufbxw_int_list index_data = ufbxw_edit_int_buffer(out_scene, vertex_indices);
-			for (size_t i = 0; i < in_mesh->vertex_indices.count; i++) {
-				index_data.data[i] = (int32_t)in_mesh->vertex_indices.data[i];
-			}
-		}
 
 		{
 			ufbxw_int_list face_data = ufbxw_edit_int_buffer(out_scene, face_offsets);
@@ -168,41 +222,50 @@ int main(int argc, char **argv)
 		ufbxw_mesh_set_vertices(out_scene, out_mesh, vertices);
 		ufbxw_mesh_set_polygons(out_scene, out_mesh, vertex_indices, face_offsets);
 
-		if (in_mesh->vertex_normal.exists) {
-			ufbxw_vec3_buffer normals = ufbxw_create_vec3_buffer(out_scene, in_mesh->num_indices);
+		if (in_mesh->num_edges > 0) {
+			ufbxw_int_buffer edges = ufbxw_create_int_buffer(out_scene, in_mesh->num_edges);
+			ufbxw_int_list edge_data = ufbxw_edit_int_buffer(out_scene, edges);
 
-			{
-				ufbxw_vec3_list normals_data = ufbxw_edit_vec3_buffer(out_scene, normals);
-				for (size_t i = 0; i < in_mesh->num_indices; i++) {
-					normals_data.data[i] = to_ufbxw_vec3(ufbx_get_vertex_vec3(&in_mesh->vertex_normal, i));
-				}
+			for (size_t i = 0; i < in_mesh->edges.count; i++) {
+				edge_data.data[i] = (int32_t)in_mesh->edges.data[i].a;
 			}
 
+			ufbxw_mesh_set_fbx_edges(out_scene, out_mesh, edges);
+		}
+
+		if (in_mesh->vertex_normal.exists) {
+			ufbxw_vec3_buffer normals = to_ufbxw_vec3_buffer_by_index(out_scene, in_mesh->vertex_normal);
 			ufbxw_mesh_set_normals(out_scene, out_mesh, normals, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
 		}
 
 		for (size_t uv_set = 0; uv_set < in_mesh->uv_sets.count; uv_set++) {
 			ufbx_uv_set set = in_mesh->uv_sets.data[uv_set];
 
-			ufbxw_vec2_buffer uv_values = ufbxw_create_vec2_buffer(out_scene, set.vertex_uv.values.count);
-			ufbxw_int_buffer uv_indices = ufbxw_create_int_buffer(out_scene, set.vertex_uv.indices.count);
-
-			{
-				ufbxw_vec2_list values_data = ufbxw_edit_vec2_buffer(out_scene, uv_values);
-				for (size_t i = 0; i < set.vertex_uv.values.count; i++) {
-					values_data.data[i] = to_ufbxw_vec2(set.vertex_uv.values.data[i]);
-				}
-			}
-
-			{
-				ufbxw_int_list indices_data = ufbxw_edit_int_buffer(out_scene, uv_indices);
-				for (size_t i = 0; i < set.vertex_uv.indices.count; i++) {
-					indices_data.data[i] = (int32_t)set.vertex_uv.indices.data[i];
-				}
-			}
+			ufbxw_vec2_buffer uv_values = to_ufbxw_vec2_buffer(out_scene, set.vertex_uv.values);
+			ufbxw_int_buffer uv_indices = to_ufbxw_uint_buffer(out_scene, set.vertex_uv.indices);
 
 			ufbxw_mesh_set_uvs_indexed(out_scene, out_mesh, (int32_t)uv_set, uv_values, uv_indices, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
 			ufbxw_mesh_set_attribute_name(out_scene, out_mesh, UFBXW_MESH_ATTRIBUTE_UV, (int32_t)uv_set, set.name.data);
+
+			if (set.vertex_tangent.exists) {
+				ufbxw_vec3_buffer tangents = to_ufbxw_vec3_buffer_by_index(out_scene, set.vertex_tangent);
+				ufbxw_mesh_set_tangents(out_scene, out_mesh, uv_set, tangents, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
+			}
+
+			if (set.vertex_bitangent.exists) {
+				ufbxw_vec3_buffer bitangents = to_ufbxw_vec3_buffer_by_index(out_scene, set.vertex_bitangent);
+				ufbxw_mesh_set_binormals(out_scene, out_mesh, uv_set, bitangents, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
+			}
+		}
+
+		for (size_t color_set = 0; color_set < in_mesh->color_sets.count; color_set++) {
+			ufbx_color_set set = in_mesh->color_sets.data[color_set];
+
+			ufbxw_vec4_buffer color_values = to_ufbxw_vec4_buffer(out_scene, set.vertex_color.values);
+			ufbxw_int_buffer color_indices = to_ufbxw_uint_buffer(out_scene, set.vertex_color.indices);
+
+			ufbxw_mesh_set_colors_indexed(out_scene, out_mesh, (int32_t)color_set, color_values, color_indices, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
+			ufbxw_mesh_set_attribute_name(out_scene, out_mesh, UFBXW_MESH_ATTRIBUTE_COLOR, (int32_t)color_set, set.name.data);
 		}
 	}
 
@@ -330,6 +393,10 @@ int main(int argc, char **argv)
 		element_ids[in_stack->element_id] = out_stack.id;
 
 		ufbxw_set_name(out_scene, out_stack.id, in_stack->name.data);
+
+		ufbxw_ktime time_begin = (ufbxw_ktime)round(in_stack->time_begin * UFBXW_KTIME_SECOND);
+		ufbxw_ktime time_end = (ufbxw_ktime)round(in_stack->time_end * UFBXW_KTIME_SECOND);
+		ufbxw_anim_stack_set_time_range(out_scene, out_stack, time_begin, time_end);
 
 		for (size_t layer_ix = 0; layer_ix < in_stack->layers.count; layer_ix++) {
 			ufbxw_anim_layer out_layer = anim_layer_ids[in_stack->layers.data[layer_ix]->typed_id];

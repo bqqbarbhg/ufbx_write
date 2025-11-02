@@ -382,7 +382,7 @@ static void compare_node(ufbx_node *src_node, ufbx_node *ref_node, bool full)
 		compare_scope scope { "light" };
 		check(src_node->light);
 		if (src_node->light) {
-			compare_light(ref_node->light, src_node->light);
+			compare_light(src_node->light, ref_node->light);
 		}
 	}
 
@@ -391,7 +391,7 @@ static void compare_node(ufbx_node *src_node, ufbx_node *ref_node, bool full)
 			compare_scope scope { "mesh" };
 			check(src_node->mesh);
 			if (src_node->mesh) {
-				compare_mesh(ref_node->mesh, src_node->mesh);
+				compare_mesh(src_node->mesh, ref_node->mesh);
 			}
 		}
 	}
