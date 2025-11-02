@@ -9,6 +9,9 @@
 
 #include "../compare_fbx/compare_fbx.h"
 
+#define ufbxwt_array_count(arr) (sizeof(arr) / sizeof(*(arr)))
+#define ufbxwt_static_assert(desc, cond) typedef char ufbxwt_static_assert_##desc[(cond)?1:-1]
+
 static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr) {
 	fprintf(stderr, "assert fail: %s (%s:%u)\n", expr, file, line);
 	exit(1);
@@ -17,6 +20,53 @@ static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr
 #define ufbxwt_assert(cond) do { \
 		if (!(cond)) ufbxwt_assert_fail(__FILE__, __LINE__, #cond); \
 	} while (0)
+
+static const char *ufbxwt_ufbx_element_type_names[] = {
+	"unknown",
+	"node",
+	"mesh",
+	"light",
+	"camera",
+	"bone",
+	"empty",
+	"line_curve",
+	"nurbs_curve",
+	"nurbs_surface",
+	"nurbs_trim_surface",
+	"nurbs_trim_boundary",
+	"procedural_geometry",
+	"stereo_camera",
+	"camera_switcher",
+	"marker",
+	"lod_group",
+	"skin_deformer",
+	"skin_cluster",
+	"blend_deformer",
+	"blend_channel",
+	"blend_shape",
+	"cache_deformer",
+	"cache_file",
+	"material",
+	"texture",
+	"video",
+	"shader",
+	"shader_binding",
+	"anim_stack",
+	"anim_layer",
+	"anim_value",
+	"anim_curve",
+	"display_layer",
+	"selection_set",
+	"selection_node",
+	"character",
+	"constraint",
+	"audio_layer",
+	"audio_clip",
+	"pose",
+	"metadata_object",
+};
+
+ufbxwt_static_assert(element_type_name_count, ufbxwt_array_count(ufbxwt_ufbx_element_type_names) == UFBX_ELEMENT_TYPE_COUNT);
 
 static ufbxw_vec2 to_ufbxw_vec2(ufbx_vec2 v)
 {
@@ -350,7 +400,13 @@ int main(int argc, char **argv)
 			ufbx_anim_prop *in_prop = &in_layer->anim_props.data[prop_ix];
 
 			ufbxw_id dst_id = element_ids[in_prop->element->element_id];
-			ufbxwt_assert(dst_id != 0);
+			if (!dst_id) {
+				fprintf(stderr, "Ignoring animation on missing %s '%s'\n",
+					ufbxwt_ufbx_element_type_names[in_prop->element->type],
+					in_prop->element->name.data);
+				continue;
+			}
+
 			ufbxw_anim_prop out_anim = ufbxw_animate_prop(out_scene, dst_id, in_prop->prop_name.data, out_layer);
 
 			ufbx_anim_value *in_value = in_prop->anim_value;

@@ -205,6 +205,11 @@ static void check_fail_imp(const char *file, int line, Args... args)
 
 template <typename T>
 static bool equals(T a, T b) { return a == b; }
+static bool equals(double a, double b) {
+	if (isnan(a)) return isnan(b);
+	return a == b;
+}
+
 static bool equals(ufbx_string a, ufbx_string b) { return !strcmp(a.data, b.data); }
 static bool equals(ufbx_vec2 a, ufbx_vec2 b) { return a.x == b.x && a.y == b.y; }
 static bool equals(ufbx_vec3 a, ufbx_vec3 b) { return a.x == b.x && a.y == b.y && a.z == b.z; }
@@ -214,6 +219,8 @@ static bool equals(ufbx_edge a, ufbx_edge b) { return a.a == b.a && a.b == b.b; 
 static bool equals(ufbx_face a, ufbx_face b) { return a.index_begin == b.index_begin && a.num_indices == b.num_indices; }
 
 static bool approx(double a, double b) {
+	if (isnan(a)) return isnan(b);
+
 	double err = fabs(a - b);
 	return err <= fmax(fmax(fabs(a), fabs(b)), 1.0) * g_opts.approx_epsilon;
 }
