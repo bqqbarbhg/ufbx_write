@@ -332,23 +332,23 @@ int main(int argc, char **argv)
 		ufbxw_light_set_outer_angle(out_scene, out_light, in_light->outer_angle);
 	}
 
-	for (size_t node_ix = 0; node_ix < in_scene->nodes.count; node_ix++) {
-		ufbx_node *in_node = in_scene->nodes.data[node_ix];
+	// Create nodes in the original element order
+	for (size_t elem_ix = 0; elem_ix < in_scene->elements.count; elem_ix++) {
+		ufbx_element *in_elem = in_scene->elements.data[elem_ix];
+		if (in_elem->type != UFBX_ELEMENT_NODE) continue;
+
+		ufbx_node *in_node = ufbx_as_node(in_elem);
 		if (in_node->is_root) {
 			continue;
 		}
 
 		ufbxw_node out_node = ufbxw_create_node(out_scene);
-		node_ids[node_ix] = out_node;
+		node_ids[in_node->typed_id] = out_node;
 		element_ids[in_node->element_id] = out_node.id;
 
 		ufbxw_set_name(out_scene, out_node.id, in_node->name.data);
 
 		ufbxw_node_set_inherit_type(out_scene, out_node, (ufbxw_inherit_type)in_node->inherit_mode);
-
-		if (in_node->parent && !in_node->parent->is_root) {
-			ufbxw_node_set_parent(out_scene, out_node, node_ids[in_node->parent->typed_id]);
-		}
 
 		if (advanced_transform) {
 			ufbxw_node_set_translation(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "Lcl Translation", ufbx_zero_vec3)));
@@ -387,6 +387,18 @@ int main(int argc, char **argv)
 			if (attrib_id != 0) {
 				ufbxw_node_set_attribute(out_scene, out_node, attrib_id);
 			}
+		}
+	}
+
+	// Hook the parents
+	for (size_t node_ix = 0; node_ix < in_scene->nodes.count; node_ix++) {
+		ufbx_node *in_node = in_scene->nodes.data[node_ix];
+
+		if (in_node->parent && !in_node->parent->is_root) {
+			ufbxw_node out_node = node_ids[in_node->typed_id];
+			ufbxw_node parent_node = node_ids[in_node->parent->typed_id];
+
+			ufbxw_node_set_parent(out_scene, out_node, parent_node);
 		}
 	}
 
