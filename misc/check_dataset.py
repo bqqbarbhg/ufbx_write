@@ -268,17 +268,21 @@ if __name__ == "__main__":
                     model.fbx_path,
                     "-o", result_path,
                     "-f", format,
+                    "--ascii", "fmtlib",
                     "--compare",
                 ]
-                for k,v in opts:
-                    if k == "format":
-                        continue
-                    if v is False:
-                        pass
-                    elif v is True:
-                        roundtrip_args += [f"--{k}"]
-                    else:
-                        roundtrip_args += [f"--{k}", v]
+
+                # TODO: Dedicated roundtrip options
+                if False:
+                    for k,v in opts:
+                        if k == "format":
+                            continue
+                        if v is False:
+                            pass
+                        elif v is True:
+                            roundtrip_args += [f"--{k}"]
+                        else:
+                            roundtrip_args += [f"--{k}", v]
 
                 log("$ " + " ".join(roundtrip_args))
                 log()

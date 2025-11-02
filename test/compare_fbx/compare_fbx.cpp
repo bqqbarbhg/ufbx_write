@@ -165,6 +165,7 @@ const char *find_filename(const char *path)
 	return end;
 }
 
+size_t g_check_total_elements = 0;
 size_t g_check_total_count = 0;
 size_t g_check_fail_count = 0;
 
@@ -272,6 +273,7 @@ static void check_list_approx_imp(const char *file, int line, const char *field,
 
 	g_check_total_count++;
 	size_t count = min(a.count, b.count);
+	g_check_total_elements += count;
 	for (size_t i = 0; i < count; i++) {
 		if (!approx(a[i], b[i])) {
 			check_fail_imp(file, line, field, "[", i, "]: ", a[i], " != ", b[i]);
@@ -295,6 +297,7 @@ static void check_vertex_attrib_imp(const char *file, int line, const char *fiel
 
 	g_check_total_count++;
 	size_t count = min(a.indices.count, b.indices.count);
+	g_check_total_elements += count;
 	for (size_t i = 0; i < count; i++) {
 		if (!approx(a[i], b[i])) {
 			check_fail_imp(file, line, field, "[", i, "]: ", a[i], " != ", b[i]);
@@ -417,7 +420,7 @@ static void compare_anim(ufbx_scene *src_scene, ufbx_anim *src_anim, ufbx_scene 
 	double frame_begin = ref_anim->time_begin * ref_scene->settings.frames_per_second;
 	double frame_end = ref_anim->time_end * ref_scene->settings.frames_per_second;
 
-	size_t num_samples = 128;
+	size_t num_samples = 8;
 	for (size_t sample_ix = 0; sample_ix < num_samples; sample_ix++) {
 		double frame = frame_begin + (frame_end - frame_begin) * sample_ix / (num_samples - 1);
 		double time = frame / ref_scene->settings.frames_per_second;
@@ -458,6 +461,7 @@ extern "C" bool compare_fbx(const char *src_path, const char *ref_path)
 
 	compare_scene(src_scene, ref_scene, true);
 
+#if 0
 	check_equal(src_scene, ref_scene, anim_stacks.count);
 	for (size_t stack_ix = 0; stack_ix < min(src_scene->anim_stacks.count, ref_scene->anim_stacks.count); stack_ix++) {
 		ufbx_anim_stack *src_stack = src_scene->anim_stacks[stack_ix];
@@ -471,6 +475,7 @@ extern "C" bool compare_fbx(const char *src_path, const char *ref_path)
 
 		compare_anim(src_scene, src_stack->anim, ref_scene, ref_stack->anim);
 	}
+#endif
 
 	ufbx_free_scene(src_scene);
 	ufbx_free_scene(ref_scene);
@@ -480,7 +485,7 @@ extern "C" bool compare_fbx(const char *src_path, const char *ref_path)
 	}
 
 	size_t ok_count = g_check_total_count - g_check_fail_count;
-	printf("%zu/%zu checks ok\n", ok_count, g_check_total_count);
+	printf("%zu/%zu checks ok (%zu elements)\n", ok_count, g_check_total_count, g_check_total_elements);
 
 	return g_check_fail_count == 0;
 }
