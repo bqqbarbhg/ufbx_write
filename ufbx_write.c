@@ -7664,7 +7664,7 @@ static ufbxwi_noinline bool ufbxwi_ascii_write_array_data(ufbxwi_save_thread_con
 	size_t offset = 0;
 	while (offset < input->count) {
 		size_t max_read_size = (input->count - offset) * type_info.size;
-		size_t read_size = ufbxwi_min_sz(max_read_size, line_elems);
+		size_t read_size = ufbxwi_min_sz(max_read_size, line_elems * type_info.size);
 		ufbxwi_void_span span = ufbxwi_buffer_input_read(input, &line_temp_buffer, read_size, offset);
 		size_t span_scalars = span.count * type_info.components;
 

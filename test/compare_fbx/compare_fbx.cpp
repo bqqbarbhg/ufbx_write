@@ -218,7 +218,10 @@ static bool approx(double a, double b) {
 static bool approx(ufbx_vec2 a, ufbx_vec2 b) { return approx(a.x, b.x) && approx(a.y, b.y); }
 static bool approx(ufbx_vec3 a, ufbx_vec3 b) { return approx(a.x, b.x) && approx(a.y, b.y) && approx(a.z, b.z); }
 static bool approx(ufbx_vec4 a, ufbx_vec4 b) { return approx(a.x, b.x) && approx(a.y, b.y) && approx(a.z, b.z) && approx(a.w, b.w); }
-static bool approx(ufbx_quat a, ufbx_quat b) { return approx(a.x, b.x) && approx(a.y, b.y) && approx(a.z, b.z) && approx(a.w, b.w); }
+static bool approx(ufbx_quat a, ufbx_quat b) {
+	a = ufbx_quat_fix_antipodal(a, b);
+	return approx(a.x, b.x) && approx(a.y, b.y) && approx(a.z, b.z) && approx(a.w, b.w);
+}
 
 #define check(m_cond) do { \
 		g_check_total_count++; \
