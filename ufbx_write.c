@@ -817,6 +817,7 @@ struct ufbxwi_error {
 
 static ufbxwi_noinline void ufbxwi_failf_imp(ufbxwi_error *error, ufbxw_error_type type, const char *func, const char *fmt, ...)
 {
+	// Don't report errors if we have already failed fatally
 	if (error->error.type >= UFBXW_ERROR_FATAL) return;
 
 	if (type < UFBXW_ERROR_FATAL) {
