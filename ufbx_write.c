@@ -8157,7 +8157,10 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 	ufbxwi_check(ufbxwi_write_reserve_small(sc, 16));
 
 	uint32_t encoding = 0;
-	if (sc->opts.deflate.create_cb.fn) {
+
+	// Don't deflate tiny buffers
+	// TODO: Determine a better cutoff point
+	if (data_size >= 16 && sc->opts.deflate.create_cb.fn) {
 		encoding = 1;
 	}
 
