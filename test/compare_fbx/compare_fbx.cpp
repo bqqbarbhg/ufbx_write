@@ -6,6 +6,7 @@
 #include <inttypes.h>
 #include <math.h>
 
+#include "compare_fbx.h"
 #include "../ufbx/ufbx.h"
 #include "../util/im_arg.h"
 
@@ -164,9 +165,17 @@ const char *find_filename(const char *path)
 	return end;
 }
 
+size_t g_check_total_count = 0;
+size_t g_check_fail_count = 0;
+
 template <typename... Args>
 static void check_fail_imp(const char *file, int line, Args... args)
 {
+	g_check_fail_count++;
+	if (g_check_fail_count >= 100) {
+		return;
+	}
+
 	char buf[512];
 	format_args(buf, sizeof(buf), args...);
 
@@ -212,18 +221,21 @@ static bool approx(ufbx_vec4 a, ufbx_vec4 b) { return approx(a.x, b.x) && approx
 static bool approx(ufbx_quat a, ufbx_quat b) { return approx(a.x, b.x) && approx(a.y, b.y) && approx(a.z, b.z) && approx(a.w, b.w); }
 
 #define check(m_cond) do { \
+		g_check_total_count++; \
 		if (!(m_cond)) { \
 			check_fail(#m_cond); \
 		} \
 	} while (0)
 
 #define check_equal(m_src, m_ref, m_field) do { \
+		g_check_total_count++; \
 		if (!equals((m_src)->m_field, (m_ref)->m_field)) { \
 			check_fail(#m_field, ": ", (m_src)->m_field, " != ", (m_ref)->m_field); \
 		} \
 	} while (0)
 
 #define check_approx(m_src, m_ref, m_field) do { \
+		g_check_total_count++; \
 		if (!approx((m_src)->m_field, (m_ref)->m_field)) { \
 			check_fail(#m_field, ": ", (m_src)->m_field, " != ", (m_ref)->m_field); \
 		} \
@@ -232,10 +244,12 @@ static bool approx(ufbx_quat a, ufbx_quat b) { return approx(a.x, b.x) && approx
 template <typename T>
 static void check_list_equal_imp(const char *file, int line, const char *field, T a, T b)
 {
+	g_check_total_count++;
 	if (a.count != b.count) {
 		check_fail_imp(file, line, field, " count: ", a.count, " != ", b.count);
 	}
 
+	g_check_total_count++;
 	size_t count = min(a.count, b.count);
 	for (size_t i = 0; i < count; i++) {
 		if (!equals(a[i], b[i])) {
@@ -248,10 +262,12 @@ static void check_list_equal_imp(const char *file, int line, const char *field, 
 template <typename T>
 static void check_list_approx_imp(const char *file, int line, const char *field, T a, T b)
 {
+	g_check_total_count++;
 	if (a.count != b.count) {
 		check_fail_imp(file, line, field, " count: ", a.count, " != ", b.count);
 	}
 
+	g_check_total_count++;
 	size_t count = min(a.count, b.count);
 	for (size_t i = 0; i < count; i++) {
 		if (!approx(a[i], b[i])) {
@@ -264,13 +280,17 @@ static void check_list_approx_imp(const char *file, int line, const char *field,
 template <typename T>
 static void check_vertex_attrib_imp(const char *file, int line, const char *field, T a, T b)
 {
+	g_check_total_count++;
 	if (a.exists != b.exists) {
 		check_fail_imp(file, line, field, " exists: ", a.exists, " != ", b.exists);
 	}
+
+	g_check_total_count++;
 	if (a.indices.count != b.indices.count) {
 		check_fail_imp(file, line, field, " indices.count: ", a.indices.count, " != ", b.indices.count);
 	}
 
+	g_check_total_count++;
 	size_t count = min(a.indices.count, b.indices.count);
 	for (size_t i = 0; i < count; i++) {
 		if (!approx(a[i], b[i])) {
@@ -303,7 +323,7 @@ static void compare_mesh(ufbx_mesh *src_mesh, ufbx_mesh *ref_mesh)
 
 	check_equal(src_mesh, ref_mesh, uv_sets.count);
 	for (size_t set_ix = 0; set_ix < min(src_mesh->uv_sets.count, ref_mesh->uv_sets.count); set_ix++) {
-		compare_scope scope { "uv set ", set_ix };
+		compare_scope scope { "uv set %zu", set_ix };
 
 		ufbx_uv_set *src_set = &src_mesh->uv_sets[set_ix];
 		ufbx_uv_set *ref_set = &ref_mesh->uv_sets[set_ix];
@@ -316,7 +336,7 @@ static void compare_mesh(ufbx_mesh *src_mesh, ufbx_mesh *ref_mesh)
 
 	check_equal(src_mesh, ref_mesh, color_sets.count);
 	for (size_t set_ix = 0; set_ix < min(src_mesh->color_sets.count, ref_mesh->color_sets.count); set_ix++) {
-		compare_scope scope { "color set ", set_ix };
+		compare_scope scope { "color set %zu", set_ix };
 
 		ufbx_color_set *src_set = &src_mesh->color_sets[set_ix];
 		ufbx_color_set *ref_set = &ref_mesh->color_sets[set_ix];
@@ -326,9 +346,29 @@ static void compare_mesh(ufbx_mesh *src_mesh, ufbx_mesh *ref_mesh)
 	}
 }
 
+static void compare_light(ufbx_light *src_light, ufbx_light *ref_light)
+{
+	check_approx(src_light, ref_light, color);
+	check_approx(src_light, ref_light, intensity);
+	check_approx(src_light, ref_light, type);
+	check_approx(src_light, ref_light, decay);
+	check_approx(src_light, ref_light, area_shape);
+	check_approx(src_light, ref_light, inner_angle);
+	check_approx(src_light, ref_light, outer_angle);
+}
+
 static void compare_node(ufbx_node *src_node, ufbx_node *ref_node, bool full)
 {
 	check_equal(src_node, ref_node, name);
+
+	if (ref_node->parent) {
+		check(src_node->parent);
+		if (src_node->parent) {
+			check_equal(src_node, ref_node, parent->typed_id);
+		}
+	} else {
+		check(!src_node->parent);
+	}
 
 	check_approx(src_node, ref_node, local_transform.translation);
 	check_approx(src_node, ref_node, local_transform.rotation);
@@ -338,11 +378,21 @@ static void compare_node(ufbx_node *src_node, ufbx_node *ref_node, bool full)
 	check_approx(src_node, ref_node, geometry_transform.rotation);
 	check_approx(src_node, ref_node, geometry_transform.scale);
 
+	if (ref_node->light) {
+		compare_scope scope { "light" };
+		check(src_node->light);
+		if (src_node->light) {
+			compare_light(ref_node->light, src_node->light);
+		}
+	}
+
 	if (full) {
 		if (ref_node->mesh) {
 			compare_scope scope { "mesh" };
 			check(src_node->mesh);
-			compare_mesh(ref_node->mesh, src_node->mesh);
+			if (src_node->mesh) {
+				compare_mesh(ref_node->mesh, src_node->mesh);
+			}
 		}
 	}
 }
@@ -382,24 +432,8 @@ static void compare_anim(ufbx_scene *src_scene, ufbx_anim *src_anim, ufbx_scene 
 	}
 }
 
-int main(int argc, char **argv)
+extern "C" bool compare_fbx(const char *src_path, const char *ref_path)
 {
-	const char *src_path = NULL;
-	const char *ref_path = NULL;
-
-	im_arg_begin_c(argc, argv);
-
-	while (im_arg_next()) {
-		im_arg_help("--help", "Show this help");
-
-		if (im_arg("source", "Source file path")) {
-			src_path = im_arg_str(0);
-		}
-		if (im_arg("reference", "Reference file path")) {
-			ref_path = im_arg_str(0);
-		}
-	}
-
 	ufbx_load_opts load_opts = { 0 };
 	ufbx_error load_error;
 
@@ -408,7 +442,7 @@ int main(int argc, char **argv)
 		char err_buf[512];
 		ufbx_format_error(err_buf, sizeof(err_buf), &load_error);
 		fprintf(stderr, "Failed to load source scene: %s\n", err_buf);
-		exit(2);
+		return false;
 	}
 
 	ufbx_scene *ref_scene = ufbx_load_file(ref_path, &load_opts, &load_error);
@@ -416,7 +450,7 @@ int main(int argc, char **argv)
 		char err_buf[512];
 		ufbx_format_error(err_buf, sizeof(err_buf), &load_error);
 		fprintf(stderr, "Failed to load source scene: %s\n", err_buf);
-		exit(3);
+		return false;
 	}
 
 	compare_scene(src_scene, ref_scene, true);
@@ -438,5 +472,12 @@ int main(int argc, char **argv)
 	ufbx_free_scene(src_scene);
 	ufbx_free_scene(ref_scene);
 
-	return 0;
+	if (g_check_fail_count > 0) {
+		printf("\n");
+	}
+
+	size_t ok_count = g_check_total_count - g_check_fail_count;
+	printf("%zu/%zu checks ok\n", ok_count, g_check_total_count);
+
+	return g_check_fail_count == 0;
 }

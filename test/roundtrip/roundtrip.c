@@ -7,6 +7,8 @@
 #include <string.h>
 #include <math.h>
 
+#include "../compare_fbx/compare_fbx.h"
+
 static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr) {
 	fprintf(stderr, "assert fail: %s (%s:%u)\n", expr, file, line);
 	exit(1);
@@ -41,6 +43,7 @@ int main(int argc, char **argv)
 	const char *output_path = NULL;
 	const char *input_path = NULL;
 	const char *format = "";
+	bool compare = false;
 
 	ufbxwt_deflate_impl deflate_impl = UFBXWT_DEFLATE_IMPL_NONE;
 	ufbxwt_ascii_format_impl ascii_impl = UFBXWT_ASCII_FORMAT_IMPL_DEFAULT;
@@ -98,6 +101,8 @@ int main(int argc, char **argv)
 			advanced_transform = true;
 		} else if (!strcmp(argv[i], "--bake-animation")) {
 			bake_animation = true;
+		} else if (!strcmp(argv[i], "--compare")) {
+			compare = true;
 		} else {
 			ufbxwt_assert(input_path == NULL);
 			input_path = argv[i];
@@ -197,11 +202,16 @@ int main(int argc, char **argv)
 			}
 
 			ufbxw_mesh_set_uvs_indexed(out_scene, out_mesh, (int32_t)uv_set, uv_values, uv_indices, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
+			ufbxw_mesh_set_attribute_name(out_scene, out_mesh, UFBXW_MESH_ATTRIBUTE_UV, (int32_t)uv_set, set.name.data);
 		}
 	}
 
 	for (size_t node_ix = 0; node_ix < in_scene->nodes.count; node_ix++) {
 		ufbx_node *in_node = in_scene->nodes.data[node_ix];
+		if (in_node->is_root) {
+			continue;
+		}
+
 		ufbxw_node out_node = ufbxw_create_node(out_scene);
 		node_ids[node_ix] = out_node;
 		element_ids[in_node->element_id] = out_node.id;
@@ -210,7 +220,7 @@ int main(int argc, char **argv)
 
 		ufbxw_node_set_inherit_type(out_scene, out_node, (ufbxw_inherit_type)in_node->inherit_mode);
 
-		if (in_node->parent) {
+		if (in_node->parent && !in_node->parent->is_root) {
 			ufbxw_node_set_parent(out_scene, out_node, node_ids[in_node->parent->typed_id]);
 		}
 
@@ -359,5 +369,13 @@ int main(int argc, char **argv)
 
 	ufbxw_free_scene(out_scene);
 
-	return 0;
+	int result = 0;
+
+	if (compare) {
+		if (!compare_fbx(output_path, input_path)) {
+			result = 1;
+		}
+	}
+
+	return result;
 }

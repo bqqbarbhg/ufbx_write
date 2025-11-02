@@ -51,7 +51,8 @@ get_filename_component(ROOT_PATH "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ufbxw_test)
 set_target_properties(ufbxw_test PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY ${ROOT_PATH})
 set_target_properties(ufbxw_unit PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY ${ROOT_PATH})
-set_target_properties(ufbxwt_roundtrip PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY ${ROOT_PATH})
+set_target_properties(roundtrip PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY ${ROOT_PATH})
+set_target_properties(compare_fbx PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY ${ROOT_PATH})
 
 file(MAKE_DIRECTORY "${ROOT_PATH}/output")
 
