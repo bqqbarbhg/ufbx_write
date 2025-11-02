@@ -452,6 +452,8 @@ extern "C" bool compare_fbx(const char *src_path, const char *ref_path, const co
 	g_opts = *opts;
 
 	ufbx_load_opts load_opts = { 0 };
+	load_opts.retain_vertex_attrib_w = true;
+
 	ufbx_error load_error;
 
 	ufbx_scene *src_scene = ufbx_load_file(src_path, &load_opts, &load_error);
