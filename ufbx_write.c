@@ -817,6 +817,7 @@ struct ufbxwi_error {
 
 static ufbxwi_noinline void ufbxwi_failf_imp(ufbxwi_error *error, ufbxw_error_type type, const char *func, const char *fmt, ...)
 {
+	// Don't report errors if we have already failed fatally
 	if (error->error.type >= UFBXW_ERROR_FATAL) return;
 
 	if (type < UFBXW_ERROR_FATAL) {
@@ -3499,6 +3500,7 @@ typedef struct {
 	ufbxw_int_buffer vertex_indices;
 	ufbxw_int_buffer face_offsets;
 	ufbxw_int_buffer polygon_vertex_index;
+	ufbxw_int_buffer edges;
 
 	ufbxwi_mesh_attribute_list attributes;
 
@@ -3594,6 +3596,10 @@ typedef struct {
 
 	ufbxw_real intensity;
 	ufbxw_vec3 color;
+	int32_t decay_type;
+	int32_t light_type;
+	ufbxw_real inner_angle;
+	ufbxw_real outer_angle;
 } ufbxwi_light;
 
 typedef struct {
@@ -4084,16 +4090,16 @@ static const ufbxwi_prop_desc ufbxwi_blend_channel_props[] = {
 
 static const ufbxwi_prop_desc ufbxwi_light_props[] = {
 	{ UFBXWI_Color, UFBXW_PROP_TYPE_COLOR, ufbxwi_field(ufbxwi_light, color), ufbxwi_default(vec3_1), UFBXW_PROP_FLAG_ANIMATABLE },
-	{ UFBXWI_LightType, UFBXW_PROP_TYPE_ENUM, },
+	{ UFBXWI_LightType, UFBXW_PROP_TYPE_ENUM, ufbxwi_field(ufbxwi_light, light_type) },
 	{ UFBXWI_CastLightOnObject, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 	{ UFBXWI_DrawVolumetricLight, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 	{ UFBXWI_DrawGroundProjection, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
 	{ UFBXWI_DrawFrontFacingVolumetricLight, UFBXW_PROP_TYPE_BOOL, },
 	{ UFBXWI_Intensity, UFBXW_PROP_TYPE_NUMBER, ufbxwi_field(ufbxwi_light, intensity), ufbxwi_default(double_100), UFBXW_PROP_FLAG_ANIMATABLE },
-	{ UFBXWI_InnerAngle, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
-	{ UFBXWI_OuterAngle, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_45), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_InnerAngle, UFBXW_PROP_TYPE_NUMBER, ufbxwi_field(ufbxwi_light, inner_angle), 0, UFBXW_PROP_FLAG_ANIMATABLE },
+	{ UFBXWI_OuterAngle, UFBXW_PROP_TYPE_NUMBER, ufbxwi_field(ufbxwi_light, outer_angle), ufbxwi_default(double_45), UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_Fog, UFBXW_PROP_TYPE_NUMBER, ufbxwi_default(double_50), 0, UFBXW_PROP_FLAG_ANIMATABLE },
-	{ UFBXWI_DecayType, UFBXW_PROP_TYPE_ENUM, },
+	{ UFBXWI_DecayType, UFBXW_PROP_TYPE_ENUM, ufbxwi_field(ufbxwi_light, decay_type) },
 	{ UFBXWI_DecayStart, UFBXW_PROP_TYPE_NUMBER, 0, 0, UFBXW_PROP_FLAG_ANIMATABLE },
 	{ UFBXWI_FileName, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_empty) },
 	{ UFBXWI_EnableNearAttenuation, UFBXW_PROP_TYPE_BOOL, },
@@ -4808,6 +4814,7 @@ static bool ufbxwi_init_light(ufbxw_scene *scene, void *data)
 	ufbxwi_light *light = (ufbxwi_light*)data;
 	light->color = ufbxwi_one_vec3;
 	light->intensity = (ufbxw_real)100.0;
+	light->outer_angle = (ufbxw_real)45.0;
 	return true;
 }
 
@@ -6314,8 +6321,8 @@ static const ufbxwi_mesh_attribute_info ufbxwi_mesh_attribute_infos[] = {
 	{ NULL }, // Invalid
 	{ "LayerElementNormal", "Normals", NULL, 102, 1, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
 	{ "LayerElementUV", "UV", "UVIndex", 101, 5, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC2 | UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES },
-	{ "LayerElementTangent", "Tangent", NULL, 102, 3, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
-	{ "LayerElementBinormal", "Binormal", NULL, 102, 2, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
+	{ "LayerElementTangent", "Tangents", NULL, 102, 3, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
+	{ "LayerElementBinormal", "Binormals", NULL, 102, 2, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC3 | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES | UFBXWI_MESH_ATTRIBUTE_FLAG_HAS_VALUES_W },
 	{ "LayerElementColor", "Colors", "ColorIndex", 101, 4, UFBXWI_MESH_ATTRIBUTE_TYPE_VEC4 | UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES },
 	{ "LayerElementSmoothing", "Smoothing", "", 102, 6, UFBXWI_MESH_ATTRIBUTE_TYPE_INT | UFBXWI_MESH_ATTRIBUTE_FLAG_FORBID_INDICES },
 	{ "LayerElementMaterial", NULL, "Materials", 101, 7, UFBXWI_MESH_ATTRIBUTE_TYPE_NONE | UFBXWI_MESH_ATTRIBUTE_FLAG_REQUIRE_INDICES },
@@ -7663,7 +7670,7 @@ static ufbxwi_noinline bool ufbxwi_ascii_write_array_data(ufbxwi_save_thread_con
 	size_t offset = 0;
 	while (offset < input->count) {
 		size_t max_read_size = (input->count - offset) * type_info.size;
-		size_t read_size = ufbxwi_min_sz(max_read_size, line_elems);
+		size_t read_size = ufbxwi_min_sz(max_read_size, line_elems * type_info.size);
 		ufbxwi_void_span span = ufbxwi_buffer_input_read(input, &line_temp_buffer, read_size, offset);
 		size_t span_scalars = span.count * type_info.components;
 
@@ -8150,7 +8157,10 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 	ufbxwi_check(ufbxwi_write_reserve_small(sc, 16));
 
 	uint32_t encoding = 0;
-	if (sc->opts.deflate.create_cb.fn) {
+
+	// Don't deflate tiny buffers
+	// TODO: Determine a better cutoff point
+	if (data_size >= 16 && sc->opts.deflate.create_cb.fn) {
 		encoding = 1;
 	}
 
@@ -8682,6 +8692,8 @@ static void ufbxwi_save_mesh_data(ufbxwi_save_context *sc, ufbxwi_element *eleme
 		ufbxwi_dom_array(sc, "PolygonVertexIndex", index_buffer);
 	}
 
+	ufbxwi_dom_array(sc, "Edges", mesh->edges.id);
+
 	ufbxwi_dom_value(sc, "GeometryVersion", "I", 124);
 
 	ufbxwi_check(ufbxwi_list_resize_uninit(&sc->ator, &sc->tmp_attributes, ufbxwi_mesh_attribute*, mesh->attributes.count));
@@ -8935,6 +8947,7 @@ static void ufbxwi_save_anim_curve_keys(ufbxwi_save_context *sc, ufbxwi_element 
 		prev_prev_ix = prev_ix;
 	}
 
+	ufbxw_assert(attr_count <= max_attrs);
 	ufbxw_buffer_id buf_flags = ufbxwi_create_external_buffer(&sc->buffers, UFBXWI_BUFFER_TYPE_INT, key_flags, attr_count, 0);
 	ufbxw_buffer_id buf_attrs = ufbxwi_create_external_buffer(&sc->buffers, UFBXWI_BUFFER_TYPE_KEY_ATTR, key_attrs, attr_count, 0);
 	ufbxw_buffer_id buf_refcounts = ufbxwi_create_external_buffer(&sc->buffers, UFBXWI_BUFFER_TYPE_INT, key_refcounts, attr_count, 0);
@@ -10364,25 +10377,18 @@ ufbxw_abi void ufbxw_node_set_translation(ufbxw_scene *scene, ufbxw_node node, u
 	data->lcl_translation = translation;
 }
 
-ufbxw_abi void ufbxw_node_set_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
-{
-	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check_element(scene, node.id, data);
-	data->lcl_rotation = rotation;
-}
-
-ufbxw_abi void ufbxw_node_set_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 scaling)
-{
-	ufbxwi_node *data = ufbxwi_get_node(scene, node);
-	ufbxwi_check_element(scene, node.id, data);
-	data->lcl_scaling = scaling;
-}
-
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_translation(ufbxw_scene *scene, ufbxw_node node)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
 	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
 	return data->lcl_translation;
+}
+
+ufbxw_abi void ufbxw_node_set_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->lcl_rotation = rotation;
 }
 
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation(ufbxw_scene *scene, ufbxw_node node)
@@ -10392,11 +10398,208 @@ ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation(ufbxw_scene *scene, ufbxw_node node
 	return data->lcl_rotation;
 }
 
+ufbxw_abi void ufbxw_node_set_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 scaling)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->lcl_scaling = scaling;
+}
+
 ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling(ufbxw_scene *scene, ufbxw_node node)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
 	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
 	return data->lcl_scaling;
+}
+
+ufbxw_abi void ufbxw_node_set_rotation_order(ufbxw_scene *scene, ufbxw_node node, ufbxw_rotation_order order)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->rotation_order = (int32_t)order;
+}
+
+ufbxw_abi ufbxw_rotation_order ufbxw_node_get_rotation_order(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, UFBXW_ROTATION_ORDER_XYZ);
+	return (ufbxw_rotation_order)data->rotation_order;
+}
+
+ufbxw_abi void ufbxw_node_set_rotation_quat(ufbxw_scene *scene, ufbxw_node node, ufbxw_quat rotation, ufbxw_rotation_order order)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->lcl_rotation = ufbxw_quat_to_euler(rotation, order);
+	data->rotation_order = (int32_t)order;
+}
+
+ufbxw_abi void ufbxw_node_set_inherit_type(ufbxw_scene *scene, ufbxw_node node, ufbxw_inherit_type order)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->inherit_type = (int32_t)order;
+}
+
+ufbxw_abi ufbxw_inherit_type ufbxw_node_get_inherit_type(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, UFBXW_INHERIT_TYPE_NORMAL);
+	return (ufbxw_inherit_type)data->inherit_type;
+}
+
+ufbxw_abi void ufbxw_node_set_pre_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->pre_rotation = rotation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_pre_rotation(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->pre_rotation;
+}
+
+ufbxw_abi void ufbxw_node_set_post_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->post_rotation = rotation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_post_rotation(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->post_rotation;
+}
+
+ufbxw_abi void ufbxw_node_set_rotation_offset(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->rotation_offset = rotation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation_offset(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->rotation_offset;
+}
+
+ufbxw_abi void ufbxw_node_set_rotation_pivot(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->rotation_pivot = rotation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_rotation_pivot(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->rotation_pivot;
+}
+
+ufbxw_abi void ufbxw_node_set_scaling_offset(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 scaling)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->scaling_offset = scaling;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling_offset(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->scaling_offset;
+}
+
+ufbxw_abi void ufbxw_node_set_scaling_pivot(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 scaling)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->scaling_pivot = scaling;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_scaling_pivot(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->scaling_pivot;
+}
+
+ufbxw_abi void ufbxw_node_set_geometric_translation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 geometric_translation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->geometric_translation = geometric_translation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_geometric_translation(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->geometric_translation;
+}
+
+ufbxw_abi void ufbxw_node_set_geometric_rotation(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 geometric_rotation)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->geometric_rotation = geometric_rotation;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_geometric_rotation(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->geometric_rotation;
+}
+
+ufbxw_abi void ufbxw_node_set_geometric_scaling(ufbxw_scene *scene, ufbxw_node node, ufbxw_vec3 geometric_scaling)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->geometric_scaling = geometric_scaling;
+}
+
+ufbxw_abi ufbxw_vec3 ufbxw_node_get_geometric_scaling(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, ufbxw_zero_vec3);
+	return data->geometric_scaling;
+}
+
+ufbxw_abi void ufbxw_node_set_visibility(ufbxw_scene *scene, ufbxw_node node, bool visible)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->visibility = visible ? 1.0f : 0.0f;
+}
+
+ufbxw_abi bool ufbxw_node_get_visibility(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, false);
+	return data->visibility > 0.0f;
+}
+
+ufbxw_abi void ufbxw_node_set_visibility_inheritance(ufbxw_scene *scene, ufbxw_node node, bool inherit)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data);
+	data->visibility_inheritance = inherit;
+}
+
+ufbxw_abi bool ufbxw_node_get_visibility_inheritance(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxwi_node *data = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, data, false);
+	return data->visibility_inheritance;
 }
 
 ufbxw_abi ufbxw_anim_prop ufbxw_node_animate_translation(ufbxw_scene *scene, ufbxw_node node, ufbxw_anim_layer layer)
@@ -10571,11 +10774,81 @@ ufbxw_abi void ufbxw_light_set_color(ufbxw_scene *scene, ufbxw_light light, ufbx
 	ld->color = color;
 }
 
+ufbxw_abi ufbxw_vec3 ufbxw_light_get_color(ufbxw_scene *scene, ufbxw_light light)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld, ufbxw_zero_vec3);
+	return ld->color;
+}
+
 ufbxw_abi void ufbxw_light_set_intensity(ufbxw_scene *scene, ufbxw_light light, ufbxw_real intensity)
 {
 	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
 	ufbxwi_check_element(scene, light.id, ld);
 	ld->intensity = intensity;
+}
+
+ufbxw_abi ufbxw_real ufbxw_light_get_intensity(ufbxw_scene *scene, ufbxw_light light)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld, 0.0f);
+	return ld->intensity;
+}
+
+ufbxw_abi void ufbxw_light_set_decay(ufbxw_scene *scene, ufbxw_light light, ufbxw_light_decay decay)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld);
+	ld->decay_type = (int32_t)decay;
+}
+
+ufbxw_abi ufbxw_light_decay ufbxw_light_get_decay(ufbxw_scene *scene, ufbxw_light light)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld, (ufbxw_light_decay)0);
+	return (ufbxw_light_decay)ld->decay_type;
+}
+
+ufbxw_abi void ufbxw_light_set_type(ufbxw_scene *scene, ufbxw_light light, ufbxw_light_type type)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld);
+	ld->light_type = (int32_t)type;
+}
+
+ufbxw_abi ufbxw_light_type ufbxw_light_get_type(ufbxw_scene *scene, ufbxw_light light)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld, (ufbxw_light_type)0);
+	return (ufbxw_light_type)ld->light_type;
+}
+
+ufbxw_abi void ufbxw_light_set_inner_angle(ufbxw_scene *scene, ufbxw_light light, ufbxw_real value)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld);
+	ld->inner_angle = value;
+}
+
+ufbxw_abi ufbxw_real ufbxw_light_get_inner_angle(ufbxw_scene *scene, ufbxw_light light)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld, 0.0f);
+	return ld->inner_angle;
+}
+
+ufbxw_abi void ufbxw_light_set_outer_angle(ufbxw_scene *scene, ufbxw_light light, ufbxw_real value)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld);
+	ld->outer_angle = value;
+}
+
+ufbxw_abi ufbxw_real ufbxw_light_get_outer_angle(ufbxw_scene *scene, ufbxw_light light)
+{
+	ufbxwi_light *ld = ufbxwi_get_light(scene, light);
+	ufbxwi_check_element(scene, light.id, ld, 0.0f);
+	return ld->outer_angle;
 }
 
 ufbxw_abi ufbxw_camera ufbxw_create_camera(ufbxw_scene *scene, ufbxw_node node)
@@ -10657,6 +10930,14 @@ ufbxw_abi void ufbxw_mesh_set_face_material(ufbxw_scene *scene, ufbxw_mesh mesh,
 	desc.indices = material_indices.id;
 	desc.mapping = UFBXW_ATTRIBUTE_MAPPING_POLYGON;
 	ufbxw_mesh_set_attribute(scene, mesh, UFBXW_MESH_ATTRIBUTE_MATERIAL, 0, &desc);
+}
+
+ufbxw_abi void ufbxw_mesh_set_fbx_edges(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_int_buffer edges)
+{
+	ufbxwi_mesh *md = ufbxwi_get_mesh(scene, mesh);
+	ufbxwi_check_element(scene, mesh.id, md);
+
+	ufbxwi_set_buffer_from_user(&scene->buffers, &md->edges.id, edges.id);
 }
 
 ufbxw_abi void ufbxw_mesh_set_attribute(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const ufbxw_mesh_attribute_desc *desc)
@@ -11035,6 +11316,16 @@ ufbxw_abi ufbxw_anim_curve ufbxw_anim_get_curve(ufbxw_scene *scene, ufbxw_anim_p
 	} else {
 		return ufbxw_null_anim_curve;
 	}
+}
+
+ufbxw_abi void ufbxw_anim_set_default_value(ufbxw_scene *scene, ufbxw_anim_prop anim, size_t index, ufbxw_real value)
+{
+	ufbxwi_anim_prop *p = ufbxwi_get_anim_prop(scene, anim);
+	if (index >= 4) {
+		ufbxwi_failf(&scene->error, UFBXW_ERROR_INDEX_OUT_OF_BOUNDS, "index (%zu) out of bounds (4)", index);
+		return;
+	}
+	p->defaults[index] = value;
 }
 
 ufbxw_abi void ufbxw_anim_add_keyframe_real(ufbxw_scene *scene, ufbxw_anim_prop anim, ufbxw_ktime time, ufbxw_real value, uint32_t type)
