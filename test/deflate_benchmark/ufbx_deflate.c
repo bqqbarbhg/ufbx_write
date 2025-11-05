@@ -11,7 +11,7 @@
 
 static size_t ufbxwte_deflate_ufbx_compress(ufbxwte_deflate_compressor *cc, void *dst, size_t dst_size, const void *src, size_t src_size)
 {
-	return SIZE_MAX;
+	return ufbxwi_deflate(dst, src, src_size);
 }
 
 static void ufbxwte_deflate_ufbx_free_compressor(ufbxwte_deflate_compressor *cc)

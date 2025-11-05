@@ -7,6 +7,15 @@
 #include <assert.h>
 #include <vector>
 
+static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr) {
+	fprintf(stderr, "assert fail: %s (%s:%u)\n", expr, file, line);
+	exit(1);
+}
+
+#define ufbxwt_assert(cond) do { \
+		if (!(cond)) ufbxwt_assert_fail(__FILE__, __LINE__, #cond); \
+	} while (0)
+
 bool g_verbose;
 
 struct test_array
@@ -29,6 +38,7 @@ struct test_file
 std::vector<char> g_src_buffer;
 std::vector<char> g_dst_buffer;
 std::vector<char> g_compress_buffer;
+std::vector<char> g_check_buffer;
 
 const char *deflate_impl_name[] = {
 	"zlib",
@@ -122,10 +132,10 @@ benchmark_compress_result benchmark_compress(const test_file &file, int32_t leve
 
 	std::vector<size_t> uncompressed_offsets;
 
-	{
-		ufbxwte_deflate_decompressor dc;
-		ufbxwte_deflate_init_decompressor(&dc, UFBXWTE_DEFLATE_LIBDEFLATE);
+	ufbxwte_deflate_decompressor dc;
+	ufbxwte_deflate_init_decompressor(&dc, UFBXWTE_DEFLATE_LIBDEFLATE);
 
+	{
 		size_t offset = 0;
 		for (const test_array &arr : file.arrays) {
 			result.uncompressed_bytes += arr.uncompressed_size;
@@ -137,8 +147,6 @@ benchmark_compress_result benchmark_compress(const test_file &file, int32_t leve
 			uncompressed_offsets.push_back(offset);
 			offset += arr.uncompressed_size;
 		}
-
-		ufbxwte_deflate_free_decompressor(&dc);
 	}
 
 	for (size_t round = 0; round < 3; round++) {
@@ -157,6 +165,11 @@ benchmark_compress_result benchmark_compress(const test_file &file, int32_t leve
 				size_t size = ufbxwte_deflate_compress(&cc[impl], dst, dst_size, src, src_size);
 				if (size != SIZE_MAX) {
 					total_size += size;
+				}
+
+				if (round == 0) {
+					size_t dec_size = ufbxwte_deflate_decompress(&dc, g_check_buffer.data(), g_check_buffer.size(), dst, size);
+					ufbxwt_assert(dec_size == arr.uncompressed_size);
 				}
 
 				index++;
@@ -178,6 +191,8 @@ benchmark_compress_result benchmark_compress(const test_file &file, int32_t leve
 	for (size_t impl = 0; impl < UFBXWTE_DEFLATE_IMPL_COUNT; impl++) {
 		ufbxwte_deflate_free_compressor(&cc[impl]);
 	}
+
+	ufbxwte_deflate_free_decompressor(&dc);
 
 	return result;
 }
@@ -264,6 +279,7 @@ int main(int argc, char **argv)
 	g_src_buffer.resize(max_file_size);
 	g_dst_buffer.resize(max_uncompressed_size);
 	g_compress_buffer.resize(max_uncompressed_size * 4 / 3 + 256);
+	g_check_buffer.resize(max_uncompressed_size);
 
 	if (do_decompress) {
 		for (const test_file &file : test_files) {
