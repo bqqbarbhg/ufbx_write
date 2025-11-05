@@ -10,6 +10,11 @@ option(USE_CPP_THREADS "Enable C++ threads" ON)
 
 set(SRC_EXTRA "")
 
+list(APPEND SRC_EXTRA
+    "ufbxwt_extra_deflate.c"
+    "ufbxwt_extra_deflate.h"
+)
+
 if(USE_LIBDEFLATE)
     FetchContent_Declare(
         libdeflate
