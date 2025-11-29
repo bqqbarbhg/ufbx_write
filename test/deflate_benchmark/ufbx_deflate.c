@@ -43,6 +43,7 @@ bool ufbxwt_deflate_init_compressor(ufbxwte_deflate_compressor *cc, ufbxwte_defl
 {
 	if (impl == UFBXWTE_DEFLATE_UFBX) {
 		ufbxwi_deflate_encoder *ud = (ufbxwi_deflate_encoder*)malloc(sizeof(ufbxwi_deflate_encoder));
+		ufbxwi_deflate_encoder_setup(ud);
 
 		cc->user = ud;
 		cc->compress_fn = &ufbxwte_deflate_ufbx_compress;

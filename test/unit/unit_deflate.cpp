@@ -4,6 +4,8 @@
 #define UFBXWI_FEATURE_DEFLATE 1
 #include "../../ufbx_write.c"
 
+#include "../ufbx/ufbx.h"
+
 #define UFBXWT_UNIT_CATEGORY "deflate"
 
 struct ufbxwt_deflate_symbol_info {
@@ -100,7 +102,7 @@ UFBXWT_UNIT_TEST(deflate_length_to_symbol)
 	for (ufbxwt_deflate_symbol_info info : ufbxwt_deflate_length_table) {
 		for (uint32_t v = info.min_value; v <= info.max_value; v++) {
 			uint32_t sym = ufbxwi_deflate_length_symbol(v);
-			ufbxwt_assert(sym == info.symbol);
+			ufbxwt_assert(sym + 256 == info.symbol);
 		}
 	}
 }
@@ -113,5 +115,43 @@ UFBXWT_UNIT_TEST(deflate_distance_to_symbol)
 			ufbxwt_assert(sym == info.symbol);
 		}
 	}
+}
+
+static void ufbxwt_test_deflate(const void *input, size_t input_length)
+{
+	ufbxwi_deflate_encoder *ud = (ufbxwi_deflate_encoder*)malloc(sizeof(ufbxwi_deflate_encoder));
+	ufbxwi_deflate_encoder_setup(ud);
+
+	char *dst = (char*)malloc(input_length * 2);
+	char *ref_dst = (char*)malloc(input_length);
+
+	size_t compressed_length = ufbxwi_deflate(ud, dst, input, input_length);
+
+	ufbx_inflate_retain ref_retain;
+	ref_retain.initialized = false;
+
+	ufbx_inflate_input ref_input = { 0 };
+	ref_input.data = dst;
+	ref_input.data_size = compressed_length;
+	ref_input.total_size = compressed_length;
+
+	ptrdiff_t result = ufbx_inflate(ref_dst, input_length, &ref_input, &ref_retain);
+	ufbxwt_assert(result >= 0);
+	ufbxwt_assert(result == input_length);
+	ufbxwt_assert(!memcmp(input, ref_dst, input_length));
+
+	free(ref_dst);
+	free(dst);
+	free(ud);
+}
+
+static void ufbxwt_test_deflate_str(const char *str)
+{
+	ufbxwt_test_deflate(str, strlen(str));
+}
+
+UFBXWT_UNIT_TEST(deflate_simple)
+{
+	ufbxwt_test_deflate_str("Hello");
 }
 
