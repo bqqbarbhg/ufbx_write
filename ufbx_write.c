@@ -123,12 +123,6 @@
 	#endif
 #endif
 
-#if defined(UFBXW_REGRESSION)
-	#define UFBXWI_DEFLATE_WINDOW_SIZE 128
-#else
-	#define UFBXWI_DEFLATE_WINDOW_SIZE 65536
-#endif
-
 // -- Pointer alignment
 
 #if !defined(UFBXW_STANDARD_C) && defined(__GNUC__) && defined(__has_builtin)
@@ -153,6 +147,8 @@
 #if !defined(UFBXW_STANDARD_C) && defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
 	ufbxwi_extern_c unsigned char _BitScanReverse(unsigned long * _Index, unsigned long _Mask);
 	ufbxwi_extern_c unsigned char _BitScanReverse64(unsigned long * _Index, unsigned __int64 _Mask);
+	ufbxwi_extern_c unsigned char _BitScanForward(unsigned long * _Index, unsigned long _Mask);
+	ufbxwi_extern_c unsigned char _BitScanForward64(unsigned long * _Index, unsigned __int64 _Mask);
 	static ufbxwi_forceinline ufbxwi_unused uint32_t ufbxwi_lzcnt32(uint32_t v) {
 		unsigned long index;
 		_BitScanReverse(&index, (unsigned long)v);
@@ -171,9 +167,32 @@
 		#endif
 		return 63 - (uint32_t)index;
 	}
+
+#if defined(_M_X64)
+	static ufbxwi_forceinline ufbxwi_unused uint32_t ufbxwi_tzcnt64(uint64_t v) {
+		unsigned long index;
+		_BitScanForward64(&index, (unsigned __int64)v);
+		return (uint32_t)index;
+	}
+
+	#define UFBXWI_HAS_TZCNT64 1
+#endif
+
+	#define UFBXWI_HAS_TZCNT32 1
+	static ufbxwi_forceinline ufbxwi_unused uint32_t ufbxwi_tzcnt32(uint32_t v) {
+		unsigned long index;
+		_BitScanForward(&index, (unsigned long)v);
+		return (uint32_t)index;
+	}
+
 #elif !defined(UFBXW_STANDARD_C) && (defined(__GNUC__) || defined(__clang__))
 	#define ufbxwi_lzcnt32(v) ((uint32_t)__builtin_clz((unsigned)(v)))
 	#define ufbxwi_lzcnt64(v) ((uint32_t)__builtin_clzll((unsigned long long)(v)))
+	#define ufbxwi_tzcnt32(v) ((uint32_t)__builtin_ctz((unsigned)(v)))
+	#define ufbxwi_tzcnt64(v) ((uint32_t)__builtin_ctzll((unsigned long long)(v)))
+
+	#define UFBXWI_HAS_TZCNT64 1
+	#define UFBXWI_HAS_TZCNT32 1
 #else
 	// DeBrujin table lookup
 	static const uint8_t ufbxwi_lzcnt32_table[] =  {
@@ -201,6 +220,14 @@
 		v |= v >> 32;
 		return ufbxwi_lzcnt64_table[(v * UINT64_C(0x03f79d71b4cb0a89)) >> 58];
 	}
+#endif
+
+#if !defined(UFBXW_LITTLE_ENDIAN)
+	#if !defined(UFBXW_STANDARD_C) && (defined(_M_IX86) || defined(__i386__) || defined(_M_X64) || defined(__x86_64__) || defined(_M_ARM64) || defined(__aarch64__) || defined(__wasm__) || defined(__EMSCRIPTEN__))
+		#define UFBXW_LITTLE_ENDIAN 1
+	#else
+		#define UFBXW_LITTLE_ENDIAN 0
+	#endif
 #endif
 
 #if defined(UFBXWI_HAS_ATTRIBUTE_ALIGNED)
@@ -237,6 +264,8 @@
 	#define ufbxwi_read_u64(ptr) (*(const ufbxwi_unaligned ufbxwi_unaligned_u64*)(ptr))
 	#define ufbxwi_read_f32(ptr) (*(const ufbxwi_unaligned ufbxwi_unaligned_f32*)(ptr))
 	#define ufbxwi_read_f64(ptr) (*(const ufbxwi_unaligned ufbxwi_unaligned_f64*)(ptr))
+
+	#define UFBXWI_UNALIGNED_IS_FAST 1
 #else
 	static ufbxwi_forceinline uint16_t ufbxwi_read_u16(const void *ptr) {
 		const char *p = (const char*)ptr;
@@ -276,6 +305,8 @@
 		memcpy(&f, &u, 8);
 		return f;
 	}
+
+	#define UFBXWI_UNALIGNED_IS_FAST 0
 #endif
 
 #define UFBXWI_PI ((ufbxw_real)3.14159265358979323846)
@@ -1373,7 +1404,7 @@ static uint32_t ufbxwi_bit_reverse(uint32_t mask, uint32_t num_bits)
 	return x >> (16 - num_bits);
 }
 
-void ufbxwi_build_huffman(ufbxwi_huff_symbol *symbols, uint32_t *counts, uint32_t num_symbols, uint32_t max_bits)
+void ufbxwi_build_huffman(ufbxwi_huff_symbol *symbols, const uint32_t *counts, uint32_t num_symbols, uint32_t max_bits)
 {
 	ufbxwi_huff_node nodes[1024];
 
@@ -1430,6 +1461,202 @@ void ufbxwi_build_huffman(ufbxwi_huff_symbol *symbols, uint32_t *counts, uint32_
 	}
 }
 
+#define UFBXWI_DEFLATE_HASH3_BITS 14
+#define UFBXWI_DEFLATE_HASH4_BITS 15
+#define UFBXWI_DEFLATE_WINDOW_BITS 15
+#define UFBXWI_DEFLATE_MATCH_BUFFER_SIZE 0x8000
+
+#define UFBXWI_DEFLATE_NUM_LITLEN_SYMBOLS 286
+#define UFBXWI_DEFLATE_NUM_DIST_SYMBOLS 30
+
+#define UFBXWI_DEFLATE_WINDOW_SIZE (1u << UFBXWI_DEFLATE_WINDOW_BITS)
+
+typedef uint64_t ufbxwi_lz_word;
+#define ufbxwi_lz_word_read(ptr) ufbxwi_read_u64(ptr)
+#define ufbxwi_lz_word_low_zero_bytes(word) (ufbxwi_tzcnt64(word) >> 3)
+
+typedef int64_t ufbxwi_lz_pos;
+
+typedef struct {
+	uint32_t offset;
+	uint8_t length_sym;
+	uint8_t dist_sym;
+	uint16_t length;
+	uint16_t dist;
+} ufbxwi_lz_match;
+
+typedef struct {
+	const char *data;
+	ufbxwi_lz_pos data_position;
+	ufbxwi_lz_pos data_size;
+
+	uint32_t match_count;
+
+	// uint32_t hash3_tab[UFBXWI_DEFLATE_MATCH_HASH3_SIZE];
+
+	int32_t hash4_tab[1 << UFBXWI_DEFLATE_HASH4_BITS];
+	uint16_t hash4_chain[1 << UFBXWI_DEFLATE_WINDOW_BITS];
+
+	ufbxwi_lz_match matches[UFBXWI_DEFLATE_MATCH_BUFFER_SIZE];
+
+	uint32_t litlen_count[UFBXWI_DEFLATE_NUM_LITLEN_SYMBOLS];
+	uint32_t dist_count[UFBXWI_DEFLATE_NUM_DIST_SYMBOLS];
+
+	ufbxwi_huff_symbol huff_litlen[UFBXWI_DEFLATE_NUM_LITLEN_SYMBOLS];
+	ufbxwi_huff_symbol huff_dist[UFBXWI_DEFLATE_NUM_DIST_SYMBOLS];
+} ufbxwi_deflate_encoder;
+
+static ufbxwi_noinline void ufbxwi_deflate_encoder_init(ufbxwi_deflate_encoder *ud)
+{
+	memset(ud->hash4_tab, 0, sizeof(ud->hash4_tab));
+	memset(ud->hash4_chain, 0xff, sizeof(ud->hash4_chain));
+}
+
+static const uint8_t ufbxwi_length_symbol_table[] = {
+	1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15, 16, 16, 16, 16,
+	17, 17, 17, 17, 17, 17, 17, 17, 18, 18, 18, 18, 18, 18, 18, 18, 19, 19, 19, 19, 19, 19, 19, 19, 20, 20, 20, 20, 20, 20, 20, 20,
+	21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
+	23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
+	25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
+	26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
+	27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27,
+	28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 29,
+};
+
+static ufbxwi_forceinline uint32_t ufbxwi_deflate_length_symbol(int32_t length)
+{
+	return 256 + ufbxwi_length_symbol_table[length - 3];
+}
+
+static ufbxwi_forceinline uint32_t ufbxwi_deflate_dist_symbol(int32_t distance)
+{
+	uint32_t v = distance - 1;
+	if (v < 2) return v;
+
+	uint32_t log_v = 31 - 1 - ufbxwi_lzcnt32((uint32_t)v);
+	return log_v * 2 + (v >> log_v);
+}
+
+static ufbxwi_forceinline uint32_t ufbxwi_deflate_hash4(const void *data, uint32_t bits)
+{
+	const uint32_t v = ufbxwi_read_u32(data);
+	return (uint32_t)(((uint64_t)(v) * UINT64_C(0x9E3779B185EBCA87)) >> (64 - bits));
+}
+
+static ufbxwi_forceinline int32_t ufbxwi_lz_match_length(const char *data, const char *match, int32_t max_len)
+{
+	int32_t len = 0;
+	ufbxwi_lz_word delta = 0;
+
+	do {
+		delta = ufbxwi_lz_word_read(data + len) ^ ufbxwi_lz_word_read(match + len);
+		if (delta != 0) break;
+		len += sizeof(ufbxwi_lz_word);
+
+		delta = ufbxwi_lz_word_read(data + len) ^ ufbxwi_lz_word_read(match + len);
+		if (delta != 0) break;
+		len += sizeof(ufbxwi_lz_word);
+	} while (len < max_len);
+
+	len += ufbxwi_lz_word_low_zero_bytes(delta);
+	return len < max_len ? len : max_len;
+}
+
+static ufbxwi_forceinline uint16_t ufbxwi_lz_saturate_chain_offset(ufbxwi_lz_pos delta)
+{
+	return (uint16_t)((int32_t)delta | (0x8000 - (int32_t)delta) >> 31);
+}
+
+static ufbxwi_noinline void ufbxwi_find_matches(ufbxwi_deflate_encoder *ud)
+{
+	ufbxwi_lz_pos read_pos = ud->data_position;
+	ufbxwi_lz_pos end = ud->data_size;
+	const char *data = (const char*)ud->data;
+
+	uint32_t next_hash4 = ufbxwi_deflate_hash4(data + read_pos, UFBXWI_DEFLATE_HASH4_BITS);
+
+	while (read_pos < end) {
+		const uint32_t hash4 = next_hash4;
+		next_hash4 = ufbxwi_deflate_hash4(data + read_pos + 1, UFBXWI_DEFLATE_HASH4_BITS);
+
+		ufbxwi_lz_pos match_pos = (ufbxwi_lz_pos)ud->hash4_tab[hash4];
+		ud->hash4_tab[hash4] = (int32_t)read_pos;
+		ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
+
+		ufbxwi_lz_pos next_pos = match_pos - ud->hash4_chain[match_pos];
+
+		const ufbxwi_lz_pos match_limit = read_pos - 0x8000;
+
+		ufbxwi_lz_pos best_pos = 0;
+		int32_t best_len = 0;
+
+		const char *data_read = data + read_pos;
+
+		if (match_pos >= match_limit) {
+			uint32_t scan_left = 64;
+
+			best_len = ufbxwi_lz_match_length(data + match_pos, data_read, 258);
+			best_pos = match_pos;
+
+			match_pos = next_pos;
+			next_pos = next_pos - ud->hash4_chain[next_pos];
+
+			while (match_pos >= match_limit) {
+				const char *data_match = data + match_pos;
+
+				if (ufbxwi_read_u32(data_match + best_len - 3) == ufbxwi_read_u32(data_read + best_len - 3)) {
+					int32_t new_len = ufbxwi_lz_match_length(data_match, data_read, 258);
+					if (new_len > best_len) {
+						best_len = new_len;
+						best_pos = match_pos;
+					}
+				}
+
+				match_pos = next_pos;
+				next_pos = next_pos - ud->hash4_chain[next_pos];
+			}
+
+			if (best_len >= 4) {
+				const uint32_t match_index = ud->match_count++;
+				ufbxwi_lz_match *match = &ud->matches[match_index];
+				match->offset = read_pos;
+
+				const int32_t distance = (int32_t)(read_pos - best_pos);
+				const uint32_t length_sym = ufbxwi_deflate_length_symbol(best_len);
+				const uint32_t dist_sym = ufbxwi_deflate_dist_symbol(distance);
+
+				ud->litlen_count[length_sym]++;
+				ud->dist_count[dist_sym]++;
+
+				match->length = (uint16_t)best_len;
+				match->dist = (int16_t)distance;
+				match->length_sym = (uint8_t)length_sym;
+				match->dist_sym = (uint8_t)dist_sym;
+
+				ufbxwi_lz_pos end_pos = read_pos + best_len;
+				while (read_pos < end_pos) {
+					read_pos++;
+
+					const uint32_t hash4 = next_hash4;
+					match_pos = (ufbxwi_lz_pos)ud->hash4_tab[hash4];
+					next_hash4 = ufbxwi_deflate_hash4(data + read_pos + 1, UFBXWI_DEFLATE_HASH4_BITS);
+					ud->hash4_tab[hash4] = (int32_t)read_pos;
+					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
+				}
+
+				if (match_index == UFBXWI_DEFLATE_MATCH_BUFFER_SIZE - 1) {
+					break;
+				}
+			}
+		}
+		
+	}
+}
+
+static ufbxwi_noinline void ufbxwi_encode_matches(ufbxwi_deflate_encoder *ud)
+{
+}
+
 static uint32_t ufbxwi_match_len(const unsigned char *a, const unsigned char *b, uint32_t max_length)
 {
 	if (max_length > 258) max_length = 258;
@@ -1444,203 +1671,18 @@ static uint16_t ufbxwi_encode_lit(uint32_t value, uint32_t bits)
 	return (uint16_t)(value | (0xfffeu << bits));
 }
 
-static uint32_t ufbxwi_sym_offset_bits(ufbxwi_huff_symbol *syms, uint32_t code, uint32_t base, const uint16_t *counts, uint32_t value)
-{
-	for (uint32_t bits = 0; counts[bits]; bits++) {
-		uint32_t num = counts[bits] << bits, delta = value - base;
-		if (delta < num) {
-			return syms[code + (delta >> bits)].length + bits;
-		}
-		code += counts[bits];
-		base += num;
-	}
-	return syms[code].bits;
-}
-
-static size_t ufbxwi_encode_sym_offset(uint16_t *dst, uint16_t code, uint32_t base, const uint16_t *counts, uint32_t value)
-{
-	for (uint32_t bits = 0; counts[bits]; bits++) {
-		uint32_t num = counts[bits] << bits, delta = value - base;
-		if (delta < num) {
-			dst[0] = code + (delta >> bits);
-			if (bits > 0) {
-				dst[1] = ufbxwi_encode_lit(delta & ((1 << bits) - 1), bits);
-				return 2;
-			} else {
-				return 1;
-			}
-		}
-		code += counts[bits];
-		base += num;
-	}
-	dst[0] = code;
-	return 1;
-}
-
-static uint32_t ufbxwi_lz_hash(const unsigned char *d)
-{
-	uint32_t x = (uint32_t)d[0] | (uint32_t)d[1] << 8 | (uint32_t)d[2] << 16;
-	x ^= x >> 16;
-	x *= UINT32_C(0x7feb352d);
-	x ^= x >> 15;
-	x *= UINT32_C(0x846ca68b);
-	x ^= x >> 16;
-	return x ? x : 1;
-}
-
-typedef struct {
-	uint32_t hash;
-	uint32_t offset;
-} ufbxwi_lz_hash_match;
-
-static void ufbxwi_init_tri_dist(uint16_t *tri_dist, const void *data, uint32_t length)
-{
-	const uint32_t max_scan = 32;
-	const unsigned char *d = (const unsigned char*)data;
-
-	// TODO: Dynamic memory
-	const uint32_t mask = 0x1ffff;
-	static ufbxwi_lz_hash_match match_table[0x20000];
-	memset(match_table, 0, sizeof(match_table));
-
-	for (uint32_t i = 0; i < length; i++) {
-		if (length - i >= 3) {
-			uint32_t hash = ufbxwi_lz_hash(d + i), replace_ix = 0, replace_score = 0;
-			for (uint32_t scan = 0; scan < max_scan; scan++) {
-				uint32_t ix = (hash + scan) & mask;
-				uint32_t delta = (uint32_t)(i - match_table[ix].offset);
-				if (match_table[ix].hash == hash && delta <= 32768) {
-					tri_dist[i] = (uint16_t)delta;
-					match_table[ix].offset = i;
-					replace_ix = UINT32_MAX;
-					break;
-				} else {
-					uint32_t score = delta <= 32768 ? delta : 32768 + max_scan - scan;
-					if (score > replace_score) {
-						replace_score = score;
-						replace_ix = ix;
-						if (score > 32768) break;
-					}
-				}
-			}
-			if (replace_ix != UINT32_MAX) {
-				match_table[replace_ix].hash = hash;
-				match_table[replace_ix].offset = i;
-				tri_dist[i] = UINT16_MAX;
-			}
-		} else {
-			tri_dist[i] = UINT16_MAX;
-		}
-	}
-}
-
-static ufbxwi_forceinline bool ufbxwi_cmp3(const void *a, const void *b)
-{
-	const char *ca = (const char*)a, *cb = (const char*)b;
-	return ca[0] == cb[0] && ca[1] == cb[1] && ca[2] == cb[2];
-}
-
-typedef struct {
-	uint32_t len, dist, bits;
-} ufbxwi_lz_match;
-
-static const uint16_t ufbxwi_len_counts[] = { 8, 4, 4, 4, 4, 4, 0 };
-static const uint16_t ufbxwi_dist_counts[] = { 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0 };
-
-static ufbxwi_lz_match ufbxwi_find_match(ufbxwi_huff_symbol *syms, const uint16_t *tri_dist, const void *data, uint32_t begin, uint32_t end)
-{
-	ufbxwi_lz_match result = { 0 };
-
-	const unsigned char *d = (const unsigned char*)data;
-	int32_t max_len = (int32_t)end - begin - 1;
-	if (max_len > 258) max_len = 258;
-	if (max_len < 3) return result;
-
-	uint32_t best_len = 0, best_dist = 0;
-	int32_t m_off = begin - tri_dist[begin], m_end = m_off, m_delta = 0;
-	uint32_t best_bits = syms[d[begin + 0]].length + syms[d[begin + 1]].length;
-	for (size_t scan = 0; scan < 10; scan++) {
-		if (begin - m_off > 32768 || m_off < 0 || m_end < 0 || m_delta > max_len - 3) break;
-		int32_t delta = m_end - m_off - 3;
-
-		bool ok = true;
-		if (m_off >= 0 && (m_end - m_off < m_delta || !ufbxwi_cmp3(d + m_off + m_delta, d + begin + m_delta))) {
-			m_off -= tri_dist[m_off];
-			if (m_off >= 0 && m_end - m_off > m_delta && ufbxwi_cmp3(d + m_off + m_delta, d + begin + m_delta)) {
-				m_end = m_off + m_delta;
-			}
-			ok = false;
-		}
-		if (m_end >= m_delta && (m_end - m_off < m_delta || !ufbxwi_cmp3(d + m_end - m_delta, d + begin))) {
-			m_end -= tri_dist[m_end];
-			if (m_end >= m_delta && m_end - m_off < m_delta && ufbxwi_cmp3(d + m_end - m_delta, d + begin)) {
-				m_off = m_end - m_delta;
-			}
-			ok = false;
-		}
-		if (!ok) continue;
-
-		if (m_delta <= 3 || !memcmp(d + begin, d + m_off, m_delta + 3)) {
-			do {
-				uint32_t m_len = m_delta + 3, m_dist = begin - m_off;
-				uint32_t m_bits = ufbxwi_sym_offset_bits(syms, 257, 3, ufbxwi_len_counts, m_len)
-					+ ufbxwi_sym_offset_bits(syms, 286, 1, ufbxwi_dist_counts, m_dist);
-
-				best_bits += syms[d[begin + m_len - 1]].length;
-				if (m_bits < best_bits) {
-					best_bits = m_bits;
-					best_len = m_len;
-					best_dist = m_dist;
-				}
-
-				m_end++;
-				m_delta++;
-			} while (m_delta <= max_len - 3 && d[begin + m_delta + 2] == d[m_off + m_delta + 2]);
-		} else {
-			m_off--;
-		}
-	}
-	result.len = best_len;
-	result.dist = best_dist;
-	result.bits = best_bits;
-	return result;
-}
-
 static uint32_t ufbxwi_encode_lz(ufbxwi_huff_symbol *syms, uint16_t *dst, const uint16_t *tri_dist, const void *data, uint32_t begin, uint32_t end, uint32_t *p_bits)
 {
 	const unsigned char *d = (const unsigned char*)data;
 	uint16_t *p = dst;
 	uint32_t bits = 0;
 	for (int32_t i = (int32_t)begin; i < (int32_t)end; i++) {
-
-		ufbxwi_lz_match match = ufbxwi_find_match(syms, tri_dist, data, i, end);
-		while (match.len > 0) {
-			ufbxwi_lz_match next = ufbxwi_find_match(syms, tri_dist, data, i + 1, end);
-			if (next.len == 0) break;
-
-			uint32_t match_bits = match.bits, next_bits = next.bits + syms[d[i]].length;
-			for (uint32_t j = i + match.len; j < i + 1 + next.len; j++) match_bits += syms[d[j]].length;
-			for (uint32_t j = i + 1 + next.len; j < i + match.len; j++) next_bits += syms[d[j]].length;
-			if (next_bits >= match_bits) break;
-
-			bits += syms[d[i]].length;
-			*p++ = d[i++];
-			match = next;
-		}
-
-		if (match.len > 0) {
-			ufbxwi_dev_assert(!memcmp(d + i, d + i - match.dist, match.len));
-			p += ufbxwi_encode_sym_offset(p, 257, 3, ufbxwi_len_counts, match.len);
-			p += ufbxwi_encode_sym_offset(p, 286, 1, ufbxwi_dist_counts, match.dist);
-			i += match.len - 1;
-		} else {
-			*p++ = d[i];
-		}
+		*p++ = d[i];
 	}
 	return (uint32_t)(p - dst);
 }
 
-static size_t ufbxwi_encode_lengths(uint16_t *dst, ufbxwi_huff_symbol *syms, uint32_t *p_count, uint32_t min_count)
+static size_t ufbxwi_encode_codelens(uint16_t *dst, const ufbxwi_huff_symbol *syms, uint32_t *p_count, uint32_t min_count)
 {
 	uint32_t count = *p_count;
 	while (count > min_count && syms[count - 1].length == 0) count--;
@@ -1699,7 +1741,7 @@ static ufbxwi_forceinline void ufbxwi_push_bits(char **p_dst, size_t *p_reg, siz
 	*p_num += bits;
 }
 
-static void ufbxwi_encode_syms(char **p_dst, size_t *p_reg, size_t *p_num, ufbxwi_huff_symbol *table, const uint16_t *syms, size_t num_syms)
+static ufbxwi_noinline void ufbxwi_encode_syms(char **p_dst, size_t *p_reg, size_t *p_num, ufbxwi_huff_symbol *table, const uint16_t *syms, size_t num_syms)
 {
 	size_t reg = *p_reg, num = *p_num;
 	for (size_t i = 0; i < num_syms; i++) {
@@ -1748,9 +1790,9 @@ static size_t ufbxwi_deflate(void *dst, const void *data, size_t length)
 	static uint16_t *tri_buf;
 
 	if (!sym_buf)
-		sym_buf = malloc(256*1024*1024);
+		sym_buf = (uint16_t*)malloc(256*1024*1024);
 	if (!tri_buf)
-		tri_buf = malloc(256*1024*1024);
+		tri_buf = (uint16_t*)malloc(256*1024*1024);
 
 	size_t reg = 0, num = 0;
 
@@ -1760,8 +1802,6 @@ static size_t ufbxwi_deflate(void *dst, const void *data, size_t length)
 	for (size_t lz_base = 0; lz_base < length; lz_base += lz_block_size) {
 		size_t lz_length = length - lz_base;
 		if (lz_length > lz_block_size) lz_length = lz_block_size;
-
-		ufbxwi_init_tri_dist(tri_buf, (const char*)data + lz_base, (uint32_t)lz_length);
 
 		for (size_t huff_base = 0; huff_base < lz_length; huff_base += huff_block_size) {
 			size_t huff_length = lz_length - huff_base;
@@ -1792,8 +1832,8 @@ static size_t ufbxwi_deflate(void *dst, const void *data, size_t length)
 
 			uint32_t hlit = 286, hdist = 30;
 			uint16_t header_syms[316], *header_dst = header_syms;
-			header_dst += ufbxwi_encode_lengths(header_dst, sym_huffs + 0, &hlit, 257);
-			header_dst += ufbxwi_encode_lengths(header_dst, sym_huffs + 286, &hdist, 1);
+			header_dst += ufbxwi_encode_codelens(header_dst, sym_huffs + 0, &hlit, 257);
+			header_dst += ufbxwi_encode_codelens(header_dst, sym_huffs + 286, &hdist, 1);
 			size_t header_len = (size_t)(header_dst - header_syms);
 
 			uint32_t header_counts[19] = { 0 };
