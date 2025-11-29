@@ -11,11 +11,13 @@
 
 static size_t ufbxwte_deflate_ufbx_compress(ufbxwte_deflate_compressor *cc, void *dst, size_t dst_size, const void *src, size_t src_size)
 {
-	return ufbxwi_deflate(dst, src, src_size);
+	ufbxwi_deflate_encoder *ud = (ufbxwi_deflate_encoder*)cc->user;
+	return ufbxwi_deflate(ud, dst, src, src_size);
 }
 
 static void ufbxwte_deflate_ufbx_free_compressor(ufbxwte_deflate_compressor *cc)
 {
+	free(cc->user);
 }
 
 static size_t ufbxwte_deflate_ufbx_decompress(ufbxwte_deflate_decompressor *dc, void *dst, size_t dst_size, const void *src, size_t src_size)
@@ -40,6 +42,9 @@ static void ufbxwte_deflate_ufbx_free_decompressor(ufbxwte_deflate_decompressor 
 bool ufbxwt_deflate_init_compressor(ufbxwte_deflate_compressor *cc, ufbxwte_deflate_impl impl, int32_t level)
 {
 	if (impl == UFBXWTE_DEFLATE_UFBX) {
+		ufbxwi_deflate_encoder *ud = (ufbxwi_deflate_encoder*)malloc(sizeof(ufbxwi_deflate_encoder));
+
+		cc->user = ud;
 		cc->compress_fn = &ufbxwte_deflate_ufbx_compress;
 		cc->free_fn = &ufbxwte_deflate_ufbx_free_compressor;
 

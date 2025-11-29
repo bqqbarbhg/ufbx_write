@@ -88,8 +88,11 @@ UFBXWT_UNIT_TEST(deflate_saturate_chain_offset)
 
 UFBXWT_UNIT_TEST(deflate_match_length)
 {
-	ufbxwt_assert(ufbxwi_lz_match_length("Hello World Alpha", "Hello World Beta", 128) == 12);
-	ufbxwt_assert(ufbxwi_lz_match_length("Hello World Alpha", "Hello World Beta", 10) == 10);
+	ufbxwt_assert(ufbxwi_lz_match_length_slow("Hello World Alpha", "Hello World Beta", 128) == 12);
+	ufbxwt_assert(ufbxwi_lz_match_length_slow("Hello World Alpha", "Hello World Beta", 10) == 10);
+
+	ufbxwt_assert(ufbxwi_lz_match_length_fast("Hello World Alpha........", "Hello World Beta........", 128) == 12);
+	ufbxwt_assert(ufbxwi_lz_match_length_fast("Hello World Alpha........", "Hello World Beta........", 10) == 10);
 }
 
 UFBXWT_UNIT_TEST(deflate_length_to_symbol)
