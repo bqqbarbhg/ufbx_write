@@ -1428,7 +1428,7 @@ static uint32_t ufbxwi_bit_reverse(uint32_t mask, uint32_t num_bits)
 	return x >> (16 - num_bits);
 }
 
-void ufbxwi_build_huffman(ufbxwi_huff_symbol *symbols, uint32_t *counts, uint32_t num_symbols, uint32_t max_bits)
+void ufbxwi_build_huffman(ufbxwi_huff_symbol *symbols, const uint16_t *counts, uint32_t num_symbols, uint32_t max_bits)
 {
 	ufbxwi_huff_node nodes[1024];
 
@@ -1483,8 +1483,14 @@ void ufbxwi_build_huffman(ufbxwi_huff_symbol *symbols, uint32_t *counts, uint32_
 
 		break;
 	}
+}
 
-	memset(counts, 0, num_symbols * sizeof(uint32_t));
+static ufbxwi_noinline void ufbxwi_build_static_huffman(ufbxwi_huff_symbol *huff, uint32_t count, uint32_t bits, uint32_t code_begin)
+{
+	ufbxwi_nounroll for (uint32_t i = 0; i < count; i++) {
+		huff[i].length = bits;
+		huff[i].bits = ufbxwi_bit_reverse(code_begin + i, bits);
+	}
 }
 
 #define UFBXWI_DEFLATE_HASH3_BITS 14
@@ -1498,6 +1504,10 @@ void ufbxwi_build_huffman(ufbxwi_huff_symbol *symbols, uint32_t *counts, uint32_
 #define UFBXWI_DEFLATE_NUM_CODELEN_SYMBOLS 19
 
 #define UFBXWI_DEFLATE_WINDOW_SIZE (1u << UFBXWI_DEFLATE_WINDOW_BITS)
+
+#define UFBXWI_DEFLATE_BLOCK_UNCOMPRESSED 0
+#define UFBXWI_DEFLATE_BLOCK_STATIC 1
+#define UFBXWI_DEFLATE_BLOCK_DYNAMIC 2
 
 typedef uint64_t ufbxwi_lz_word;
 #define ufbxwi_lz_word_read(ptr) ufbxwi_read_u64(ptr)
@@ -1535,6 +1545,9 @@ typedef struct {
 
 	char *dst_begin;
 
+	int8_t force_block_type;
+	bool has_static_huff;
+
 	uint32_t hash3_tab[1 << UFBXWI_DEFLATE_HASH3_BITS];
 
 	int32_t hash4_tab[1 << UFBXWI_DEFLATE_HASH4_BITS];
@@ -1542,23 +1555,25 @@ typedef struct {
 
 	ufbxwi_lz_match matches[UFBXWI_DEFLATE_MATCH_BUFFER_SIZE];
 
-	uint32_t litlen_count[UFBXWI_DEFLATE_NUM_LITLEN_SYMBOLS];
-	uint32_t dist_count[UFBXWI_DEFLATE_NUM_DIST_SYMBOLS];
+	uint16_t litlen_count[UFBXWI_DEFLATE_NUM_LITLEN_SYMBOLS];
+	uint16_t dist_count[UFBXWI_DEFLATE_NUM_DIST_SYMBOLS];
 
 	ufbxwi_huff_symbol huff_litlen[UFBXWI_DEFLATE_NUM_LITLEN_SYMBOLS];
 	ufbxwi_huff_symbol huff_dist[UFBXWI_DEFLATE_NUM_DIST_SYMBOLS];
 
-	uint32_t codelen_count[UFBXWI_DEFLATE_NUM_CODELEN_SYMBOLS];
+	uint16_t codelen_count[UFBXWI_DEFLATE_NUM_CODELEN_SYMBOLS];
 	ufbxwi_huff_symbol huff_codelen[UFBXWI_DEFLATE_NUM_CODELEN_SYMBOLS];
 
 	ufbxwi_deflate_codelen codelens[UFBXWI_DEFLATE_MAX_CODELENS];
+
+	ufbxwi_huff_symbol huff_static_litlen[UFBXWI_DEFLATE_NUM_LITLEN_SYMBOLS];
+	ufbxwi_huff_symbol huff_static_dist[UFBXWI_DEFLATE_NUM_DIST_SYMBOLS];
 } ufbxwi_deflate_encoder;
 
 static ufbxwi_noinline void ufbxwi_deflate_encoder_setup(ufbxwi_deflate_encoder *ud)
 {
-	memset(ud->litlen_count, 0, sizeof(ud->litlen_count));
-	memset(ud->dist_count, 0, sizeof(ud->dist_count));
-	memset(ud->codelen_count, 0, sizeof(ud->codelen_count));
+	ud->has_static_huff = false;
+	ud->force_block_type = -1;
 }
 
 static ufbxwi_noinline void ufbxwi_deflate_encoder_reset(ufbxwi_deflate_encoder *ud, void *dst, const void *src, size_t src_size)
@@ -1613,6 +1628,8 @@ static const uint32_t ufbxwi_deflate_distance_info[] = {
 	0x00010, 0x00020, 0x00030, 0x00040, 0x00051, 0x00071, 0x00092, 0x000d2, 0x00113, 0x00193, 0x00214, 0x00314, 0x00415, 0x00615, 0x00816, 0x00c16, 0x01017,
 	0x01817, 0x02018, 0x03018, 0x04019, 0x06019, 0x0801a, 0x0c01a, 0x1001b, 0x1801b, 0x2001c, 0x3001c, 0x4001d, 0x6001d,
 };
+
+static const uint8_t ufbxwi_deflate_codelen_swizzle[] = { 16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15 };
 
 static ufbxwi_forceinline uint32_t ufbxwi_deflate_length_symbol(int32_t length)
 {
@@ -2056,21 +2073,17 @@ static ufbxwi_noinline uint32_t ufbxwi_deflate_encode_codelens(ufbxwi_deflate_en
 		m_num_bits -= mi_flush_bits; \
 	} while (0)
 
-static ufbxwi_noinline void ufbxwi_deflate_flush_header(ufbxwi_deflate_encoder *ud, uint32_t hlit, uint32_t hdist)
+static ufbxwi_noinline void ufbxwi_deflate_flush_dynamic_header(ufbxwi_deflate_encoder *ud, uint32_t hlit, uint32_t hdist)
 {
-	static const uint8_t codelen_swizzle[] = { 16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15 };
 	uint32_t hclen = 19;
-	while (hclen > 4 && ud->huff_codelen[codelen_swizzle[hclen - 1]].length == 0) {
+	while (hclen > 4 && ud->huff_codelen[ufbxwi_deflate_codelen_swizzle[hclen - 1]].length == 0) {
 		hclen--;
 	}
-
-	const bool end = ud->read_pos == ud->end_pos;
 
 	char *dst = ud->dst_data;
 	uint64_t bits = ud->dst_bits;
 	uint32_t num_bits = ud->dst_num_bits;
 
-	ufbxwi_deflate_push_bits(bits, num_bits, end ? 0x5 : 0x4, 3);
 	ufbxwi_deflate_push_bits(bits, num_bits, hlit - 257, 5);
 	ufbxwi_deflate_push_bits(bits, num_bits, hdist - 1, 5);
 	ufbxwi_deflate_push_bits(bits, num_bits, hclen - 4, 4);
@@ -2081,7 +2094,7 @@ static ufbxwi_noinline void ufbxwi_deflate_flush_header(ufbxwi_deflate_encoder *
 			ufbxwi_deflate_flush_bits(dst, bits, num_bits);
 		}
 
-		ufbxwi_deflate_push_bits(bits, num_bits, ud->huff_codelen[codelen_swizzle[i]].length, 3);
+		ufbxwi_deflate_push_bits(bits, num_bits, ud->huff_codelen[ufbxwi_deflate_codelen_swizzle[i]].length, 3);
 	}
 	ufbxwi_deflate_flush_bits(dst, bits, num_bits);
 
@@ -2090,7 +2103,7 @@ static ufbxwi_noinline void ufbxwi_deflate_flush_header(ufbxwi_deflate_encoder *
 	ud->dst_num_bits = num_bits;
 }
 
-static ufbxwi_noinline void ufbxwi_deflate_flush_matches(ufbxwi_deflate_encoder *ud)
+static ufbxwi_noinline void ufbxwi_deflate_flush_matches(ufbxwi_deflate_encoder *ud, ufbxwi_huff_symbol *huff_litlen, ufbxwi_huff_symbol *huff_dist)
 {
 	ufbxwi_lz_pos encode_pos = ud->encode_pos;
 	const char *data = (const char*)ud->data;
@@ -2110,15 +2123,15 @@ static ufbxwi_noinline void ufbxwi_deflate_flush_matches(ufbxwi_deflate_encoder 
 		if (encode_pos != literal_end_pos) {
 			while (literal_end_pos - encode_pos >= 3) {
 				const char *d = data + encode_pos;
-				ufbxwi_deflate_push_sym(bits, num_bits, ud->huff_litlen[(uint8_t)d[0]]);
-				ufbxwi_deflate_push_sym(bits, num_bits, ud->huff_litlen[(uint8_t)d[1]]);
-				ufbxwi_deflate_push_sym(bits, num_bits, ud->huff_litlen[(uint8_t)d[2]]);
+				ufbxwi_deflate_push_sym(bits, num_bits, huff_litlen[(uint8_t)d[0]]);
+				ufbxwi_deflate_push_sym(bits, num_bits, huff_litlen[(uint8_t)d[1]]);
+				ufbxwi_deflate_push_sym(bits, num_bits, huff_litlen[(uint8_t)d[2]]);
 				ufbxwi_deflate_flush_bits(dst, bits, num_bits);
 				encode_pos += 3;
 			}
 			while (encode_pos < literal_end_pos) {
 				const char *d = data + encode_pos;
-				ufbxwi_deflate_push_sym(bits, num_bits, ud->huff_litlen[(uint8_t)d[0]]);
+				ufbxwi_deflate_push_sym(bits, num_bits, huff_litlen[(uint8_t)d[0]]);
 				encode_pos += 1;
 			}
 			ufbxwi_deflate_flush_bits(dst, bits, num_bits);
@@ -2131,15 +2144,19 @@ static ufbxwi_noinline void ufbxwi_deflate_flush_matches(ufbxwi_deflate_encoder 
 			const uint32_t len_extra = (match.length - len_extra_base) & ((1 << len_extra_bits) - 1);
 			const uint32_t dist_extra = (match.dist - dist_extra_base) & ((1 << dist_extra_bits) - 1);
 
-			ufbxwi_deflate_push_sym(bits, num_bits, ud->huff_litlen[match.length_sym + 256]);
+			ufbxwi_deflate_push_sym(bits, num_bits, huff_litlen[match.length_sym + 256]);
 			ufbxwi_deflate_push_bits(bits, num_bits, len_extra, len_extra_bits);
-			ufbxwi_deflate_push_sym(bits, num_bits, ud->huff_dist[match.dist_sym]);
+			ufbxwi_deflate_push_sym(bits, num_bits, huff_dist[match.dist_sym]);
 			ufbxwi_deflate_push_bits(bits, num_bits, dist_extra, dist_extra_bits);
 			ufbxwi_deflate_flush_bits(dst, bits, num_bits);
 
 			encode_pos += match.length;
 		}
 	}
+
+	// End-of-block symbol
+	ufbxwi_deflate_push_sym(bits, num_bits, huff_litlen[256]);
+	ufbxwi_deflate_flush_bits(dst, bits, num_bits);
 
 	ud->dst_data = dst;
 	ud->dst_bits = bits;
@@ -2185,16 +2202,168 @@ static ufbxwi_noinline void ufbxwi_deflate_flush_codelens(ufbxwi_deflate_encoder
 	ud->dst_num_bits = num_bits;
 }
 
-static ufbxwi_noinline void ufbxwi_deflate_compress_block(ufbxwi_deflate_encoder *ud)
+static ufbxwi_noinline void ufbxwi_deflate_flush_uncompressed(ufbxwi_deflate_encoder *ud)
+{
+	if (ud->dst_num_bits % 8 != 0) {
+		ufbxwi_deflate_push_bits(ud->dst_bits, ud->dst_num_bits, 0, 8 - (ud->dst_num_bits % 8));
+	}
+	ufbxwi_deflate_flush_bits(ud->dst_data, ud->dst_bits, ud->dst_num_bits);
+
+	while (ud->encode_pos < ud->read_pos) {
+		const uint32_t num_bytes = ufbxwi_min_u32((uint32_t)(ud->read_pos - ud->encode_pos), 0xffffu);
+
+		char *dst = ud->dst_data;
+		dst[0] = (char)(num_bytes & 0xff);
+		dst[1] = (char)(num_bytes >> 8);
+		dst[2] = (char)~(num_bytes & 0xff);
+		dst[3] = (char)~(num_bytes >> 8);
+		dst += 4;
+
+		memcpy(dst, ud->data + ud->encode_pos, num_bytes);
+		dst += num_bytes;
+
+		ud->dst_data = dst;
+		ud->encode_pos += num_bytes;
+	}
+}
+
+static ufbxwi_noinline void ufbxwi_init_static_huff(ufbxwi_deflate_encoder *ud)
+{
+	// Lit/length
+	ufbxwi_build_static_huffman(ud->huff_static_litlen + 0, 144 - 0, 8, 0x30);
+	ufbxwi_build_static_huffman(ud->huff_static_litlen + 144, 256 - 144, 9, 0x190);
+	ufbxwi_build_static_huffman(ud->huff_static_litlen + 256, 280 - 256, 7, 0x0);
+	ufbxwi_build_static_huffman(ud->huff_static_litlen + 280, 286 - 280, 8, 0xc0);
+
+	// Distance
+	ufbxwi_build_static_huffman(ud->huff_static_dist, 30, 5, 0x0);
+
+	ud->has_static_huff = true;
+}
+
+static ufbxwi_noinline int32_t ufbxwi_deflate_determine_block_type(ufbxwi_deflate_encoder *ud)
+{
+	if (ud->force_block_type >= 0) {
+		return ud->force_block_type;
+	}
+
+	uint32_t bits_dynamic = 0;
+	uint32_t bits_static = 0;
+
+	// Literal/length
+	{
+		const uint16_t *litlen_count = ud->litlen_count;
+		uint32_t temp_count = 0;
+
+		ufbxwi_nounroll for (uint32_t i = 0; i < 144; i++) {
+			const uint32_t count = litlen_count[i];
+			bits_dynamic += count * ud->huff_litlen[i].length;
+			temp_count += count;
+		}
+		bits_static += temp_count * 8;
+
+		temp_count = 0;
+		ufbxwi_nounroll for (uint32_t i = 144; i < 256; i++) {
+			const uint32_t count = litlen_count[i];
+			bits_dynamic += count * ud->huff_litlen[i].length;
+			temp_count += count;
+		}
+		bits_static += temp_count * 9;
+
+		ufbxwi_nounroll for (uint32_t i = 256; i < 280; i++) {
+			const uint32_t count = litlen_count[i];
+			const uint32_t extra_bits = ufbxwi_deflate_length_info[i - 256] & 0xf;
+			bits_dynamic += count * (ud->huff_litlen[i].length + extra_bits);
+			bits_static += count * (7 + extra_bits);
+		}
+
+		ufbxwi_nounroll for (uint32_t i = 280; i < 286; i++) {
+			const uint32_t count = litlen_count[i];
+			const uint32_t extra_bits = ufbxwi_deflate_length_info[i - 256] & 0xf;
+			bits_dynamic += count * (ud->huff_litlen[i].length + extra_bits);
+			bits_static += count * (8 + extra_bits);
+		}
+	}
+
+	// Distance
+	{
+		const uint16_t *dist_count = ud->dist_count;
+
+		ufbxwi_nounroll for (uint32_t i = 0; i < 30; i++) {
+			const uint32_t count = dist_count[i];
+			const uint32_t extra_bits = ufbxwi_deflate_distance_info[i] & 0xf;
+			bits_dynamic += count * (ud->huff_dist[i].length + extra_bits);
+			bits_static += count * (5 + extra_bits);
+		}
+	}
+
+	// Codelen
+	{
+		const uint16_t *codelen_count = ud->codelen_count;
+		static const uint8_t codelen_extra_bits[] = { 2, 3, 7 };
+
+		ufbxwi_nounroll for (uint32_t i = 0; i < 16; i++) {
+			const uint32_t count = codelen_count[i];
+			bits_dynamic += count * ud->huff_codelen[i].length;
+		}
+		ufbxwi_nounroll for (uint32_t i = 16; i < 19; i++) {
+			const uint32_t count = codelen_count[i];
+			const uint32_t extra_bits = codelen_extra_bits[i - 16];
+			bits_dynamic += count * ud->huff_codelen[i].length;
+		}
+	}
+
+	// Header
+	{
+		uint32_t hclen = 19;
+		while (hclen > 4 && ud->huff_codelen[ufbxwi_deflate_codelen_swizzle[hclen - 1]].length == 0) {
+			hclen--;
+		}
+
+		// Block type
+		bits_dynamic += 3;
+		bits_static += 3;
+
+		// HLIT, HDIST, HCLEN
+		bits_dynamic += 5 + 5 + 4;
+
+		// Codelen lengths
+		bits_dynamic += hclen * 3;
+	}
+
+	uint32_t bits_uncompressed = 0;
+
+	// Slightly over- and under-estimated
+	uint32_t uncompressed_bytes = (uint32_t)(ud->read_pos - ud->encode_pos);
+	bits_uncompressed += 3 + 8 + 32;
+	bits_uncompressed += uncompressed_bytes * 8;
+
+	uint32_t bits_compressed = ufbxwi_min_u32(bits_dynamic, bits_static);
+
+	// Prefer uncompressed even if we lose a smidge of ratio
+	if (bits_uncompressed * 99 <= bits_compressed * 100) {
+		return UFBXWI_DEFLATE_BLOCK_UNCOMPRESSED;
+	}
+
+	// Prefer static even if we lose a smidge of ratio
+	if (bits_static * 99 <= bits_dynamic * 100) {
+		return UFBXWI_DEFLATE_BLOCK_STATIC;
+	}
+
+	return UFBXWI_DEFLATE_BLOCK_DYNAMIC;
+}
+
+static ufbxwi_noinline void ufbxwi_deflate_compress_block(ufbxwi_deflate_encoder *ud, ufbxwi_lz_pos end_pos)
 {
 	// Reset state
 	ud->num_matches = 0;
 	ud->num_codelens = 0;
-
-	// TODO: Block pacing
+	memset(ud->litlen_count, 0, sizeof(ud->litlen_count));
+	memset(ud->dist_count, 0, sizeof(ud->dist_count));
+	memset(ud->codelen_count, 0, sizeof(ud->codelen_count));
 
 	ud->litlen_count[256] = 1;
-	ufbxwi_find_matches(ud, ud->end_pos);
+	ufbxwi_find_matches(ud, end_pos);
 
 	ufbxwi_build_huffman(ud->huff_litlen, ud->litlen_count, UFBXWI_DEFLATE_NUM_LITLEN_SYMBOLS, 15);
 	ufbxwi_build_huffman(ud->huff_dist, ud->dist_count, UFBXWI_DEFLATE_NUM_DIST_SYMBOLS, 15);
@@ -2203,15 +2372,26 @@ static ufbxwi_noinline void ufbxwi_deflate_compress_block(ufbxwi_deflate_encoder
 	const uint32_t hdist = ufbxwi_deflate_encode_codelens(ud, ud->huff_dist, 1, 30);
 	ufbxwi_build_huffman(ud->huff_codelen, ud->codelen_count, UFBXWI_DEFLATE_NUM_CODELEN_SYMBOLS, 7);
 
-	// TODO: Uncompressed blocks where they are better
+	int32_t block_type = ufbxwi_deflate_determine_block_type(ud);
 
-	ufbxwi_deflate_flush_header(ud, hlit, hdist);
-	ufbxwi_deflate_flush_codelens(ud);
-	ufbxwi_deflate_flush_matches(ud);
-
-	// End-of-block symbol
-	ufbxwi_deflate_push_sym(ud->dst_bits, ud->dst_num_bits, ud->huff_litlen[256]);
+	const bool end = ud->read_pos == ud->end_pos;
+	const uint32_t block_header = ((uint32_t)block_type << 1) | (end ? 0x1 : 0x0);
+	ufbxwi_deflate_push_bits(ud->dst_bits, ud->dst_num_bits, block_header, 3);
 	ufbxwi_deflate_flush_bits(ud->dst_data, ud->dst_bits, ud->dst_num_bits);
+
+	if (block_type == UFBXWI_DEFLATE_BLOCK_UNCOMPRESSED) {
+		ufbxwi_deflate_flush_uncompressed(ud);
+	} else if (block_type == UFBXWI_DEFLATE_BLOCK_STATIC) {
+		if (!ud->has_static_huff) {
+			ufbxwi_init_static_huff(ud);
+		}
+		ufbxwi_deflate_flush_matches(ud, ud->huff_static_litlen, ud->huff_static_dist);
+	} else if (block_type == UFBXWI_DEFLATE_BLOCK_DYNAMIC) {
+		ufbxwi_deflate_flush_dynamic_header(ud, hlit, hdist);
+		ufbxwi_deflate_flush_codelens(ud);
+		ufbxwi_deflate_flush_matches(ud, ud->huff_litlen, ud->huff_dist);
+	}
+
 }
 
 static ufbxwi_noinline uint32_t ufbxwi_adler32(const void *data, size_t size)
@@ -2362,7 +2542,13 @@ static ufbxwi_noinline void ufbxwi_deflate_imp(ufbxwi_deflate_encoder *ud)
 	ufbxwi_deflate_flush_bits(ud->dst_data, ud->dst_bits, ud->dst_num_bits);
 
 	while (ud->read_pos != ud->end_pos) {
-		ufbxwi_deflate_compress_block(ud);
+		// TODO: Better block pacing
+		ufbxwi_lz_pos block_end_pos = ud->read_pos + 0x8000;
+		if (block_end_pos > ud->end_pos) {
+			block_end_pos = ud->end_pos;
+		}
+
+		ufbxwi_deflate_compress_block(ud, block_end_pos);
 	}
 
 	const uint32_t checksum = ufbxwi_adler32(ud->data, (size_t)ud->end_pos);

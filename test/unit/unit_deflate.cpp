@@ -125,20 +125,24 @@ static void ufbxwt_test_deflate(const void *input, size_t input_length)
 	char *dst = (char*)malloc(input_length * 2 + 128);
 	char *ref_dst = (char*)malloc(input_length);
 
-	size_t compressed_length = ufbxwi_deflate(ud, dst, input, input_length);
+	for (int32_t force_block_type = -1; force_block_type < 3; force_block_type++) {
+		ud->force_block_type = (int8_t)force_block_type;
 
-	ufbx_inflate_retain ref_retain;
-	ref_retain.initialized = false;
+		size_t compressed_length = ufbxwi_deflate(ud, dst, input, input_length);
 
-	ufbx_inflate_input ref_input = { 0 };
-	ref_input.data = dst;
-	ref_input.data_size = compressed_length;
-	ref_input.total_size = compressed_length;
+		ufbx_inflate_retain ref_retain;
+		ref_retain.initialized = false;
 
-	ptrdiff_t result = ufbx_inflate(ref_dst, input_length, &ref_input, &ref_retain);
-	ufbxwt_assert(result >= 0);
-	ufbxwt_assert(result == input_length);
-	ufbxwt_assert(!memcmp(input, ref_dst, input_length));
+		ufbx_inflate_input ref_input = { 0 };
+		ref_input.data = dst;
+		ref_input.data_size = compressed_length;
+		ref_input.total_size = compressed_length;
+
+		ptrdiff_t result = ufbx_inflate(ref_dst, input_length, &ref_input, &ref_retain);
+		ufbxwt_assert(result >= 0);
+		ufbxwt_assert(result == input_length);
+		ufbxwt_assert(!memcmp(input, ref_dst, input_length));
+	}
 
 	free(ref_dst);
 	free(dst);
