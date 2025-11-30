@@ -1898,22 +1898,6 @@ static ufbxwi_noinline void ufbxwi_find_matches(ufbxwi_deflate_encoder *ud, ufbx
 			match->dist_sym = 0;
 			match->length = 0;
 			match->dist = 0;
-		} else if (ud->prev_match_end_pos > ud->end_pos) {
-			// Trim the last match if it goes out of bounds
-
-			ufbxwi_lz_match *last_match = &ud->matches[ud->num_matches - 1];
-
-			const ufbxwi_lz_pos match_begin_pos = ud->prev_match_end_pos - last_match->length;
-			const uint32_t new_length = (uint32_t)(ud->end_pos - match_begin_pos);
-			const uint32_t new_length_sym = ufbxwi_deflate_length_symbol(new_length);
-
-			ud->litlen_count[last_match->length_sym + 256]--;
-			ud->litlen_count[new_length_sym + 256]++;
-
-			last_match->length = new_length;
-			last_match->length_sym = new_length_sym;
-
-			ud->prev_match_end_pos = ud->read_pos;
 		}
 
 		ud->prev_match_end_pos = ud->read_pos;
