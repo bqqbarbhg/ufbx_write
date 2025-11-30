@@ -1416,7 +1416,6 @@ void ufbxwi_build_huffman(ufbxwi_huff_symbol *symbols, uint32_t *counts, uint32_
 			nodes[i].index = (uint16_t)i;
 			nodes[i].parent = UINT16_MAX;
 			nodes[i].count = counts[i] ? counts[i] + bias : 0;
-			counts[i] = 0;
 		}
 		qsort(nodes, num_symbols, sizeof(ufbxwi_huff_node), &ufbxwi_cmp_huff_node);
 
@@ -1462,6 +1461,8 @@ void ufbxwi_build_huffman(ufbxwi_huff_symbol *symbols, uint32_t *counts, uint32_
 
 		break;
 	}
+
+	memset(counts, 0, num_symbols * sizeof(uint32_t));
 }
 
 #define UFBXWI_DEFLATE_HASH3_BITS 14
@@ -1662,9 +1663,9 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 
 		ufbxwi_lz_pos match_pos = (ufbxwi_lz_pos)ud->hash4_tab[hash4];
 		ud->hash4_tab[hash4] = (int32_t)read_pos;
-		ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
+		ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
 
-		ufbxwi_lz_pos next_pos = match_pos - ud->hash4_chain[match_pos];
+		ufbxwi_lz_pos next_pos = match_pos - ud->hash4_chain[match_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)];
 
 		const ufbxwi_lz_pos match_limit = read_pos - 0x8000;
 
@@ -1685,7 +1686,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 			match_pos = next_pos;
 
 			while (match_pos >= match_limit) {
-				next_pos = next_pos - ud->hash4_chain[next_pos];
+				next_pos = next_pos - ud->hash4_chain[next_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)];
 
 				const char *data_match = data + match_pos;
 
@@ -1774,9 +1775,9 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 		next_match_pos = (ufbxwi_lz_pos)ud->hash4_tab[next_hash4];
 
 		ud->hash4_tab[hash4] = (int32_t)read_pos;
-		ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
+		ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
 
-		ufbxwi_lz_pos next_pos = match_pos - ud->hash4_chain[match_pos];
+		ufbxwi_lz_pos next_pos = match_pos - ud->hash4_chain[match_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)];
 
 		const ufbxwi_lz_pos match_limit = read_pos - 0x8000;
 
@@ -1794,7 +1795,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 			match_pos = next_pos;
 
 			while (match_pos >= match_limit) {
-				next_pos = next_pos - ud->hash4_chain[next_pos];
+				next_pos = next_pos - ud->hash4_chain[next_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)];
 
 				const char *data_match = data + match_pos;
 
