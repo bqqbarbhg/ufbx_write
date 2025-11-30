@@ -2059,6 +2059,7 @@ static ufbxwi_noinline void ufbxwi_deflate_flush_matches(ufbxwi_deflate_encoder 
 	ud->dst_data = dst;
 	ud->dst_bits = bits;
 	ud->dst_num_bits = num_bits;
+	ud->encode_pos = encode_pos;
 }
 
 static ufbxwi_noinline void ufbxwi_deflate_flush_codelens(ufbxwi_deflate_encoder *ud)
@@ -2116,6 +2117,8 @@ static ufbxwi_noinline void ufbxwi_deflate_compress_block(ufbxwi_deflate_encoder
 	const uint32_t hlit = ufbxwi_deflate_encode_codelens(ud, ud->huff_litlen, 257, 286);
 	const uint32_t hdist = ufbxwi_deflate_encode_codelens(ud, ud->huff_dist, 1, 30);
 	ufbxwi_build_huffman(ud->huff_codelen, ud->codelen_count, UFBXWI_DEFLATE_NUM_CODELEN_SYMBOLS, 7);
+
+	// TODO: Uncompressed blocks where they are better
 
 	ufbxwi_deflate_flush_header(ud, hlit, hdist);
 	ufbxwi_deflate_flush_codelens(ud);
