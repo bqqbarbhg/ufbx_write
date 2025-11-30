@@ -1399,6 +1399,17 @@ UFBXWI_LIST_TYPE(ufbxwi_byte_list, char);
 
 #ifdef UFBXWI_FEATURE_DEFLATE
 
+static uint32_t ufbxwi_bit_reverse(uint32_t mask, uint32_t num_bits)
+{
+	ufbxwi_dev_assert(num_bits <= 16);
+	uint32_t x = mask;
+	x = (((x & 0xaaaa) >> 1) | ((x & 0x5555) << 1));
+	x = (((x & 0xcccc) >> 2) | ((x & 0x3333) << 2));
+	x = (((x & 0xf0f0) >> 4) | ((x & 0x0f0f) << 4));
+	x = (((x & 0xff00) >> 8) | ((x & 0x00ff) << 8));
+	return x >> (16 - num_bits);
+}
+
 typedef struct {
 	uint16_t length, bits;
 } ufbxwi_huff_symbol;
@@ -1409,23 +1420,47 @@ typedef struct {
 	uint32_t count;
 } ufbxwi_huff_node;
 
-static int ufbxwi_cmp_huff_node(const void *va, const void *vb)
+static ufbxwi_forceinline bool ufbxwi_huff_node_less(ufbxwi_huff_node a, ufbxwi_huff_node b)
 {
-	const ufbxwi_huff_node *a = (const ufbxwi_huff_node*)va, *b = (const ufbxwi_huff_node*)vb;
-	if (a->count != b->count) return a->count < b->count ? -1 : 1;
-	if (a->index != b->index) return a->index > b->index ? -1 : 1;
+	if (a.count != b.count) return a.count < b.count;
+	if (a.index != b.index) return a.index > b.index;
 	return 0;
 }
 
-static uint32_t ufbxwi_bit_reverse(uint32_t mask, uint32_t num_bits)
+static ufbxwi_noinline void ufbxwi_sort_huff_symbols(ufbxwi_huff_node *nodes, size_t count)
 {
-	ufbxwi_dev_assert(num_bits <= 16);
-	uint32_t x = mask;
-	x = (((x & 0xaaaa) >> 1) | ((x & 0x5555) << 1));
-	x = (((x & 0xcccc) >> 2) | ((x & 0x3333) << 2));
-	x = (((x & 0xf0f0) >> 4) | ((x & 0x0f0f) << 4));
-	x = (((x & 0xff00) >> 8) | ((x & 0x00ff) << 8));
-	return x >> (16 - num_bits);
+	if (count <= 1) return;
+
+	ufbxwi_huff_node tmp;
+
+	size_t start = (count - 1) >> 1;
+	size_t end = count - 1;
+	for (;;) {
+		size_t root = start;
+		size_t child;
+		while ((child = root*2 + 1) <= end) {
+			size_t next = ufbxwi_huff_node_less(nodes[child], nodes[root]) ? root : child;
+			if (child + 1 <= end && ufbxwi_huff_node_less(nodes[next], nodes[child + 1])) {
+				next = child + 1;
+			}
+			if (next == root) break;
+			tmp = nodes[root];
+			nodes[root] = nodes[next];
+			nodes[next] = tmp;
+			root = next;
+		}
+
+		if (start > 0) {
+			start--;
+		} else if (end > 0) {
+			tmp = nodes[end];
+			nodes[end] = nodes[0];
+			nodes[0] = tmp;
+			end--;
+		} else {
+			break;
+		}
+	}
 }
 
 void ufbxwi_build_huffman(ufbxwi_huff_symbol *symbols, const uint16_t *counts, uint32_t num_symbols, uint32_t max_bits)
@@ -1439,7 +1474,7 @@ void ufbxwi_build_huffman(ufbxwi_huff_symbol *symbols, const uint16_t *counts, u
 			nodes[i].parent = UINT16_MAX;
 			nodes[i].count = counts[i] ? counts[i] + bias : 0;
 		}
-		qsort(nodes, num_symbols, sizeof(ufbxwi_huff_node), &ufbxwi_cmp_huff_node);
+		ufbxwi_sort_huff_symbols(nodes, num_symbols);
 
 		uint32_t cs = 0, ce = num_symbols, qs = 512, qe = qs;
 		while (cs + 2 < ce && nodes[cs].count == 0) cs++;
@@ -1736,7 +1771,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 		const char *data_read = data + read_pos;
 
 		if (match_pos >= match_limit) {
-			int32_t scan_left = 64;
+			int32_t scan_left = 32;
 
 			int32_t data_left = (int32_t)(ud->end_pos - read_pos);
 			int32_t max_length = data_left < 258 ? data_left : 258;
@@ -1885,7 +1920,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 		const char *data_read = data + read_pos;
 
 		if (match_pos >= match_limit) {
-			uint32_t scan_left = 64;
+			uint32_t scan_left = 32;
 
 			best_len = ufbxwi_lz_match_length_fast(data + match_pos, data_read, 258);
 			best_pos = match_pos;
@@ -2543,7 +2578,7 @@ static ufbxwi_noinline void ufbxwi_deflate_imp(ufbxwi_deflate_encoder *ud)
 
 	while (ud->read_pos != ud->end_pos) {
 		// TODO: Better block pacing
-		ufbxwi_lz_pos block_end_pos = ud->read_pos + 0x8000;
+		ufbxwi_lz_pos block_end_pos = ud->read_pos + 0xf000;
 		if (block_end_pos > ud->end_pos) {
 			block_end_pos = ud->end_pos;
 		}
