@@ -123,6 +123,20 @@
 	#endif
 #endif
 
+#if !defined(UFBXW_STANDARD_C) && ((defined(_MSC_VER) && defined(_M_X64) && !defined(_M_ARM64EC)) || ((defined(__GNUC__) || defined(__clang__)) && defined(__x86_64__)))
+	#define UFBXWI_ARCH_X64 1
+#else
+	#define UFBXWI_ARCH_X64 0
+#endif
+
+#if defined(UFBXW_USE_SSE) || (!defined(UFBXW_STANDARD_C) && !defined(UFBXW_NO_SSE) && UFBXWI_ARCH_X64)
+	#define UFBXWI_HAS_SSE 1
+	#include <xmmintrin.h>
+	#include <emmintrin.h>
+#else
+	#define UFBXWI_HAS_SSE 0
+#endif
+
 // -- Pointer alignment
 
 #if !defined(UFBXW_STANDARD_C) && defined(__GNUC__) && defined(__has_builtin)
@@ -134,6 +148,14 @@
 #ifndef ufbxwi_is_aligned
 	#define ufbxwi_is_aligned(m_ptr, m_align) (((uintptr_t)(m_ptr) & ((m_align) - 1)) == 0)
 	#define ufbxwi_is_aligned_mask(m_ptr, m_align) (((uintptr_t)(m_ptr) & (m_align)) == 0)
+#endif
+
+// -- Large fast integer
+
+#if !defined(UFBXW_STANDARD_C) && (defined(__wasm__) || defined(__EMSCRIPTEN__)) && !defined(UFBXW_WASM_32BIT)
+	typedef uint64_t ufbxwi_fast_uint;
+#else
+	typedef size_t ufbxwi_fast_uint;
 #endif
 
 // -- Bit manipulation
@@ -2120,22 +2142,144 @@ static ufbxwi_noinline void ufbxwi_deflate_compress_block(ufbxwi_deflate_encoder
 	ufbxwi_deflate_flush_bits(ud->dst_data, ud->dst_bits, ud->dst_num_bits);
 }
 
-static uint32_t ufbxwi_adler32(const void *data, size_t size)
+static ufbxwi_noinline uint32_t ufbxwi_adler32(const void *data, size_t size)
 {
-	size_t a = 1, b = 0;
+	ufbxwi_fast_uint a = 1, b = 0;
 	const char *p = (const char*)data;
-	const size_t num_before_wrap = sizeof(size_t) == 8 ? 380368439u : 5552u;
-	size_t size_left = size;
+
+	// Adler-32 consists of two running sums modulo 65521. As an optimization
+	// we can accumulate N sums before applying the modulo, where N depends on
+	// the size of the type holding the sum.
+	const ufbxwi_fast_uint num_before_wrap = sizeof(ufbxwi_fast_uint) == 8 ? 380368439u : 5552u;
+
+	ufbxwi_fast_uint  size_left = size;
 	while (size_left > 0) {
-		size_t num = size_left <= num_before_wrap ? size_left : num_before_wrap;
+		ufbxwi_fast_uint  num = size_left <= num_before_wrap ? size_left : num_before_wrap;
 		size_left -= num;
 		const char *end = p + num;
-		while (p != end) {
-			a += (size_t)(uint8_t)*p++; b += a;
+
+		// Align to 16 bytes
+		while (p != end && !ufbxwi_is_aligned(p, 16)) {
+			a += (ufbxwi_fast_uint )(uint8_t)p[0]; b += a;
+			p++;
 		}
+
+#if UFBXWI_HAS_SSE
+		static const uint16_t factors[2][8] = {
+			{ 16, 15, 14, 13, 12, 11, 10, 9, },
+			{ 8, 7, 6, 5, 4, 3, 2, 1, },
+		};
+
+		const __m128i zero = _mm_setzero_si128();
+		const __m128i factor_1 = _mm_set1_epi16(1);
+		const __m128i factor_16 = _mm_set1_epi16(16);
+		const __m128i factor_lo = _mm_loadu_si128((const __m128i*)factors[0]);
+		const __m128i factor_hi = _mm_loadu_si128((const __m128i*)factors[1]);
+
+		for (;;) {
+			size_t chunk_size = ufbxwi_min_sz(ufbxwi_to_size(end - p), 5803) & ~(size_t)0xff;
+			if (chunk_size == 0) break;
+			const char *chunk_end = p + chunk_size;
+
+			__m128i s1 = zero;
+			__m128i s2 = zero;
+
+			while (p != chunk_end) {
+				__m128i s1_lo = zero, s1_hi = zero;
+				__m128i tmp_lo = zero, tmp_hi = zero;
+
+				ufbxwi_nounroll for (size_t i = 0; i < 256; i += 32) {
+					__m128i d0 = _mm_load_si128((const __m128i*)(p + i + 0));
+					__m128i d1 = _mm_load_si128((const __m128i*)(p + i + 16));
+
+					tmp_lo = _mm_add_epi16(tmp_lo, s1_lo);
+					tmp_hi = _mm_add_epi16(tmp_hi, s1_hi);
+					s1_lo = _mm_add_epi16(s1_lo, _mm_unpacklo_epi8(d0, zero));
+					s1_hi = _mm_add_epi16(s1_hi, _mm_unpackhi_epi8(d0, zero));
+
+					tmp_lo = _mm_add_epi16(tmp_lo, s1_lo);
+					tmp_hi = _mm_add_epi16(tmp_hi, s1_hi);
+					s1_lo = _mm_add_epi16(s1_lo, _mm_unpacklo_epi8(d1, zero));
+					s1_hi = _mm_add_epi16(s1_hi, _mm_unpackhi_epi8(d1, zero));
+				}
+
+				s2 = _mm_add_epi32(s2, _mm_slli_epi32(s1, 8));
+				s1 = _mm_add_epi32(s1, _mm_madd_epi16(s1_lo, factor_1));
+				s1 = _mm_add_epi32(s1, _mm_madd_epi16(s1_hi, factor_1));
+
+				s2 = _mm_add_epi32(s2, _mm_madd_epi16(tmp_lo, factor_16));
+				s2 = _mm_add_epi32(s2, _mm_madd_epi16(tmp_hi, factor_16));
+				s2 = _mm_add_epi32(s2, _mm_madd_epi16(s1_lo, factor_lo));
+				s2 = _mm_add_epi32(s2, _mm_madd_epi16(s1_hi, factor_hi));
+
+				p += 256;
+			}
+
+			s1 = _mm_add_epi32(s1, _mm_shuffle_epi32(s1, _MM_SHUFFLE(2,3,0,1)));
+			s2 = _mm_add_epi32(s2, _mm_shuffle_epi32(s2, _MM_SHUFFLE(2,3,0,1)));
+			s1 = _mm_add_epi32(s1, _mm_shuffle_epi32(s1, _MM_SHUFFLE(1,0,3,2)));
+			s2 = _mm_add_epi32(s2, _mm_shuffle_epi32(s2, _MM_SHUFFLE(1,0,3,2)));
+
+			b += chunk_size * a;
+			a += (uint32_t)_mm_cvtsi128_si32(s1);
+			b += (uint32_t)_mm_cvtsi128_si32(s2);
+		}
+#elif UFBXW_LITTLE_ENDIAN
+		for (;;) {
+			size_t chunk_size = ufbxwi_min_sz(ufbxwi_to_size(end - p), 256*8/4) & ~(size_t)0xf;
+			if (chunk_size == 0) break;
+			const char *chunk_end = p + chunk_size;
+
+			uint64_t s1_lo = 0, s1_hi = 0;
+			uint64_t tmp, s2 = 0;
+			uint64_t mask8  = UINT64_C(0x00ff00ff00ff00ff);
+			uint64_t mask16 = UINT64_C(0x0000ffff0000ffff);
+
+			while (p != chunk_end) {
+				uint64_t d0 = *(const uint64_t*)p;
+				uint64_t d1 = *(const uint64_t*)(p + 8);
+
+				tmp = s1_lo + s1_hi;
+				s1_lo += d0 & mask8;
+				s1_hi += (d0 >> 8) & mask8;
+
+				tmp += s1_lo + s1_hi;
+				s1_lo += d1 & mask8;
+				s1_hi += (d1 >> 8) & mask8;
+
+				s2 += (tmp & mask16) + ((tmp >> 16) & mask16);
+				p += 16;
+			}
+
+			uint64_t s1 = s1_lo + s1_hi;
+			s1 = (s1 & mask16) + ((s1 >> 16u) & mask16);
+			ufbxwi_fast_uint  s1_sum = (ufbxwi_fast_uint )(s1 + (s1 >> 32u));
+
+			ufbxwi_fast_uint  s2_sum = (ufbxwi_fast_uint )(s2 + (s2 >> 32u)) * 8;
+			s2_sum += ((ufbxwi_fast_uint )(s1_lo >>  0) & 0xffff) * 8;
+			s2_sum += ((ufbxwi_fast_uint )(s1_hi >>  0) & 0xffff) * 7;
+			s2_sum += ((ufbxwi_fast_uint )(s1_lo >> 16) & 0xffff) * 6;
+			s2_sum += ((ufbxwi_fast_uint )(s1_hi >> 16) & 0xffff) * 5;
+			s2_sum += ((ufbxwi_fast_uint )(s1_lo >> 32) & 0xffff) * 4;
+			s2_sum += ((ufbxwi_fast_uint )(s1_hi >> 32) & 0xffff) * 3;
+			s2_sum += ((ufbxwi_fast_uint )(s1_lo >> 48) & 0xffff) * 2;
+			s2_sum += ((ufbxwi_fast_uint )(s1_hi >> 48) & 0xffff) * 1;
+
+			b += chunk_size * a;
+			a += s1_sum & 0xffffffffu;
+			b += s2_sum & 0xffffffffu;
+		}
+#endif
+
+		while (p != end) {
+			a += (size_t)(uint8_t)p[0]; b += a;
+			p++;
+		}
+
 		a %= 65521u;
 		b %= 65521u;
 	}
+
 	return (uint32_t)((b << 16) | (a & 0xffff));
 }
 
