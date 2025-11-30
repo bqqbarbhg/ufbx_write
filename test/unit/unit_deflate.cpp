@@ -175,3 +175,14 @@ UFBXWT_UNIT_TEST(deflate_match_overlap)
 	ufbxwt_test_deflate_str("HelloHello.. lloHe");
 }
 
+UFBXWT_UNIT_TEST(deflate_match_fast)
+{
+	char data[4096];
+	for (size_t i = 0; i < 4096; i++)
+	{
+		data[i] = (char)i;
+	}
+
+	ufbxwt_test_deflate(data, sizeof(data));
+}
+

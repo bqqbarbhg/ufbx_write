@@ -1674,7 +1674,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 		const char *data_read = data + read_pos;
 
 		if (match_pos >= match_limit) {
-			uint32_t scan_left = 64;
+			int32_t scan_left = 64;
 
 			int32_t data_left = (int32_t)(ud->end_pos - read_pos);
 			int32_t max_length = data_left < 258 ? data_left : 258;
@@ -1698,6 +1698,9 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 				}
 
 				match_pos = next_pos;
+				if (--scan_left <= 0) {
+					break;
+				}
 			}
 
 			if (best_len >= 4) {
@@ -1804,6 +1807,9 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 				}
 
 				match_pos = next_pos;
+				if (--scan_left <= 0) {
+					break;
+				}
 			}
 
 			if (best_len >= 4) {
