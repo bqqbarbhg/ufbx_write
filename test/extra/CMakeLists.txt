@@ -8,6 +8,8 @@ option(USE_FMTLIB "Enable fmtlib" ON)
 option(USE_TO_CHARS "Enable to_chars" ON)
 option(USE_CPP_THREADS "Enable C++ threads" ON)
 
+option(USE_ASAN "Enable Address Sanitizer" OFF)
+
 set(SRC_EXTRA "")
 
 if(USE_LIBDEFLATE)
@@ -75,6 +77,11 @@ if(USE_CPP_THREADS)
     target_compile_definitions(ufbxw_extra PUBLIC UFBXWT_HAS_CPP_THREADS=1)
 
     list(APPEND SRC_EXTRA "../../extra/ufbxw_cpp_threads.h" "ufbxw_cpp_threads.cpp")
+endif()
+
+if(USE_ASAN)
+    add_compile_options(-fsanitize=address)
+    add_link_options(-fsanitize=address)
 endif()
 
 target_sources(ufbxw_extra PRIVATE ${SRC_EXTRA})
