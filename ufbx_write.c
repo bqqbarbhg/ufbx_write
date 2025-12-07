@@ -1657,7 +1657,7 @@ static ufbxwi_noinline void ufbxwi_deflate_encoder_setup(ufbxwi_deflate_encoder 
 
 static ufbxwi_noinline void ufbxwi_deflate_encoder_reset_imp(ufbxwi_deflate_encoder *ud, const void *data, size_t src_size)
 {
-	ud->data = data;
+	ud->data = (const char*)data;
 	ud->read_pos = 0;
 	ud->end_pos = (ufbxwi_lz_pos)src_size;
 	ud->prev_match_end_pos = 0;
@@ -2627,7 +2627,7 @@ static ufbxwi_noinline ufbxw_deflate_advance_result ufbxwi_deflate_encoder_advan
 {
 	ufbxw_assert(ud->state == UFBXWI_DEFLATE_ENCODER_STATE_RESET || ud->state == UFBXWI_DEFLATE_ENCODER_STATE_INCOMPLETE);
 
-	ud->dst_data = dst;
+	ud->dst_data = (char*)dst;
 	ud->dst_end = (char*)dst + dst_size;
 
 	if (ud->state == UFBXWI_DEFLATE_ENCODER_STATE_RESET) {

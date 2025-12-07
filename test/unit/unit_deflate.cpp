@@ -122,13 +122,14 @@ static void ufbxwt_test_deflate(const void *input, size_t input_length)
 	ufbxwi_deflate_encoder *ud = (ufbxwi_deflate_encoder*)malloc(sizeof(ufbxwi_deflate_encoder));
 	ufbxwi_deflate_encoder_setup(ud);
 
-	char *dst = (char*)malloc(input_length * 2 + 128);
+	size_t dst_size = input_length * 2 + 128;
+	char *dst = (char*)malloc(dst_size);
 	char *ref_dst = (char*)malloc(input_length);
 
 	for (int32_t force_block_type = -1; force_block_type < 3; force_block_type++) {
 		ud->force_block_type = (int8_t)force_block_type;
 
-		size_t compressed_length = ufbxwi_deflate(ud, dst, input, input_length);
+		size_t compressed_length = ufbxwi_deflate(ud, dst, dst_size, input, input_length);
 
 		ufbx_inflate_retain ref_retain;
 		ref_retain.initialized = false;

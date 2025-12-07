@@ -66,7 +66,8 @@ benchmark_decompress_result benchmark_decompress(const test_file &file)
 
 	{
 		FILE *f = fopen(file.data_path, "rb");
-		fread(g_src_buffer.data(), 1, file.data_size, f);
+		size_t num_read = fread(g_src_buffer.data(), 1, file.data_size, f);
+		ufbxwt_assert(num_read == file.data_size);
 		fclose(f);
 	}
 
@@ -126,7 +127,8 @@ benchmark_compress_result benchmark_compress(const test_file &file, int32_t leve
 
 	{
 		FILE *f = fopen(file.data_path, "rb");
-		fread(g_src_buffer.data(), 1, file.data_size, f);
+		size_t num_read = fread(g_src_buffer.data(), 1, file.data_size, f);
+		ufbxwt_assert(num_read == file.data_size);
 		fclose(f);
 	}
 
