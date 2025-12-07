@@ -244,6 +244,14 @@
 	}
 #endif
 
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && defined(__ORDER_BIG_ENDIAN__)
+	#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+		#define UFBXW_LITTLE_ENDIAN 1
+	#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+		#define UFBXW_LITTLE_ENDIAN 1
+	#endif
+#endif
+
 #if !defined(UFBXW_LITTLE_ENDIAN)
 	#if !defined(UFBXW_STANDARD_C) && (defined(_M_IX86) || defined(__i386__) || defined(_M_X64) || defined(__x86_64__) || defined(_M_ARM64) || defined(__aarch64__) || defined(__wasm__) || defined(__EMSCRIPTEN__))
 		#define UFBXW_LITTLE_ENDIAN 1
