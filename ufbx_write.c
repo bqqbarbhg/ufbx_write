@@ -360,6 +360,18 @@
 		return f;
 	}
 
+	static ufbxwi_forceinline void ufbxwi_write_u64(void *ptr, uint64_t value) {
+		char *p = (char*)ptr;
+		p[0] = (char)(value >> 0u);
+		p[1] = (char)(value >> 8u);
+		p[2] = (char)(value >> 16u);
+		p[3] = (char)(value >> 24u);
+		p[4] = (char)(value >> 32u);
+		p[5] = (char)(value >> 40u);
+		p[6] = (char)(value >> 48u);
+		p[7] = (char)(value >> 56u);
+	}
+
 	#define UFBXWI_UNALIGNED_IS_FAST 0
 #endif
 
