@@ -163,7 +163,7 @@ int main(int argc, char **argv)
 	const char *format = "";
 	bool compare = false;
 
-	ufbxwt_deflate_impl deflate_impl = UFBXWT_DEFLATE_IMPL_NONE;
+	ufbxwt_deflate_impl deflate_impl = UFBXWT_DEFLATE_IMPL_BUILTIN;
 	ufbxwt_ascii_format_impl ascii_impl = UFBXWT_ASCII_FORMAT_IMPL_DEFAULT;
 	ufbxwt_thread_impl thread_impl = UFBXWT_THREAD_IMPL_NONE;
 
