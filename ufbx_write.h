@@ -1227,8 +1227,8 @@ typedef enum ufbxw_deflate_advance_result {
 } ufbxw_deflate_advance_result;
 
 // Begin DEFLATE compressing a new stream.
-// You must return the buffer size you require for decompression.
-// Returning `0` is allowed to indicate that the decompressor supports streaming.
+// You must return the minimum buffer size you require for decompression.
+// If you do not support streaming output, you should return the output bound size here.
 typedef size_t ufbxw_deflate_begin_fn(void *user, size_t input_size);
 
 // Advance the compression stream.
@@ -1261,7 +1261,6 @@ typedef struct ufbxw_deflate_create_cb {
 typedef struct ufbxw_deflate {
 	ufbxw_deflate_create_cb create_cb;
 	bool streaming_input;
-	bool streaming_output;
 } ufbxw_deflate;
 
 // -- ASCII formatting

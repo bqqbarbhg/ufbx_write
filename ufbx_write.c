@@ -1564,6 +1564,13 @@ typedef struct {
 	uint8_t extra;
 } ufbxwi_deflate_codelen;
 
+typedef enum {
+	UFBXWI_DEFLATE_ENCODER_STATE_SETUP,
+	UFBXWI_DEFLATE_ENCODER_STATE_RESET,
+	UFBXWI_DEFLATE_ENCODER_STATE_INCOMPLETE,
+	UFBXWI_DEFLATE_ENCODER_STATE_FINISHED,
+} ufbxwi_deflate_encoder_state;
+
 typedef struct {
 	const char *data;
 	ufbxwi_lz_pos read_pos;
@@ -1575,13 +1582,18 @@ typedef struct {
 	uint32_t num_codelens;
 
 	char *dst_data;
+	char *dst_end;
 	uint64_t dst_bits;
 	uint32_t dst_num_bits;
 
-	char *dst_begin;
 
+	int8_t compression_level;
 	int8_t force_block_type;
 	bool has_static_huff;
+
+	ufbxwi_deflate_encoder_state state;
+
+	void *allocator;
 
 	uint32_t hash3_tab[1 << UFBXWI_DEFLATE_HASH3_BITS];
 
@@ -1605,15 +1617,17 @@ typedef struct {
 	ufbxwi_huff_symbol huff_static_dist[UFBXWI_DEFLATE_NUM_DIST_SYMBOLS];
 } ufbxwi_deflate_encoder;
 
-static ufbxwi_noinline void ufbxwi_deflate_encoder_setup(ufbxwi_deflate_encoder *ud)
+static ufbxwi_noinline void ufbxwi_deflate_encoder_setup(ufbxwi_deflate_encoder *ud, int32_t compression_level)
 {
 	ud->has_static_huff = false;
 	ud->force_block_type = -1;
+	ud->state = UFBXWI_DEFLATE_ENCODER_STATE_SETUP;
+	ud->compression_level = (int8_t)compression_level;
 }
 
-static ufbxwi_noinline void ufbxwi_deflate_encoder_reset(ufbxwi_deflate_encoder *ud, void *dst, const void *src, size_t src_size)
+static ufbxwi_noinline void ufbxwi_deflate_encoder_reset_imp(ufbxwi_deflate_encoder *ud, const void *data, size_t src_size)
 {
-	ud->data = (const char*)src;
+	ud->data = data;
 	ud->read_pos = 0;
 	ud->end_pos = (ufbxwi_lz_pos)src_size;
 	ud->prev_match_end_pos = 0;
@@ -1622,8 +1636,6 @@ static ufbxwi_noinline void ufbxwi_deflate_encoder_reset(ufbxwi_deflate_encoder 
 	ud->num_matches = 0;
 	ud->num_codelens = 0;
 
-	ud->dst_begin = (char*)dst;
-	ud->dst_data = (char*)dst;
 	ud->dst_bits = 0;
 	ud->dst_num_bits = 0;
 
@@ -2570,13 +2582,41 @@ static ufbxwi_noinline uint32_t ufbxwi_adler32(const void *data, size_t size)
 	return (uint32_t)((b << 16) | (a & 0xffff));
 }
 
-static ufbxwi_noinline void ufbxwi_deflate_imp(ufbxwi_deflate_encoder *ud)
+static size_t ufbxwi_deflate_encoder_dst_size(size_t input_size)
 {
-	ufbxwi_deflate_push_bits(ud->dst_bits, ud->dst_num_bits, 0x78, 8);
-	ufbxwi_deflate_push_bits(ud->dst_bits, ud->dst_num_bits, 0x9c, 8);
-	ufbxwi_deflate_flush_bits(ud->dst_data, ud->dst_bits, ud->dst_num_bits);
+	// Over-estimated for worst case uncompressed blocks
+	return ufbxwi_min_sz(0x10000, 64 + input_size + (input_size / 0xf000) * 8);
+}
 
+static ufbxwi_forceinline void ufbxwi_deflate_encoder_reset(ufbxwi_deflate_encoder *ud)
+{
+	ud->state = UFBXWI_DEFLATE_ENCODER_STATE_RESET;
+}
+
+static ufbxwi_noinline ufbxw_deflate_advance_result ufbxwi_deflate_encoder_advance(ufbxwi_deflate_encoder *ud, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size)
+{
+	ufbxw_assert(ud->state == UFBXWI_DEFLATE_ENCODER_STATE_RESET || ud->state == UFBXWI_DEFLATE_ENCODER_STATE_INCOMPLETE);
+
+	ud->dst_data = dst;
+	ud->dst_end = (char*)dst + dst_size;
+
+	if (ud->state == UFBXWI_DEFLATE_ENCODER_STATE_RESET) {
+		ufbxwi_deflate_encoder_reset_imp(ud, src, src_size);
+
+		ufbxwi_deflate_push_bits(ud->dst_bits, ud->dst_num_bits, 0x78, 8);
+		ufbxwi_deflate_push_bits(ud->dst_bits, ud->dst_num_bits, 0x9c, 8);
+		ufbxwi_deflate_flush_bits(ud->dst_data, ud->dst_bits, ud->dst_num_bits);
+
+		ud->state = UFBXWI_DEFLATE_ENCODER_STATE_INCOMPLETE;
+	}
+
+	const ufbxwi_lz_pos begin_pos = ud->read_pos;
 	while (ud->read_pos != ud->end_pos) {
+		const size_t dst_size = ufbxwi_deflate_encoder_dst_size((size_t)(ud->end_pos - ud->read_pos));
+		if (ufbxwi_to_size(ud->dst_end - ud->dst_data) < dst_size) {
+			break;
+		}
+
 		// TODO: Better block pacing
 		ufbxwi_lz_pos block_end_pos = ud->read_pos + 0xf000;
 		if (block_end_pos > ud->end_pos) {
@@ -2586,23 +2626,37 @@ static ufbxwi_noinline void ufbxwi_deflate_imp(ufbxwi_deflate_encoder *ud)
 		ufbxwi_deflate_compress_block(ud, block_end_pos);
 	}
 
-	const uint32_t checksum = ufbxwi_adler32(ud->data, (size_t)ud->end_pos);
+	ufbxw_deflate_advance_result result = UFBXW_DEFLATE_ADVANCE_RESULT_INCOMPLETE;
+	if (ud->read_pos == ud->end_pos) {
+		const uint32_t checksum = ufbxwi_adler32(ud->data, (size_t)ud->end_pos);
 
-	if (ud->dst_num_bits % 8 != 0) {
-		ufbxwi_deflate_push_bits(ud->dst_bits, ud->dst_num_bits, 0, 8 - (ud->dst_num_bits % 8));
+		if (ud->dst_num_bits % 8 != 0) {
+			ufbxwi_deflate_push_bits(ud->dst_bits, ud->dst_num_bits, 0, 8 - (ud->dst_num_bits % 8));
+			ufbxwi_deflate_flush_bits(ud->dst_data, ud->dst_bits, ud->dst_num_bits);
+		}
+		for (size_t i = 0; i < 4; i++) {
+			ufbxwi_deflate_push_bits(ud->dst_bits, ud->dst_num_bits, (checksum >> (24 - i * 8)) & 0xff, 8);
+		}
 		ufbxwi_deflate_flush_bits(ud->dst_data, ud->dst_bits, ud->dst_num_bits);
+
+		ud->state = UFBXWI_DEFLATE_ENCODER_STATE_FINISHED;
+		result = UFBXW_DEFLATE_ADVANCE_RESULT_COMPLETED;
 	}
-	for (size_t i = 0; i < 4; i++) {
-		ufbxwi_deflate_push_bits(ud->dst_bits, ud->dst_num_bits, (checksum >> (24 - i * 8)) & 0xff, 8);
-	}
-	ufbxwi_deflate_flush_bits(ud->dst_data, ud->dst_bits, ud->dst_num_bits);
+
+	status->bytes_written = ufbxwi_to_size(ud->dst_data - (char*)dst);
+	status->bytes_read = (size_t)(ud->read_pos - begin_pos);
+
+	return result;
 }
 
-static ufbxwi_noinline size_t ufbxwi_deflate(ufbxwi_deflate_encoder *ud, void *dst, const void *data, size_t length)
+static ufbxwi_unused ufbxwi_noinline size_t ufbxwi_deflate(ufbxwi_deflate_encoder *ud, void *dst, size_t dst_size, const void *src, size_t src_size)
 {
-	ufbxwi_deflate_encoder_reset(ud, dst, data, length);
-	ufbxwi_deflate_imp(ud);
-	return ud->dst_data - ud->dst_begin;
+	ufbxwi_deflate_encoder_reset(ud);
+
+	ufbxw_deflate_advance_status status = { 0 };
+	ufbxw_deflate_advance_result result = ufbxwi_deflate_encoder_advance(ud, &status, dst, dst_size, src, src_size);
+	ufbxw_assert(result == UFBXW_DEFLATE_ADVANCE_RESULT_COMPLETED);
+	return status.bytes_written;
 }
 
 #endif
@@ -8621,6 +8675,10 @@ typedef struct {
 	uint32_t reloc_end_offset;
 } ufbxwi_binary_node_header;
 
+typedef struct {
+	ufbxwi_allocator *ator;
+} ufbxwi_builtin_deflate_opts;
+
 UFBXWI_LIST_TYPE(ufbxwi_binary_node_header_list, ufbxwi_binary_node_header);
 
 typedef struct {
@@ -8662,6 +8720,8 @@ typedef struct {
 	ufbxwi_thread_pool thread_pool;
 	ufbxwi_task_queue task_queue;
 	ufbxwi_write_queue write_queue;
+
+	ufbxwi_builtin_deflate_opts builtin_deflate_opts;
 
 	ufbxwi_save_thread_context main_thread_ctx;
 
@@ -8718,6 +8778,48 @@ static void ufbxwi_free_save_thread_context(void *user, void *thread_ctx)
 	ufbxwi_save_context *sc = (ufbxwi_save_context*)user;
 	ufbxwi_save_thread_context *tc = (ufbxwi_save_thread_context*)thread_ctx;
 	ufbxwi_destroy_save_thread_context(sc, tc);
+}
+
+// -- Built-in Deflate
+
+static size_t ufbxwi_builtin_deflate_begin(void *user, size_t input_size)
+{
+	ufbxwi_deflate_encoder *ud = (ufbxwi_deflate_encoder*)user;
+	ufbxwi_deflate_encoder_reset(ud);
+	return ufbxwi_deflate_encoder_dst_size(input_size);
+}
+
+static ufbxw_deflate_advance_result ufbxwi_builtin_deflate_advance(void *user, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, uint32_t flags)
+{
+	ufbxwi_deflate_encoder *ud = (ufbxwi_deflate_encoder*)user;
+	return ufbxwi_deflate_encoder_advance(ud, status, dst, dst_size, src, src_size);
+}
+
+static void ufbxwi_builtin_deflate_free(void *user)
+{
+	ufbxwi_deflate_encoder *ud = (ufbxwi_deflate_encoder*)user;
+	ufbxwi_allocator *ator = (ufbxwi_allocator*)ud->allocator;
+	ufbxwi_free(ator, ud);
+}
+
+static bool ufbxwi_builtin_deflate_create(void *user, ufbxw_deflate_compressor *compressor, int32_t compression_level)
+{
+	ufbxwi_builtin_deflate_opts *opts = (ufbxwi_builtin_deflate_opts*)user;
+
+	ufbxwi_deflate_encoder *ud = ufbxwi_alloc(opts->ator, ufbxwi_deflate_encoder, 1);
+	if (!ud) {
+		return false;
+	}
+
+	ud->allocator = opts->ator;
+	ufbxwi_deflate_encoder_setup(ud, compression_level);
+
+	compressor->user = ud;
+	compressor->begin_fn = &ufbxwi_builtin_deflate_begin;
+	compressor->advance_fn = &ufbxwi_builtin_deflate_advance;
+	compressor->free_fn = &ufbxwi_builtin_deflate_free;
+
+	return true;
 }
 
 // -- ASCII
@@ -9287,11 +9389,13 @@ static bool ufbxwi_deflate_buffer(ufbxwi_save_thread_context *tc, ufbxwi_write_c
 	size_t total_read = 0;
 	size_t total_written = 0;
 
-	size_t bound_size = tc->deflate.begin_fn(tc->deflate.user, data_size);
+	size_t dst_size = tc->deflate.begin_fn(tc->deflate.user, data_size);
+	if (dst_size == 0) {
+		dst_size = window_size;
+	}
 
 	const char *buffer_data = (const char*)input->data;
 
-	size_t dst_size = window_size;
 	if (!tc->opts->deflate.streaming_input && !buffer_data) {
 		ufbxwi_check(ufbxwi_list_resize_uninit(tc->ator, &tc->tmp_input_buffer, char, data_size), false);
 		size_t read_count = ufbxwi_buffer_input_read_to(input, tc->tmp_input_buffer.data, buffer_count, 0);
@@ -9300,9 +9404,6 @@ static bool ufbxwi_deflate_buffer(ufbxwi_save_thread_context *tc, ufbxwi_write_c
 			return false;
 		}
 		buffer_data = tc->tmp_input_buffer.data;
-	}
-	if (!tc->opts->deflate.streaming_output) {
-		dst_size = bound_size;
 	}
 
 	if (buffer_data) {
@@ -10862,6 +10963,11 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 		sc->opts.ascii_formatter.format_double_fn = &ufbxwi_default_ascii_format_double;
 	}
 
+	if (!sc->opts.deflate.create_cb.fn) {
+		sc->opts.deflate.create_cb.fn = &ufbxwi_builtin_deflate_create;
+		sc->opts.deflate.create_cb.user = &sc->builtin_deflate_opts;
+	}
+
 	// TODO: Determine these somehow
 	if (sc->opts.threaded_min_deflate_bytes == 0) {
 		sc->opts.threaded_min_deflate_bytes = 512;
@@ -10904,9 +11010,12 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 		ufbxwi_init_save_thread_context(sc, &sc->main_thread_ctx);
 		ufbxwi_write_queue_init(&sc->write_queue, &sc->thread_ator, &sc->thread_error, &sc->task_queue, &sc->main_thread_ctx, *stream, buffer_size);
 
+		sc->builtin_deflate_opts.ator = &sc->thread_ator;
 	} else {
 		ufbxwi_init_save_thread_context(sc, &sc->main_thread_ctx);
 		ufbxwi_write_queue_init(&sc->write_queue, &sc->ator, &sc->error, NULL, &sc->main_thread_ctx, *stream, buffer_size);
+
+		sc->builtin_deflate_opts.ator = &sc->ator;
 	}
 
 	// HACK: Hook the write queue to the buffer pool, as write chunks may temporarily own a buffer that
