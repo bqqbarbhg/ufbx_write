@@ -260,6 +260,28 @@
 	#endif
 #endif
 
+// Unaligned little-endian load functions
+// On platforms that support unaligned access natively (x86, x64, ARM64) just use normal loads,
+// with unaligned attributes, otherwise do manual byte-wise load.
+
+#define ufbxwi_read_u8(ptr) (*(const uint8_t*)(ptr))
+
+// Detect support for `__attribute__((aligned(1)))`
+#if !defined(UFBXW_STANDARD_C) && (defined(__clang__) && defined(__APPLE__))
+	// Apple overrides Clang versioning, 5.0 here maps to 3.3
+	#if __clang_major__ >= 5
+		#define UFBXWI_HAS_ATTRIBUTE_ALIGNED 1
+	#endif
+#elif !defined(UFBXW_STANDARD_C) && defined(__clang__)
+	#if (__clang_major__ >= 4) || (__clang_major__ == 3 && __clang_minor__ >= 3)
+		#define UFBXWI_HAS_ATTRIBUTE_ALIGNED 1
+	#endif
+#elif !defined(UFBXW_STANDARD_C) && defined(__GNUC__)
+	#if __GNUC__ >= 5
+		#define UFBXWI_HAS_ATTRIBUTE_ALIGNED 1
+	#endif
+#endif
+
 #if defined(UFBXWI_HAS_ATTRIBUTE_ALIGNED)
 	#define UFBXWI_HAS_UNALIGNED 1
 	#define UFBXWI_HAS_ALIASING 1
