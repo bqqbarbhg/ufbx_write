@@ -119,8 +119,10 @@ UFBXWT_UNIT_TEST(deflate_distance_to_symbol)
 
 static void ufbxwt_test_deflate(const void *input, size_t input_length)
 {
+	const int32_t compression_level = 6;
+
 	ufbxwi_deflate_encoder *ud = (ufbxwi_deflate_encoder*)malloc(sizeof(ufbxwi_deflate_encoder));
-	ufbxwi_deflate_encoder_setup(ud);
+	ufbxwi_deflate_encoder_setup(ud, compression_level);
 
 	size_t dst_size = input_length * 2 + 128;
 	char *dst = (char*)malloc(dst_size);
