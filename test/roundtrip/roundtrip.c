@@ -263,7 +263,14 @@ int main(int argc, char **argv)
 	ufbxw_node *node_ids = (ufbxw_node*)calloc(in_scene->nodes.count, sizeof(ufbxw_node));
 	ufbxw_anim_stack *anim_stack_ids = (ufbxw_anim_stack*)calloc(in_scene->anim_stacks.count, sizeof(ufbxw_anim_stack));
 	ufbxw_anim_layer *anim_layer_ids = (ufbxw_anim_layer*)calloc(in_scene->anim_layers.count, sizeof(ufbxw_anim_layer));
+	ufbxw_skin_deformer *skin_deformer_ids = (ufbxw_skin_deformer*)calloc(in_scene->skin_deformers.count, sizeof(ufbxw_skin_deformer));
 	ufbxw_id *element_ids = (ufbxw_id*)calloc(in_scene->elements.count, sizeof(ufbxw_id));
+
+	for (size_t skin_deformer_ix = 0; skin_deformer_ix < in_scene->skin_deformers.count; skin_deformer_ix++) {
+		ufbx_skin_deformer *in_deformer = in_scene->meshes.data[skin_deformer_ix];
+		ufbxw_skin_deformer deformer = ufbxw_create_skin_deformer(out_scene, ufbxw_null_mesh);
+
+	}
 
 	for (size_t mesh_ix = 0; mesh_ix < in_scene->meshes.count; mesh_ix++) {
 		ufbx_mesh *in_mesh = in_scene->meshes.data[mesh_ix];
