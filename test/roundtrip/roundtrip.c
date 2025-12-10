@@ -266,12 +266,6 @@ int main(int argc, char **argv)
 	ufbxw_skin_deformer *skin_deformer_ids = (ufbxw_skin_deformer*)calloc(in_scene->skin_deformers.count, sizeof(ufbxw_skin_deformer));
 	ufbxw_id *element_ids = (ufbxw_id*)calloc(in_scene->elements.count, sizeof(ufbxw_id));
 
-	for (size_t skin_deformer_ix = 0; skin_deformer_ix < in_scene->skin_deformers.count; skin_deformer_ix++) {
-		ufbx_skin_deformer *in_deformer = in_scene->meshes.data[skin_deformer_ix];
-		ufbxw_skin_deformer deformer = ufbxw_create_skin_deformer(out_scene, ufbxw_null_mesh);
-
-	}
-
 	for (size_t mesh_ix = 0; mesh_ix < in_scene->meshes.count; mesh_ix++) {
 		ufbx_mesh *in_mesh = in_scene->meshes.data[mesh_ix];
 		ufbxw_mesh out_mesh = ufbxw_create_mesh(out_scene);
@@ -422,6 +416,15 @@ int main(int argc, char **argv)
 		}
 	}
 
+	// Skinning 
+	for (size_t skin_ix = 0; skin_ix < in_scene->skin_deformers.count; skin_ix++) {
+		ufbx_skin_deformer *in_deformer = in_scene->meshes.data[skin_ix];
+		ufbxw_skin_deformer out_deformer = ufbxw_create_skin_deformer(out_scene, ufbxw_null_mesh);
+
+		skin_deformer_ids[skin_ix] = out_deformer;
+		element_ids[in_deformer->element_id] = out_deformer.id;
+	}
+
 	for (size_t layer_ix = 0; layer_ix < in_scene->anim_layers.count; layer_ix++) {
 		ufbx_anim_layer *in_layer = in_scene->anim_layers.data[layer_ix];
 		ufbxw_anim_layer out_layer = ufbxw_create_anim_layer(out_scene, ufbxw_null_anim_stack);
@@ -489,7 +492,6 @@ int main(int argc, char **argv)
 				}
 			}
 		}
-
 	}
 
 	for (size_t stack_ix = 0; stack_ix < in_scene->anim_stacks.count; stack_ix++) {
