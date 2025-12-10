@@ -29,5 +29,8 @@ $ ufbx
 
 #### Skin deformers
 
+Initial skin deformer support [(commit)](https://github.com/bqqbarbhg/ufbx_write/commit/9e3451b08c46a86edbfeed31162da3a8e940060a)
+
 ```
+1704/4454 files passed (193/410 test cases)
 ```
