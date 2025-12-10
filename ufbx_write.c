@@ -5142,6 +5142,8 @@ struct ufbxw_scene {
 
 	ufbxw_anim_stack active_anim_stack;
 
+	ufbxw_id global_settings_id;
+
 	ufbxwi_byte_list tmp_list;
 
 	// TODO: Something better, hash set
@@ -6222,10 +6224,10 @@ static bool ufbxwi_init_global_settings(ufbxw_scene *scene, void *data)
 	settings->front_axis_sign = 1;
 	settings->coord_axis = 0;
 	settings->coord_axis_sign = 1;
-	settings->original_up_axis = 1;
-	settings->original_up_axis_sign = 1;
+	settings->original_up_axis = 0;
+	settings->original_up_axis_sign = 0;
 	settings->unit_scale_factor = 1.0f;
-	settings->original_unit_scale_factor = 1.0f;
+	settings->original_unit_scale_factor = 0.0f;
 	settings->time_mode = UFBXW_TIME_MODE_24_FPS;
 	settings->time_protocol = UFBXW_TIME_PROTOCOL_DEFAULT;
 	settings->snap_on_frame_mode = UFBXW_SNAP_MODE_NONE;
@@ -7277,6 +7279,8 @@ static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop_by_id(ufbxw_sce
 static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_layer*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_LAYER); }
 static ufbxwi_forceinline ufbxwi_anim_stack *ufbxwi_get_anim_stack_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_stack*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_STACK); }
 
+static ufbxwi_forceinline ufbxwi_global_settings *ufbxwi_get_global_settings_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_global_settings*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_GLOBAL_SETTINGS); }
+
 static ufbxwi_forceinline ufbxw_node ufbxwi_assert_node(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_NODE); ufbxw_node v = { id }; return v; }
 static ufbxwi_forceinline ufbxw_anim_curve ufbxwi_assert_anim_curve(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_ANIM_CURVE); ufbxw_anim_curve v = { id }; return v; }
 static ufbxwi_forceinline ufbxw_anim_layer ufbxwi_assert_anim_layer(ufbxw_id id) { ufbxw_assert(ufbxwi_id_type(id) == UFBXW_ELEMENT_ANIM_LAYER); ufbxw_anim_layer v = { id }; return v; }
@@ -7374,16 +7378,7 @@ static void ufbxwi_create_defaults(ufbxw_scene *scene)
 
 	if (!scene->opts.no_default_global_settings) {
 		ufbxw_id id = ufbxw_create_element(scene, UFBXW_ELEMENT_GLOBAL_SETTINGS);
-
-		// TODO: Make these (and the rest) into actual fast access fields
-		ufbxw_add_int(scene, id, "UpAxis", UFBXW_PROP_TYPE_INT, 1);
-		ufbxw_add_int(scene, id, "UpAxisSign", UFBXW_PROP_TYPE_INT, 1);
-		ufbxw_add_int(scene, id, "FrontAxis", UFBXW_PROP_TYPE_INT, 2);
-		ufbxw_add_int(scene, id, "FrontAxisSign", UFBXW_PROP_TYPE_INT, 1);
-		ufbxw_add_int(scene, id, "CoordAxis", UFBXW_PROP_TYPE_INT, 0);
-		ufbxw_add_int(scene, id, "CoordAxisSign", UFBXW_PROP_TYPE_INT, 1);
-		ufbxw_add_vec3(scene, id, "AmbientColor", UFBXW_PROP_TYPE_COLOR_RGB, ufbxw_zero_vec3);
-		ufbxw_add_string(scene, id, "DefaultCamera", UFBXW_PROP_TYPE_STRING, "Producer Perspective");
+		scene->global_settings_id = id;
 	}
 
 	if (!scene->opts.no_default_document) {
@@ -7971,6 +7966,21 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 		}
 	}
 
+	if (opts->patch_original_up_axis) {
+		ufbxwi_global_settings *global_settings = ufbxwi_get_global_settings_by_id(scene, scene->global_settings_id);
+		if (global_settings->original_up_axis_sign == 0) {
+			global_settings->original_up_axis = global_settings->up_axis;
+			global_settings->original_up_axis_sign = global_settings->up_axis_sign;
+		}
+	}
+
+	if (opts->patch_original_units) {
+		ufbxwi_global_settings *global_settings = ufbxwi_get_global_settings_by_id(scene, scene->global_settings_id);
+		if (global_settings->original_unit_scale_factor == 0.0f) {
+			global_settings->original_unit_scale_factor = global_settings->unit_scale_factor;
+		}
+	}
+
 	if (opts->patch_anim_stack_reference_times) {
 		ufbxwi_for_id_list(ufbxw_id, stack_id, elements_by_type[UFBXW_ELEMENT_ANIM_STACK]) {
 			ufbxwi_anim_stack *stack = ufbxwi_get_anim_stack_by_id(scene, stack_id);
@@ -7983,8 +7993,7 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 	}
 
 	if (opts->patch_global_settings_times) {
-		ufbxw_id global_settings_id = ufbxw_get_global_settings_id(scene);
-		ufbxwi_global_settings *global_settings = (ufbxwi_global_settings*)ufbxwi_get_element(scene, global_settings_id);
+		ufbxwi_global_settings *global_settings = ufbxwi_get_global_settings_by_id(scene, scene->global_settings_id);
 		if (global_settings && global_settings->time_span_start == 0 && global_settings->time_span_stop == 0) {
 			ufbxw_ktime time_min = INT64_MAX;
 			ufbxw_ktime time_max = INT64_MIN;
@@ -12950,20 +12959,57 @@ ufbxw_abi void ufbxw_anim_curve_set_data(ufbxw_scene *scene, ufbxw_anim_curve cu
 	}
 }
 
+ufbxw_abi ufbxw_id ufbxw_get_global_settings_id(ufbxw_scene *scene)
+{
+	return scene->global_settings_id;
+}
+
+ufbxw_abi void ufbxw_scene_set_coordinate_axes(ufbxw_scene *scene, ufbxw_coordinate_axes axes)
+{
+	ufbxwi_global_settings *gs = ufbxwi_get_global_settings_by_id(scene, scene->global_settings_id);
+	if (!gs) return;
+
+	gs->coord_axis = (int32_t)(axes.right >> 1);
+	gs->coord_axis_sign = (axes.right & 1) != 0 ? -1 : 1;
+	gs->up_axis = (int32_t)(axes.up >> 1);
+	gs->up_axis_sign = (axes.up & 1) != 0 ? -1 : 1;
+	gs->front_axis = (int32_t)(axes.front >> 1);
+	gs->front_axis_sign = (axes.front & 1) != 0 ? -1 : 1;
+}
+
+ufbxw_abi ufbxw_coordinate_axes ufbxw_scene_get_coordinate_axes(ufbxw_scene *scene)
+{
+	ufbxw_coordinate_axes axes = { 0 };
+
+	ufbxwi_global_settings *gs = ufbxwi_get_global_settings_by_id(scene, scene->global_settings_id);
+	if (!gs) return axes;
+
+	axes.right = (ufbxw_coordinate_axis)((gs->coord_axis << 1) | (gs->coord_axis_sign > 0 ? 1 : 0));
+	axes.up = (ufbxw_coordinate_axis)((gs->up_axis << 1) | (gs->up_axis_sign > 0 ? 1 : 0));
+	axes.front = (ufbxw_coordinate_axis)((gs->front_axis << 1) | (gs->front_axis_sign > 0 ? 1 : 0));
+	return axes;
+}
+
+ufbxw_abi void ufbxw_scene_set_unit_scale_factor(ufbxw_scene *scene, ufbxw_real unit_scale)
+{
+	ufbxwi_global_settings *gs = ufbxwi_get_global_settings_by_id(scene, scene->global_settings_id);
+	if (!gs) return;
+
+	gs->unit_scale_factor = unit_scale;
+}
+
+ufbxw_abi ufbxw_real ufbxw_scene_get_unit_scale_factor(ufbxw_scene *scene)
+{
+	ufbxwi_global_settings *gs = ufbxwi_get_global_settings_by_id(scene, scene->global_settings_id);
+	if (!gs) return 0.0f;
+
+	return gs->unit_scale_factor;
+}
+
 ufbxw_abi ufbxw_id ufbxw_get_scene_info_id(ufbxw_scene *scene)
 {
 	ufbxwi_for_list(ufbxwi_element_slot, slot, scene->elements) {
 		if (ufbxwi_id_type(slot->id) == UFBXW_ELEMENT_SCENE_INFO) {
-			return slot->id;
-		}
-	}
-	return ufbxw_null_id;
-}
-
-ufbxw_abi ufbxw_id ufbxw_get_global_settings_id(ufbxw_scene *scene)
-{
-	ufbxwi_for_list(ufbxwi_element_slot, slot, scene->elements) {
-		if (ufbxwi_id_type(slot->id) == UFBXW_ELEMENT_GLOBAL_SETTINGS) {
 			return slot->id;
 		}
 	}
@@ -12982,7 +13028,7 @@ ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type 
 // -- Pre-saving
 
 ufbxw_abi_data_def const ufbxw_prepare_opts ufbxw_default_prepare_opts = {
-	true, true, true, true, true, true,
+	true, true, true, true, true, true, true, true,
 };
 
 ufbxw_abi void ufbxw_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *opts)

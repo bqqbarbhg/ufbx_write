@@ -246,6 +246,19 @@ int main(int argc, char **argv)
 	out_opts.no_default_anim_layer = true;
 	ufbxw_scene *out_scene = ufbxw_create_scene(&out_opts);
 
+	{
+		ufbxw_coordinate_axes axes;
+		axes.right = (ufbxw_coordinate_axis)in_scene->settings.axes.right;
+		axes.up = (ufbxw_coordinate_axis)in_scene->settings.axes.up;
+		axes.front = (ufbxw_coordinate_axis)in_scene->settings.axes.front;
+
+		// Get the original unit scale factor, without `/ 100.0 * 100.0` roundtrip
+		ufbxw_real unit_scale = ufbx_find_real(&in_scene->settings.props, "UnitScaleFactor", 1.0);
+
+		ufbxw_scene_set_coordinate_axes(out_scene, axes);
+		ufbxw_scene_set_unit_scale_factor(out_scene, unit_scale);
+	}
+
 	ufbxw_mesh *mesh_ids = (ufbxw_mesh*)calloc(in_scene->meshes.count, sizeof(ufbxw_mesh));
 	ufbxw_node *node_ids = (ufbxw_node*)calloc(in_scene->nodes.count, sizeof(ufbxw_node));
 	ufbxw_anim_stack *anim_stack_ids = (ufbxw_anim_stack*)calloc(in_scene->anim_stacks.count, sizeof(ufbxw_anim_stack));

@@ -200,7 +200,7 @@ typedef struct ufbxw_material { ufbxw_id id; } ufbxw_material;
 typedef struct ufbxw_anim_prop { ufbxw_id id; } ufbxw_anim_prop;
 typedef struct ufbxw_anim_curve { ufbxw_id id; } ufbxw_anim_curve;
 typedef struct ufbxw_anim_layer { ufbxw_id id; } ufbxw_anim_layer;
-typedef struct ufbxw_anim_stack { ufbxw_id id; } ufbxw_anim_stack ;
+typedef struct ufbxw_anim_stack { ufbxw_id id; } ufbxw_anim_stack;
 
 typedef uint64_t ufbxw_buffer_id;
 typedef struct ufbxw_int_buffer { ufbxw_buffer_id id; } ufbxw_int_buffer;
@@ -1088,10 +1088,38 @@ typedef struct ufbxw_anim_curve_data_desc {
 // Advanced API for manually specifying the animation.
 ufbxw_abi void ufbxw_anim_curve_set_data(ufbxw_scene *scene, ufbxw_anim_curve curve, const ufbxw_anim_curve_data_desc *data);
 
+// -- Global settings
+
+typedef enum ufbxw_coordinate_axis {
+	UFBXW_COORDINATE_AXIS_POSITIVE_X,
+	UFBXW_COORDINATE_AXIS_NEGATIVE_X,
+	UFBXW_COORDINATE_AXIS_POSITIVE_Y,
+	UFBXW_COORDINATE_AXIS_NEGATIVE_Y,
+	UFBXW_COORDINATE_AXIS_POSITIVE_Z,
+	UFBXW_COORDINATE_AXIS_NEGATIVE_Z,
+} ufbxw_coordinate_axis;
+
+typedef struct ufbxw_coordinate_axes {
+	ufbxw_coordinate_axis right;
+	ufbxw_coordinate_axis up;
+	ufbxw_coordinate_axis front;
+} ufbxw_coordinate_axes;
+
+ufbxw_abi ufbxw_id ufbxw_get_global_settings_id(ufbxw_scene *scene);
+
+// Scene axis interpretation.
+// FBX property: `CoordAxis`, `CoordAxisSign`, `UpAxis`, `UpAxisSign`, `FrontAxis`, `FrontAxisSign`.
+ufbxw_abi void ufbxw_scene_set_coordinate_axes(ufbxw_scene *scene, ufbxw_coordinate_axes axes);
+ufbxw_abi ufbxw_coordinate_axes ufbxw_scene_get_coordinate_axes(ufbxw_scene *scene);
+
+// Scale of a single unit in _centimeters_.
+// FBX property: `UnitScaleFactor`.
+ufbxw_abi void ufbxw_scene_set_unit_scale_factor(ufbxw_scene *scene, ufbxw_real unit_scale);
+ufbxw_abi ufbxw_real ufbxw_scene_get_unit_scale_factor(ufbxw_scene *scene);
+
 // -- Scene info
 
 ufbxw_abi ufbxw_id ufbxw_get_scene_info_id(ufbxw_scene *scene);
-ufbxw_abi ufbxw_id ufbxw_get_global_settings_id(ufbxw_scene *scene);
 
 // -- Templates
 
@@ -1137,6 +1165,8 @@ typedef struct ufbxw_prepare_opts {
 	bool patch_anim_stack_times;
 	bool patch_anim_stack_reference_times;
 	bool patch_global_settings_times;
+	bool patch_original_up_axis;
+	bool patch_original_units;
 	bool add_missing_skeletons;
 	bool add_missing_bind_poses;
 } ufbxw_prepare_opts;
