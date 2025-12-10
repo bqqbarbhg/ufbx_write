@@ -92,6 +92,28 @@ static ufbxw_vec3 to_ufbxw_euler(ufbx_quat v)
 	return to_ufbxw_vec3(euler);
 }
 
+static ufbxw_matrix to_ufbxw_matrix(ufbx_matrix v)
+{
+	ufbxw_matrix r;
+	r.m00 = v.m00;
+	r.m10 = v.m10;
+	r.m20 = v.m20;
+	r.m30 = 0.0f;
+	r.m01 = v.m01;
+	r.m11 = v.m11;
+	r.m21 = v.m21;
+	r.m31 = 0.0f;
+	r.m02 = v.m02;
+	r.m12 = v.m12;
+	r.m22 = v.m22;
+	r.m32 = 0.0f;
+	r.m03 = v.m03;
+	r.m13 = v.m13;
+	r.m23 = v.m23;
+	r.m33 = 1.0f;
+	return r;
+}
+
 static const ufbx_vec3 one_vec3 = { 1.0f, 1.0f, 1.0f };
 
 static ufbxw_int_buffer to_ufbxw_int_buffer(ufbxw_scene *scene, ufbx_int32_list src)
@@ -418,11 +440,38 @@ int main(int argc, char **argv)
 
 	// Skinning 
 	for (size_t skin_ix = 0; skin_ix < in_scene->skin_deformers.count; skin_ix++) {
-		ufbx_skin_deformer *in_deformer = in_scene->meshes.data[skin_ix];
-		ufbxw_skin_deformer out_deformer = ufbxw_create_skin_deformer(out_scene, ufbxw_null_mesh);
+		ufbx_skin_deformer *in_skin = in_scene->skin_deformers.data[skin_ix];
+		ufbxw_skin_deformer out_skin = ufbxw_create_skin_deformer(out_scene, ufbxw_null_mesh);
 
-		skin_deformer_ids[skin_ix] = out_deformer;
-		element_ids[in_deformer->element_id] = out_deformer.id;
+		skin_deformer_ids[skin_ix] = out_skin;
+		element_ids[in_skin->element_id] = out_skin.id;
+
+		for (size_t cluster_ix = 0; cluster_ix < in_skin->clusters.count; cluster_ix++) {
+			ufbx_skin_cluster* in_cluster = in_skin->clusters.data[cluster_ix];
+
+			ufbxw_node out_node = node_ids[in_cluster->bone_node->typed_id];
+			ufbxw_skin_cluster out_cluster = ufbxw_create_skin_cluster(out_scene, out_skin, out_node);
+
+			ufbxw_int_buffer indices = to_ufbxw_uint_buffer(out_scene, in_cluster->vertices);
+			ufbxw_real_buffer weights = to_ufbxw_real_buffer(out_scene, in_cluster->weights);
+
+			ufbxw_skin_cluster_set_weights(out_scene, out_cluster, indices, weights);
+
+			ufbxw_skin_cluster_set_transform(out_scene, out_cluster, to_ufbxw_matrix(in_cluster->mesh_node_to_bone));
+			ufbxw_skin_cluster_set_link_transform(out_scene, out_cluster, to_ufbxw_matrix(in_cluster->bind_to_world));
+		}
+	}
+
+	for (size_t mesh_ix = 0; mesh_ix < in_scene->meshes.count; mesh_ix++) {
+		ufbx_mesh* in_mesh = in_scene->meshes.data[mesh_ix];
+		ufbxw_mesh out_mesh = mesh_ids[in_mesh->typed_id];
+
+		for (size_t skin_ix = 0; skin_ix < in_mesh->skin_deformers.count; skin_ix++) {
+			ufbx_skin_deformer* in_skin = in_mesh->skin_deformers.data[skin_ix];
+			ufbxw_skin_deformer out_skin = skin_deformer_ids[in_skin->typed_id];
+
+			ufbxw_skin_deformer_add_mesh(out_scene, out_skin, out_mesh);
+		}
 	}
 
 	for (size_t layer_ix = 0; layer_ix < in_scene->anim_layers.count; layer_ix++) {

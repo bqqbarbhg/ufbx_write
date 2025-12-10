@@ -79,6 +79,12 @@ void format(char *&dst, char *end, ufbx_quat value)
 	dst += snprintf(dst, end - dst, "(%g, %g, %g, %g)", value.x, value.y, value.z, value.w);
 }
 
+void format(char *&dst, char *end, ufbx_matrix value)
+{
+	dst += snprintf(dst, end - dst, "(%g, %g, %g, %g, %g, %g, %g, %g, %g, %g, %g, %g)",
+		value.m00, value.m10, value.m20, value.m01, value.m11, value.m21, value.m02, value.m12, value.m22, value.m03, value.m13, value.m23);
+}
+
 void format(char *&dst, char *end, ufbx_edge value)
 {
 	dst += snprintf(dst, end - dst, "(%u, %u)", value.a, value.b);
@@ -232,6 +238,13 @@ static bool approx(ufbx_quat a, ufbx_quat b) {
 	a = ufbx_quat_fix_antipodal(a, b);
 	return approx(a.x, b.x) && approx(a.y, b.y) && approx(a.z, b.z) && approx(a.w, b.w);
 }
+static bool approx(ufbx_matrix a, ufbx_matrix b) {
+	if (!approx(a.cols[0], b.cols[0])) return false;
+	if (!approx(a.cols[1], b.cols[1])) return false;
+	if (!approx(a.cols[2], b.cols[2])) return false;
+	if (!approx(a.cols[3], b.cols[3])) return false;
+	return true;
+}
 
 #define check(m_cond) do { \
 		g_check_total_count++; \
@@ -324,6 +337,27 @@ static void check_vertex_attrib_imp(const char *file, int line, const char *fiel
 #define check_vertex_attrib(m_src, m_ref, m_field) \
 	check_vertex_attrib_imp(__FILE__, __LINE__, #m_field, (m_src)->m_field, (m_ref)->m_field)
 
+static void compare_skin(ufbx_skin_deformer* src_skin, ufbx_skin_deformer* ref_skin)
+{
+	check_equal(src_skin, ref_skin, clusters.count);
+	for (size_t cluster_ix = 0; cluster_ix < min(src_skin->clusters.count, ref_skin->clusters.count); cluster_ix++) {
+		compare_scope scope { "cluster %zu", cluster_ix };
+
+		ufbx_skin_cluster *src_cluster = src_skin->clusters[cluster_ix];
+		ufbx_skin_cluster *ref_cluster = ref_skin->clusters[cluster_ix];
+
+		ufbx_node* src_node = src_cluster->bone_node;
+		ufbx_node *ref_node = src_cluster->bone_node;
+		check_equal(src_node, ref_node, name);
+
+		check_list_equal(src_cluster, ref_cluster, vertices);
+		check_list_approx(src_cluster, ref_cluster, weights);
+
+		check_approx(src_cluster, ref_cluster, mesh_node_to_bone);
+		check_approx(src_cluster, ref_cluster, bind_to_world);
+	}
+}
+
 static void compare_mesh(ufbx_mesh *src_mesh, ufbx_mesh *ref_mesh)
 {
 	check_equal(src_mesh, ref_mesh, num_vertices);
@@ -358,6 +392,15 @@ static void compare_mesh(ufbx_mesh *src_mesh, ufbx_mesh *ref_mesh)
 		check_equal(src_set, ref_set, name);
 
 		check_vertex_attrib(src_set, ref_set, vertex_color);
+	}
+
+	check_equal(src_mesh, ref_mesh, skin_deformers.count);
+	for (size_t skin_ix = 0; skin_ix < min(src_mesh->skin_deformers.count, ref_mesh->skin_deformers.count); skin_ix++) {
+		compare_scope scope { "skin %zu", skin_ix };
+
+		ufbx_skin_deformer *src_skin = src_mesh->skin_deformers[skin_ix];
+		ufbx_skin_deformer *ref_skin = ref_mesh->skin_deformers[skin_ix];
+		compare_skin(src_skin, ref_skin);
 	}
 }
 
