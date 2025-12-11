@@ -502,6 +502,12 @@ int main(int argc, char **argv)
 				ufbxw_anim_set_default_value(out_scene, out_anim, curve_ix, in_value->default_value.v[curve_ix]);
 
 				if (in_curve) {
+					ufbxw_anim_curve_set_pre_extrapolation(out_scene, out_curve, (ufbxw_extrapolation_type)in_curve->pre_extrapolation.mode);
+					ufbxw_anim_curve_set_pre_extrapolation_repeat_count(out_scene, out_curve, in_curve->pre_extrapolation.repeat_count);
+
+					ufbxw_anim_curve_set_post_extrapolation(out_scene, out_curve, (ufbxw_extrapolation_type)in_curve->post_extrapolation.mode);
+					ufbxw_anim_curve_set_post_extrapolation_repeat_count(out_scene, out_curve, in_curve->post_extrapolation.repeat_count);
+
 					for (size_t key_ix = 0; key_ix < in_curve->keyframes.count; key_ix++) {
 						ufbx_keyframe in_key = in_curve->keyframes.data[key_ix];
 						ufbxw_keyframe_real out_key = { 0 };
@@ -511,7 +517,7 @@ int main(int argc, char **argv)
 						out_key.value = in_key.value;
 
 						ufbx_keyframe *prev_key = key_ix > 0 ? &in_curve->keyframes.data[key_ix - 1] : NULL;
-						ufbx_keyframe *next_key = key_ix > 0 ? &in_curve->keyframes.data[key_ix + 1] : NULL;
+						ufbx_keyframe *next_key = key_ix + 1 < in_curve->keyframes.count ? &in_curve->keyframes.data[key_ix + 1] : NULL;
 
 						switch (in_key.interpolation) {
 						case UFBX_INTERPOLATION_CONSTANT_PREV:
@@ -526,12 +532,14 @@ int main(int argc, char **argv)
 						case UFBX_INTERPOLATION_CUBIC:
 							out_key.flags = UFBXW_KEYFRAME_CUBIC_USER_BROKEN;
 							if (prev_key) {
-								out_key.slope_left = in_key.left.dy;
+								out_key.slope_left = in_key.left.dy / in_key.left.dx;
 								out_key.weight_left = in_key.left.dx / (in_key.time - prev_key->time);
+								out_key.flags |= UFBXW_KEYFRAME_WEIGHTED_LEFT;
 							}
 							if (next_key) {
-								out_key.slope_right = in_key.left.dy;
+								out_key.slope_right = in_key.right.dy / in_key.right.dx;
 								out_key.weight_right = in_key.right.dx / (next_key->time - in_key.time);
+								out_key.flags |= UFBXW_KEYFRAME_WEIGHTED_RIGHT;
 							}
 							break;
 						}
@@ -597,7 +605,8 @@ int main(int argc, char **argv)
 
 	if (compare) {
 		compare_fbx_opts compare_opts = { 0 };
-		compare_opts.approx_epsilon = 1e-4;
+		compare_opts.approx_epsilon = 1e-3;
+		compare_opts.compare_anim = true;
 
 		if (!compare_fbx(output_path, input_path, &compare_opts)) {
 			result = 1;

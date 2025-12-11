@@ -4,6 +4,8 @@
 
 typedef struct compare_fbx_opts {
 	double approx_epsilon;
+	bool compare_anim;
+	bool evaluate_scene_anim;
 } compare_fbx_opts;
 
 #if defined(__cplusplus)

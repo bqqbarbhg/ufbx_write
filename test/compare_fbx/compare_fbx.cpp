@@ -472,21 +472,45 @@ static void compare_anim(ufbx_scene *src_scene, ufbx_anim *src_anim, ufbx_scene 
 	double frame_begin = ref_anim->time_begin * ref_scene->settings.frames_per_second;
 	double frame_end = ref_anim->time_end * ref_scene->settings.frames_per_second;
 
-	size_t num_samples = 8;
-	for (size_t sample_ix = 0; sample_ix < num_samples; sample_ix++) {
-		double frame = frame_begin + (frame_end - frame_begin) * sample_ix / (num_samples - 1);
-		double time = frame / ref_scene->settings.frames_per_second;
+	if (g_opts.evaluate_scene_anim) {
+		size_t num_samples = 8;
+		for (size_t sample_ix = 0; sample_ix < num_samples; sample_ix++) {
+			double frame = frame_begin + (frame_end - frame_begin) * sample_ix / (num_samples - 1);
+			double time = frame / ref_scene->settings.frames_per_second;
 
-		ufbx_scene *src_state = ufbx_evaluate_scene(src_scene, src_anim, time, NULL, NULL);
-		ufbx_scene *ref_state = ufbx_evaluate_scene(ref_scene, ref_anim, time, NULL, NULL);
-		ufbxwt_assert(src_state);
-		ufbxwt_assert(ref_state);
+			ufbx_scene *src_state = ufbx_evaluate_scene(src_scene, src_anim, time, NULL, NULL);
+			ufbx_scene *ref_state = ufbx_evaluate_scene(ref_scene, ref_anim, time, NULL, NULL);
+			ufbxwt_assert(src_state);
+			ufbxwt_assert(ref_state);
 
-		compare_scope scope { "frame %.2f", frame };
-		compare_scene(src_state, ref_state, false);
+			compare_scope scope { "frame %.2f", frame };
+			compare_scene(src_state, ref_state, false);
 
-		ufbx_free_scene(src_state);
-		ufbx_free_scene(ref_state);
+			ufbx_free_scene(src_state);
+			ufbx_free_scene(ref_state);
+		}
+	} else {
+		size_t num_samples = 16;
+		for (size_t sample_ix = 0; sample_ix < num_samples; sample_ix++) {
+			double frame = frame_begin + (frame_end - frame_begin) * sample_ix / (num_samples - 1);
+			double time = frame / ref_scene->settings.frames_per_second;
+
+			compare_scope scope { "frame %.2f", frame };
+
+			check_equal(src_scene, ref_scene, nodes.count);
+			for (size_t node_ix = 0; node_ix < min(src_scene->nodes.count, ref_scene->nodes.count); node_ix++) {
+				ufbx_node *src_node = src_scene->nodes[node_ix];
+				ufbx_node *ref_node = ref_scene->nodes[node_ix];
+
+				compare_scope scope { "node '%s'", ref_node->name.data };
+
+				ufbx_transform src_transform = ufbx_evaluate_transform(src_anim, src_node, time);
+				ufbx_transform ref_transform = ufbx_evaluate_transform(ref_anim, ref_node, time);
+				check_approx(&src_transform, &ref_transform, translation);
+				check_approx(&src_transform, &ref_transform, rotation);
+				check_approx(&src_transform, &ref_transform, scale);
+			}
+		}
 	}
 }
 
@@ -517,21 +541,21 @@ extern "C" bool compare_fbx(const char *src_path, const char *ref_path, const co
 
 	compare_scene(src_scene, ref_scene, true);
 
-#if 0
-	check_equal(src_scene, ref_scene, anim_stacks.count);
-	for (size_t stack_ix = 0; stack_ix < min(src_scene->anim_stacks.count, ref_scene->anim_stacks.count); stack_ix++) {
-		ufbx_anim_stack *src_stack = src_scene->anim_stacks[stack_ix];
-		ufbx_anim_stack *ref_stack = ref_scene->anim_stacks[stack_ix];
+	if (opts->compare_anim) {
+		check_equal(src_scene, ref_scene, anim_stacks.count);
+		for (size_t stack_ix = 0; stack_ix < min(src_scene->anim_stacks.count, ref_scene->anim_stacks.count); stack_ix++) {
+			ufbx_anim_stack *src_stack = src_scene->anim_stacks[stack_ix];
+			ufbx_anim_stack *ref_stack = ref_scene->anim_stacks[stack_ix];
 
-		compare_scope scope { "anim '%s'", ref_stack->name.data };
+			compare_scope scope { "anim '%s'", ref_stack->name.data };
 
-		check_equal(ref_stack, src_stack, name);
-		check_approx(ref_stack, src_stack, time_begin);
-		check_approx(ref_stack, src_stack, time_end);
+			check_equal(ref_stack, src_stack, name);
+			check_approx(ref_stack, src_stack, time_begin);
+			check_approx(ref_stack, src_stack, time_end);
 
-		compare_anim(src_scene, src_stack->anim, ref_scene, ref_stack->anim);
+			compare_anim(src_scene, src_stack->anim, ref_scene, ref_stack->anim);
+		}
 	}
-#endif
 
 	ufbx_free_scene(src_scene);
 	ufbx_free_scene(ref_scene);
