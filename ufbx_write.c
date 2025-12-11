@@ -5041,6 +5041,11 @@ typedef struct {
 	ufbxw_float_buffer buffer_attr_flags;
 	ufbxw_float_buffer buffer_attr_data;
 
+	ufbxw_extrapolation_type pre_extrapolation;
+	ufbxw_extrapolation_type post_extrapolation;
+	int32_t pre_extrapolation_repeat;
+	int32_t post_extrapolation_repeat;
+
 	bool keys_out_of_order;
 	bool data_in_buffers;
 
@@ -6276,6 +6281,15 @@ static bool ufbxwi_init_anim_layer(ufbxw_scene *scene, void *data)
 	return true;
 }
 
+static bool ufbxwi_init_anim_curve(ufbxw_scene *scene, void *data)
+{
+	ufbxwi_anim_curve *curve = (ufbxwi_anim_curve*)data;
+	curve->pre_extrapolation_repeat = -1;
+	curve->post_extrapolation_repeat = -1;
+
+	return true;
+}
+
 enum {
 	UFBXWI_ELEMENT_TYPE_FLAG_EAGER_PROPS = 0x1,
 };
@@ -6371,7 +6385,7 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 	},
 	{
 		UFBXW_ELEMENT_ANIM_CURVE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_EMPTY, UFBXWI_AnimationCurve, UFBXWI_AnimCurve, UFBXWI_TOKEN_NONE,
-		NULL, 0, NULL,
+		NULL, 0, &ufbxwi_init_anim_curve,
 		0,
 	},
 	{
@@ -10382,6 +10396,28 @@ static void ufbxwi_save_anim_curve_keys(ufbxwi_save_context *sc, ufbxwi_element 
 	ufbxwi_dom_array(sc, "KeyAttrRefCount", buf_refcounts);
 }
 
+static void ufbxwi_save_anim_curve_extrapolation(ufbxwi_save_context *sc, const char *tag, ufbxw_extrapolation_type extrapolation, int32_t repeat_count)
+{
+	if (extrapolation == UFBXW_EXTRAPOLATION_CONSTANT) return;
+
+	ufbxwi_dom_open(sc, tag, "");
+
+	char type = 'C';
+	switch (extrapolation) {
+	case UFBXW_EXTRAPOLATION_CONSTANT: type = 'C'; break;
+	case UFBXW_EXTRAPOLATION_REPEAT: type = 'R'; break;
+	case UFBXW_EXTRAPOLATION_MIRROR: type = 'M'; break;
+	case UFBXW_EXTRAPOLATION_SLOPE: type = 'K'; break;
+	case UFBXW_EXTRAPOLATION_REPEAT_RELATIVE: type = 'A'; break;
+	default: ufbxwi_unreachable("unhandled extrapolation type");
+	}
+
+	ufbxwi_dom_value(sc, "Type", "c", type);
+	ufbxwi_dom_value(sc, "Repetition", "I", repeat_count);
+
+	ufbxwi_dom_close(sc);
+}
+
 static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element, uint32_t flags)
 {
 	ufbxw_scene *scene = sc->scene;
@@ -10554,9 +10590,14 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 	}
 
 	if (type == UFBXW_ELEMENT_ANIM_CURVE) {
+		const ufbxwi_anim_curve *curve = (const ufbxwi_anim_curve*)element;
+
 		ufbxwi_dom_value(sc, "Default", "D", 0.0); // Type?
 		ufbxwi_dom_value(sc, "KeyVer", "I", 4009);
 		ufbxwi_save_anim_curve_keys(sc, element);
+
+		ufbxwi_save_anim_curve_extrapolation(sc, "Pre-Extrapolation", curve->pre_extrapolation, curve->pre_extrapolation_repeat);
+		ufbxwi_save_anim_curve_extrapolation(sc, "Post-Extrapolation", curve->post_extrapolation, curve->post_extrapolation_repeat);
 	}
 
 	ufbxwi_dom_close(sc);
@@ -12914,6 +12955,62 @@ ufbxw_abi void ufbxw_anim_curve_finish_keyframes(ufbxw_scene *scene, ufbxw_anim_
 
 	c->keys_out_of_order = false;
 	ufbxwi_sort_anim_kefyrames(scene, c);
+}
+
+ufbxw_abi void ufbxw_anim_curve_set_pre_extrapolation(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_extrapolation_type extrapolation)
+{
+	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
+	if (!c) return;
+	c->pre_extrapolation = extrapolation;
+}
+
+ufbxw_abi ufbxw_extrapolation_type ufbxw_anim_curve_get_pre_extrapolation(ufbxw_scene *scene, ufbxw_anim_curve curve)
+{
+	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
+	if (!c) return UFBXW_EXTRAPOLATION_CONSTANT;
+	return c->pre_extrapolation;
+}
+
+ufbxw_abi void ufbxw_anim_curve_set_pre_extrapolation_repeat_count(ufbxw_scene *scene, ufbxw_anim_curve curve, int32_t repeat_count)
+{
+	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
+	if (!c) return;
+	c->pre_extrapolation_repeat = repeat_count;
+}
+
+ufbxw_abi int32_t ufbxw_anim_curve_get_pre_extrapolation_repeat_count(ufbxw_scene *scene, ufbxw_anim_curve curve)
+{
+	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
+	if (!c) return 0;
+	return c->pre_extrapolation_repeat;
+}
+
+ufbxw_abi void ufbxw_anim_curve_set_post_extrapolation(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_extrapolation_type extrapolation)
+{
+	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
+	if (!c) return;
+	c->post_extrapolation = extrapolation;
+}
+
+ufbxw_abi ufbxw_extrapolation_type ufbxw_anim_curve_get_post_extrapolation(ufbxw_scene *scene, ufbxw_anim_curve curve)
+{
+	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
+	if (!c) return UFBXW_EXTRAPOLATION_CONSTANT;
+	return c->post_extrapolation;
+}
+
+ufbxw_abi void ufbxw_anim_curve_set_post_extrapolation_repeat_count(ufbxw_scene *scene, ufbxw_anim_curve curve, int32_t repeat_count)
+{
+	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
+	if (!c) return;
+	c->post_extrapolation_repeat = repeat_count;
+}
+
+ufbxw_abi int32_t ufbxw_anim_curve_get_post_extrapolation_repeat_count(ufbxw_scene *scene, ufbxw_anim_curve curve)
+{
+	ufbxwi_anim_curve *c = ufbxwi_get_anim_curve(scene, curve);
+	if (!c) return 0;
+	return c->post_extrapolation_repeat;
 }
 
 ufbxw_abi void ufbxw_anim_curve_set_data(ufbxw_scene *scene, ufbxw_anim_curve curve, const ufbxw_anim_curve_data_desc *data)

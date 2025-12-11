@@ -144,7 +144,7 @@ typedef enum ufbxw_rotation_order {
 	UFBXW_ROTATION_ORDER_SPHERIC,
 } ufbxw_rotation_order;
 
-typedef enum ufbxw_inherit_mode {
+typedef enum ufbxw_inherit_type {
 	UFBXW_INHERIT_TYPE_NORMAL,
 	UFBXW_INHERIT_TYPE_IGNORE_PARENT_SCALE,
 	UFBXW_INHERIT_TYPE_COMPONENTWISE_SCALE,
@@ -495,6 +495,14 @@ typedef enum ufbxw_keyframe_type {
 	UFBXW_KEYFRAME_CUBIC_USER_UNIFIED = UFBXW_KEYFRAME_INTERPOLATION_CUBIC | UFBXW_KEYFRAME_TANGENT_USER,
 	UFBXW_KEYFRAME_CUBIC_USER_BROKEN = UFBXW_KEYFRAME_INTERPOLATION_CUBIC | UFBXW_KEYFRAME_TANGENT_USER | UFBXW_KEYFRAME_TANGENT_BROKEN,
 } ufbxw_keyframe_type;
+
+typedef enum ufbxw_extrapolation_type {
+	UFBXW_EXTRAPOLATION_CONSTANT,        // < Use the value of the first/last keyframe
+	UFBXW_EXTRAPOLATION_REPEAT,          // < Repeat the whole animation curve
+	UFBXW_EXTRAPOLATION_MIRROR,          // < Repeat with mirroring
+	UFBXW_EXTRAPOLATION_SLOPE,           // < Use the tangent of the last keyframe to linearly extrapolate
+	UFBXW_EXTRAPOLATION_REPEAT_RELATIVE, // < Repeat the animation curve but connect the first and last keyframe values
+} ufbxw_extrapolation_type;
 
 typedef enum ufbxw_time_mode {
 	UFBXW_TIME_MODE_DEFAULT,
@@ -1069,6 +1077,18 @@ ufbxw_abi void ufbxw_anim_set_layer(ufbxw_scene *scene, ufbxw_anim_prop anim, uf
 ufbxw_abi void ufbxw_anim_curve_add_keyframe(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_ktime time, ufbxw_real value, uint32_t type);
 ufbxw_abi void ufbxw_anim_curve_add_keyframe_key(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_keyframe_real key);
 ufbxw_abi void ufbxw_anim_curve_finish_keyframes(ufbxw_scene *scene, ufbxw_anim_curve curve);
+
+ufbxw_abi void ufbxw_anim_curve_set_pre_extrapolation(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_extrapolation_type extrapolation);
+ufbxw_abi ufbxw_extrapolation_type ufbxw_anim_curve_get_pre_extrapolation(ufbxw_scene *scene, ufbxw_anim_curve curve);
+
+ufbxw_abi void ufbxw_anim_curve_set_pre_extrapolation_repeat_count(ufbxw_scene *scene, ufbxw_anim_curve curve, int32_t repeat_count);
+ufbxw_abi int32_t ufbxw_anim_curve_get_pre_extrapolation_repeat_count(ufbxw_scene *scene, ufbxw_anim_curve curve);
+
+ufbxw_abi void ufbxw_anim_curve_set_post_extrapolation(ufbxw_scene *scene, ufbxw_anim_curve curve, ufbxw_extrapolation_type extrapolation);
+ufbxw_abi ufbxw_extrapolation_type ufbxw_anim_curve_get_post_extrapolation(ufbxw_scene *scene, ufbxw_anim_curve curve);
+
+ufbxw_abi void ufbxw_anim_curve_set_post_extrapolation_repeat_count(ufbxw_scene *scene, ufbxw_anim_curve curve, int32_t repeat_count);
+ufbxw_abi ufbxw_extrapolation_type ufbxw_anim_curve_get_post_extrapolation_repeat_count(ufbxw_scene *scene, ufbxw_anim_curve curve);
 
 typedef struct ufbxw_anim_curve_data_desc {
 	uint32_t _begin_zero;
