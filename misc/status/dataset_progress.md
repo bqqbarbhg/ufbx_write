@@ -34,3 +34,11 @@ Initial skin deformer support [(commit)](https://github.com/bqqbarbhg/ufbx_write
 ```
 1704/4454 files passed (193/410 test cases)
 ```
+
+#### Animation fixes
+
+Fixed animation tangents, added extrapolation support
+
+```
+2036/4454 files passed (221/410 test cases)
+```
