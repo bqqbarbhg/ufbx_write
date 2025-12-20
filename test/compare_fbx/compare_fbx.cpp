@@ -358,6 +358,33 @@ static void compare_skin(ufbx_skin_deformer* src_skin, ufbx_skin_deformer* ref_s
 	}
 }
 
+static void compare_blend(ufbx_blend_deformer* src_blend, ufbx_blend_deformer* ref_blend)
+{
+	check_equal(src_blend, ref_blend, channels.count);
+	for (size_t channel_ix = 0; channel_ix < min(src_blend->channels.count, ref_blend->channels.count); channel_ix++) {
+		compare_scope scope { "channel %zu", channel_ix };
+
+		ufbx_blend_channel *src_channel = src_blend->channels[channel_ix];
+		ufbx_blend_channel *ref_channel = ref_blend->channels[channel_ix];
+
+		check_equal(src_channel, ref_channel, keyframes.count);
+		for (size_t key_ix = 0; key_ix < min(src_channel->keyframes.count, ref_channel->keyframes.count); key_ix++) {
+			compare_scope scope { "keyframe %zu", key_ix };
+
+			ufbx_blend_keyframe *src_key = &src_channel->keyframes[key_ix];
+			ufbx_blend_keyframe *ref_key = &ref_channel->keyframes[key_ix];
+
+			check_approx(src_key, ref_key, target_weight);
+
+			ufbx_blend_shape *src_shape = src_key->shape;
+			ufbx_blend_shape *ref_shape = ref_key->shape;
+
+			check_list_equal(src_shape, ref_shape, offset_vertices);
+			check_list_approx(src_shape, ref_shape, position_offsets);
+		}
+	}
+}
+
 static void compare_mesh(ufbx_mesh *src_mesh, ufbx_mesh *ref_mesh)
 {
 	check_equal(src_mesh, ref_mesh, num_vertices);
@@ -401,6 +428,15 @@ static void compare_mesh(ufbx_mesh *src_mesh, ufbx_mesh *ref_mesh)
 		ufbx_skin_deformer *src_skin = src_mesh->skin_deformers[skin_ix];
 		ufbx_skin_deformer *ref_skin = ref_mesh->skin_deformers[skin_ix];
 		compare_skin(src_skin, ref_skin);
+	}
+
+	check_equal(src_mesh, ref_mesh, blend_deformers.count);
+	for (size_t blend_ix = 0; blend_ix < min(src_mesh->blend_deformers.count, ref_mesh->blend_deformers.count); blend_ix++) {
+		compare_scope scope { "blend %zu", blend_ix };
+
+		ufbx_blend_deformer *src_blend = src_mesh->blend_deformers[blend_ix];
+		ufbx_blend_deformer *ref_blend = ref_mesh->blend_deformers[blend_ix];
+		compare_blend(src_blend, ref_blend);
 	}
 }
 

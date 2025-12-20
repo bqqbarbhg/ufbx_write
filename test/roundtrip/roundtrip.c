@@ -178,6 +178,18 @@ static ufbxw_vec3_buffer to_ufbxw_vec3_buffer_by_index(ufbxw_scene *scene, ufbx_
 	return values;
 }
 
+static ufbx_element *find_deform_percent_element(ufbx_element *elem, const char *prop)
+{
+	for (size_t conn_ix = 0; conn_ix < elem->connections_src.count; conn_ix++) {
+		ufbx_connection *conn = &elem->connections_src.data[conn_ix];
+		if (conn->src_prop.length == 0 || conn->dst_prop.length == 0) continue;
+		if (strcmp(conn->src_prop.data, prop) != 0) continue;
+		if (strcmp(conn->dst_prop.data, "DeformPercent") != 0) continue;
+		return conn->dst;
+	}
+	return NULL;
+}
+
 int main(int argc, char **argv)
 {
 	const char *output_path = NULL;
@@ -219,7 +231,7 @@ int main(int argc, char **argv)
 				ascii_impl = UFBXWT_ASCII_FORMAT_IMPL_COUNT;
 				for (int i = 0; i < UFBXWT_ASCII_FORMAT_IMPL_COUNT; i++) {
 					if (!strcmp(ufbxwt_ascii_format_name((ufbxwt_ascii_format_impl)i), name)) {
-						ascii_impl = (ufbxwt_deflate_impl)i;
+						ascii_impl = (ufbxwt_ascii_format_impl)i;
 						break;
 					}
 				}
@@ -286,6 +298,7 @@ int main(int argc, char **argv)
 	ufbxw_anim_stack *anim_stack_ids = (ufbxw_anim_stack*)calloc(in_scene->anim_stacks.count, sizeof(ufbxw_anim_stack));
 	ufbxw_anim_layer *anim_layer_ids = (ufbxw_anim_layer*)calloc(in_scene->anim_layers.count, sizeof(ufbxw_anim_layer));
 	ufbxw_skin_deformer *skin_deformer_ids = (ufbxw_skin_deformer*)calloc(in_scene->skin_deformers.count, sizeof(ufbxw_skin_deformer));
+	ufbxw_blend_deformer *blend_deformer_ids = (ufbxw_blend_deformer*)calloc(in_scene->blend_deformers.count, sizeof(ufbxw_blend_deformer));
 	ufbxw_id *element_ids = (ufbxw_id*)calloc(in_scene->elements.count, sizeof(ufbxw_id));
 
 	for (size_t mesh_ix = 0; mesh_ix < in_scene->meshes.count; mesh_ix++) {
@@ -462,6 +475,34 @@ int main(int argc, char **argv)
 		}
 	}
 
+	// Blend deformers
+	for (size_t blend_ix = 0; blend_ix < in_scene->blend_deformers.count; blend_ix++) {
+		ufbx_blend_deformer *in_blend = in_scene->blend_deformers.data[blend_ix];
+		ufbxw_blend_deformer out_blend = ufbxw_create_blend_deformer(out_scene, ufbxw_null_mesh);
+		element_ids[in_blend->element_id] = out_blend.id;
+		blend_deformer_ids[blend_ix] = out_blend;
+
+		for (size_t channel_ix = 0; channel_ix < in_blend->channels.count; channel_ix++) {
+			ufbx_blend_channel *in_channel = in_blend->channels.data[channel_ix];
+			ufbxw_blend_channel out_channel = ufbxw_create_blend_channel(out_scene, out_blend);
+			element_ids[in_channel->element_id] = out_channel.id;
+
+			for (size_t shape_ix = 0; shape_ix < in_channel->keyframes.count; shape_ix++) {
+				ufbx_blend_keyframe in_keyframe = in_channel->keyframes.data[shape_ix];
+				ufbx_blend_shape *in_shape = in_keyframe.shape;
+				ufbxw_blend_shape out_shape = ufbxw_create_blend_shape(out_scene);
+				element_ids[in_shape->element_id] = out_shape.id;
+
+				ufbxw_int_buffer indices = to_ufbxw_uint_buffer(out_scene, in_shape->offset_vertices);
+				ufbxw_vec3_buffer offsets = to_ufbxw_vec3_buffer(out_scene, in_shape->position_offsets);
+				ufbxw_real target_weight = in_keyframe.target_weight * 100.0;
+
+				ufbxw_blend_shape_set_offsets(out_scene, out_shape, indices, offsets);
+				ufbxw_blend_channel_add_shape(out_scene, out_channel, out_shape, target_weight);
+			}
+		}
+	}
+
 	for (size_t mesh_ix = 0; mesh_ix < in_scene->meshes.count; mesh_ix++) {
 		ufbx_mesh* in_mesh = in_scene->meshes.data[mesh_ix];
 		ufbxw_mesh out_mesh = mesh_ids[in_mesh->typed_id];
@@ -471,6 +512,13 @@ int main(int argc, char **argv)
 			ufbxw_skin_deformer out_skin = skin_deformer_ids[in_skin->typed_id];
 
 			ufbxw_skin_deformer_add_mesh(out_scene, out_skin, out_mesh);
+		}
+
+		for (size_t blend_ix = 0; blend_ix < in_mesh->blend_deformers.count; blend_ix++) {
+			ufbx_blend_deformer* in_blend = in_mesh->blend_deformers.data[blend_ix];
+			ufbxw_blend_deformer out_blend = blend_deformer_ids[in_blend->typed_id];
+
+			ufbxw_blend_deformer_add_mesh(out_scene, out_blend, out_mesh);
 		}
 	}
 
@@ -483,7 +531,7 @@ int main(int argc, char **argv)
 		for (size_t prop_ix = 0; prop_ix < in_layer->anim_props.count; prop_ix++) {
 			ufbx_anim_prop *in_prop = &in_layer->anim_props.data[prop_ix];
 
-			ufbxw_id dst_id = element_ids[in_prop->element->element_id];
+			const ufbxw_id dst_id = element_ids[in_prop->element->element_id];
 			if (!dst_id) {
 				fprintf(stderr, "Ignoring animation on missing %s '%s'\n",
 					ufbxwt_ufbx_element_type_names[in_prop->element->type],
@@ -491,7 +539,17 @@ int main(int argc, char **argv)
 				continue;
 			}
 
-			ufbxw_anim_prop out_anim = ufbxw_animate_prop(out_scene, dst_id, in_prop->prop_name.data, out_layer);
+			ufbxw_id anim_id = dst_id;
+			const char *anim_prop = in_prop->prop_name.data;
+
+			// Retarget legacy blend channel properties into DeformPercent
+			ufbx_element *deform_element = find_deform_percent_element(in_prop->element, anim_prop);
+			if (deform_element) {
+				anim_id = element_ids[deform_element->element_id];
+				anim_prop = "DeformPercent";
+			}
+
+			ufbxw_anim_prop out_anim = ufbxw_animate_prop(out_scene, anim_id, anim_prop, out_layer);
 
 			ufbx_anim_value *in_value = in_prop->anim_value;
 			for (size_t curve_ix = 0; curve_ix < 3; curve_ix++) {
