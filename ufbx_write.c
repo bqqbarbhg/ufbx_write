@@ -13103,6 +13103,38 @@ ufbxw_abi ufbxw_real ufbxw_scene_get_unit_scale_factor(ufbxw_scene *scene)
 	return gs->unit_scale_factor;
 }
 
+ufbxw_abi void ufbxw_scene_set_time_mode(ufbxw_scene *scene, ufbxw_time_mode time_mode)
+{
+	ufbxwi_global_settings *gs = ufbxwi_get_global_settings_by_id(scene, scene->global_settings_id);
+	if (!gs) return;
+
+	gs->time_mode = (int32_t)time_mode;
+}
+
+ufbxw_abi ufbxw_time_mode ufbxw_scene_get_time_mode(ufbxw_scene *scene)
+{
+	ufbxwi_global_settings *gs = ufbxwi_get_global_settings_by_id(scene, scene->global_settings_id);
+	if (!gs) return UFBXW_TIME_MODE_DEFAULT;
+
+	return (ufbxw_time_mode)gs->time_mode;
+}
+
+ufbxw_abi void ufbxw_scene_set_custom_frame_rate(ufbxw_scene *scene, ufbxw_real frame_rate)
+{
+	ufbxwi_global_settings *gs = ufbxwi_get_global_settings_by_id(scene, scene->global_settings_id);
+	if (!gs) return;
+
+	gs->custom_frame_rate = frame_rate;
+}
+
+ufbxw_abi ufbxw_real ufbxw_scene_get_custom_frame_rate(ufbxw_scene *scene)
+{
+	ufbxwi_global_settings *gs = ufbxwi_get_global_settings_by_id(scene, scene->global_settings_id);
+	if (!gs) return 0.0f;
+
+	return gs->custom_frame_rate;
+}
+
 ufbxw_abi ufbxw_id ufbxw_get_scene_info_id(ufbxw_scene *scene)
 {
 	ufbxwi_for_list(ufbxwi_element_slot, slot, scene->elements) {

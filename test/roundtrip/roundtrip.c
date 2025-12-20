@@ -280,6 +280,7 @@ int main(int argc, char **argv)
 	out_opts.no_default_anim_layer = true;
 	ufbxw_scene *out_scene = ufbxw_create_scene(&out_opts);
 
+	// Coordinate settings
 	{
 		ufbxw_coordinate_axes axes;
 		axes.right = (ufbxw_coordinate_axis)in_scene->settings.axes.right;
@@ -291,6 +292,15 @@ int main(int argc, char **argv)
 
 		ufbxw_scene_set_coordinate_axes(out_scene, axes);
 		ufbxw_scene_set_unit_scale_factor(out_scene, unit_scale);
+	}
+
+	// Time mode
+	{
+		ufbxw_time_mode time_mode = (ufbxw_time_mode)in_scene->settings.time_mode;
+		ufbxw_real custom_frame_rate = ufbx_find_real(&in_scene->settings.props, "CustomFrameRate", -1.0);
+
+		ufbxw_scene_set_time_mode(out_scene, time_mode);
+		ufbxw_scene_set_custom_frame_rate(out_scene, custom_frame_rate);
 	}
 
 	ufbxw_mesh *mesh_ids = (ufbxw_mesh*)calloc(in_scene->meshes.count, sizeof(ufbxw_mesh));
