@@ -42,3 +42,11 @@ Fixed animation tangents, added extrapolation support
 ```
 2036/4454 files passed (221/410 test cases)
 ```
+
+#### Blend deformers
+
+Initial blend deformer support
+
+```
+2074/4454 files passed (225/410 test cases)
+```
