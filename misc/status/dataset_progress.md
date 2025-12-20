@@ -50,3 +50,11 @@ Initial blend deformer support
 ```
 2074/4454 files passed (225/410 test cases)
 ```
+
+#### Time mode
+
+Fixed time mode so that the scenes have correct FPS
+
+```
+3338/4454 files passed (335/410 test cases)
+```
