@@ -1137,6 +1137,16 @@ ufbxw_abi ufbxw_coordinate_axes ufbxw_scene_get_coordinate_axes(ufbxw_scene *sce
 ufbxw_abi void ufbxw_scene_set_unit_scale_factor(ufbxw_scene *scene, ufbxw_real unit_scale);
 ufbxw_abi ufbxw_real ufbxw_scene_get_unit_scale_factor(ufbxw_scene *scene);
 
+// Frame rate of the file.
+// FBX property: `TimeMode`.
+ufbxw_abi void ufbxw_scene_set_time_mode(ufbxw_scene *scene, ufbxw_time_mode time_mode);
+ufbxw_abi ufbxw_time_mode ufbxw_scene_get_time_mode(ufbxw_scene *scene);
+
+// Custom frame rate, used if time mode is `UFBXW_TIME_MODE_CUSTOM`.
+// FBX property: `CustomFrameRate`.
+ufbxw_abi void ufbxw_scene_set_custom_frame_rate(ufbxw_scene *scene, ufbxw_real frame_rate);
+ufbxw_abi ufbxw_real ufbxw_scene_get_custom_frame_rate(ufbxw_scene *scene);
+
 // -- Scene info
 
 ufbxw_abi ufbxw_id ufbxw_get_scene_info_id(ufbxw_scene *scene);
