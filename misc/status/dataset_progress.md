@@ -58,3 +58,11 @@ Fixed time mode so that the scenes have correct FPS
 ```
 3338/4454 files passed (335/410 test cases)
 ```
+
+#### Bones / inherit type
+
+Added bones to roundtrip, fixed inherit type handling
+
+```
+3870/4454 files passed (365/410 test cases)
+```
