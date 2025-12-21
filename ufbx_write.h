@@ -145,9 +145,9 @@ typedef enum ufbxw_rotation_order {
 } ufbxw_rotation_order;
 
 typedef enum ufbxw_inherit_type {
+	UFBXW_INHERIT_TYPE_COMPONENTWISE_SCALE,
 	UFBXW_INHERIT_TYPE_NORMAL,
 	UFBXW_INHERIT_TYPE_IGNORE_PARENT_SCALE,
-	UFBXW_INHERIT_TYPE_COMPONENTWISE_SCALE,
 } ufbxw_inherit_type;
 
 typedef struct ufbxw_scene ufbxw_scene;
@@ -165,7 +165,7 @@ typedef enum ufbxw_element_type {
 	UFBXW_ELEMENT_BLEND_SHAPE,
 	UFBXW_ELEMENT_LIGHT,
 	UFBXW_ELEMENT_CAMERA,
-	UFBXW_ELEMENT_SKELETON,
+	UFBXW_ELEMENT_BONE,
 	UFBXW_ELEMENT_BIND_POSE,
 
 	UFBXW_ELEMENT_MATERIAL,
@@ -195,6 +195,7 @@ typedef struct ufbxw_blend_channel { ufbxw_id id; } ufbxw_blend_channel;
 typedef struct ufbxw_blend_shape { ufbxw_id id; } ufbxw_blend_shape;
 typedef struct ufbxw_light { ufbxw_id id; } ufbxw_light;
 typedef struct ufbxw_camera { ufbxw_id id; } ufbxw_camera;
+typedef struct ufbxw_bone { ufbxw_id id; } ufbxw_bone;
 typedef struct ufbxw_bind_pose { ufbxw_id id; } ufbxw_bind_pose;
 typedef struct ufbxw_material { ufbxw_id id; } ufbxw_material;
 typedef struct ufbxw_anim_prop { ufbxw_id id; } ufbxw_anim_prop;
@@ -242,6 +243,7 @@ typedef struct ufbxw_ktime_range {
 #define ufbxw_null_blend_shape (ufbxw_new(ufbxw_blend_shape){0})
 #define ufbxw_null_light (ufbxw_new(ufbxw_light){0})
 #define ufbxw_null_camera (ufbxw_new(ufbxw_camera){0})
+#define ufbxw_null_bone (ufbxw_new(ufbxw_bone){0})
 #define ufbxw_null_bind_pose (ufbxw_new(ufbxw_bind_pose){0})
 #define ufbxw_null_material (ufbxw_new(ufbxw_material){0})
 #define ufbxw_null_anim_prop (ufbxw_new(ufbxw_anim_prop){0})
@@ -800,7 +802,7 @@ ufbxw_abi void ufbxw_node_set_rotation_quat(ufbxw_scene *scene, ufbxw_node node,
 // Controls how transformations are inherited to from the parent.
 // See `ufbxw_inherit_type` for more information.
 // FBX property: `InheritType`.
-ufbxw_abi void ufbxw_node_set_inherit_type(ufbxw_scene *scene, ufbxw_node node, ufbxw_inherit_type order);
+ufbxw_abi void ufbxw_node_set_inherit_type(ufbxw_scene *scene, ufbxw_node node, ufbxw_inherit_type type);
 ufbxw_abi ufbxw_inherit_type ufbxw_node_get_inherit_type(ufbxw_scene *scene, ufbxw_node node);
 
 // Rotation applied before the main `rotation`.
@@ -1023,6 +1025,10 @@ ufbxw_abi ufbxw_real ufbxw_light_get_outer_angle(ufbxw_scene *scene, ufbxw_light
 // -- Camera
 
 ufbxw_abi ufbxw_camera ufbxw_create_camera(ufbxw_scene *scene, ufbxw_node node);
+
+// -- Bone
+
+ufbxw_abi ufbxw_bone ufbxw_create_bone(ufbxw_scene *scene, ufbxw_node node);
 
 // -- Bind pose
 

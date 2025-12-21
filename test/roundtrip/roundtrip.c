@@ -178,6 +178,18 @@ static ufbxw_vec3_buffer to_ufbxw_vec3_buffer_by_index(ufbxw_scene *scene, ufbx_
 	return values;
 }
 
+static ufbxw_inherit_type to_ufbxw_inherit_type(ufbx_inherit_mode mode)
+{
+	switch (mode) {
+	case UFBX_INHERIT_MODE_NORMAL: return UFBXW_INHERIT_TYPE_NORMAL;
+	case UFBX_INHERIT_MODE_COMPONENTWISE_SCALE: return UFBXW_INHERIT_TYPE_COMPONENTWISE_SCALE;
+	case UFBX_INHERIT_MODE_IGNORE_PARENT_SCALE: return UFBXW_INHERIT_TYPE_IGNORE_PARENT_SCALE;
+	default:
+		ufbxwt_assert(0 && "unhandled inherit mode");
+		return UFBXW_INHERIT_TYPE_NORMAL;
+	}
+}
+
 static ufbx_element *find_deform_percent_element(ufbx_element *elem, const char *prop)
 {
 	for (size_t conn_ix = 0; conn_ix < elem->connections_src.count; conn_ix++) {
@@ -391,6 +403,12 @@ int main(int argc, char **argv)
 		ufbxw_light_set_outer_angle(out_scene, out_light, in_light->outer_angle);
 	}
 
+	for (size_t bone_ix = 0; bone_ix < in_scene->bones.count; bone_ix++) {
+		ufbx_bone *in_bone = in_scene->bones.data[bone_ix];
+		ufbxw_bone out_bone = ufbxw_create_bone(out_scene, ufbxw_null_node);
+		element_ids[in_bone->element_id] = out_bone.id;
+	}
+
 	// Create nodes in the original element order
 	for (size_t elem_ix = 0; elem_ix < in_scene->elements.count; elem_ix++) {
 		ufbx_element *in_elem = in_scene->elements.data[elem_ix];
@@ -407,7 +425,7 @@ int main(int argc, char **argv)
 
 		ufbxw_set_name(out_scene, out_node.id, in_node->name.data);
 
-		ufbxw_node_set_inherit_type(out_scene, out_node, (ufbxw_inherit_type)in_node->inherit_mode);
+		ufbxw_node_set_inherit_type(out_scene, out_node, to_ufbxw_inherit_type(in_node->inherit_mode));
 
 		if (advanced_transform) {
 			ufbxw_node_set_translation(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "Lcl Translation", ufbx_zero_vec3)));

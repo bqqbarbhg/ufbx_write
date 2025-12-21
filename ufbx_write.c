@@ -6177,6 +6177,7 @@ static bool ufbxwi_init_node(ufbxw_scene *scene, void *data)
 	node->geometric_scaling = ufbxwi_one_vec3;
 	node->visibility = 1.0;
 	node->visibility_inheritance = true;
+	node->inherit_type = UFBXW_INHERIT_TYPE_NORMAL;
 	return true;
 }
 
@@ -6359,7 +6360,7 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 		0,
 	},
 	{
-		UFBXW_ELEMENT_SKELETON, UFBXWI_TOKEN_NONE, UFBXWI_LimbNode, UFBXWI_NodeAttribute, UFBXWI_NodeAttribute, UFBXWI_FbxSkeleton,
+		UFBXW_ELEMENT_BONE, UFBXWI_TOKEN_NONE, UFBXWI_LimbNode, UFBXWI_NodeAttribute, UFBXWI_NodeAttribute, UFBXWI_FbxSkeleton,
 		ufbxwi_skeleton_props, ufbxwi_arraycount(ufbxwi_skeleton_props), &ufbxwi_init_skeleton,
 		0,
 	},
@@ -8034,8 +8035,7 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 			if (!node) continue;
 			if (node->attribute != 0) continue;
 
-			ufbxw_id skeleton = ufbxw_create_element(scene, UFBXW_ELEMENT_SKELETON);
-			ufbxwi_connect(scene, UFBXW_CONNECTION_NODE_ATTRIBUTE, skeleton, node->element.id, 0);
+			ufbxw_bone bone = ufbxw_create_bone(scene, cluster->node);
 			ufbxwi_check(!ufbxwi_is_fatal(&scene->error));
 		}
 	}
@@ -10569,7 +10569,7 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 
 	// TODO: Light, camera
 
-	if (type == UFBXW_ELEMENT_SKELETON) {
+	if (type == UFBXW_ELEMENT_BONE) {
 		ufbxwi_dom_value(sc, "TypeFlags", "C", "Skeleton");
 	}
 
@@ -11903,11 +11903,11 @@ ufbxw_abi void ufbxw_node_set_rotation_quat(ufbxw_scene *scene, ufbxw_node node,
 	data->rotation_order = (int32_t)order;
 }
 
-ufbxw_abi void ufbxw_node_set_inherit_type(ufbxw_scene *scene, ufbxw_node node, ufbxw_inherit_type order)
+ufbxw_abi void ufbxw_node_set_inherit_type(ufbxw_scene *scene, ufbxw_node node, ufbxw_inherit_type type)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
 	ufbxwi_check_element(scene, node.id, data);
-	data->inherit_type = (int32_t)order;
+	data->inherit_type = (int32_t)type;
 }
 
 ufbxw_abi ufbxw_inherit_type ufbxw_node_get_inherit_type(ufbxw_scene *scene, ufbxw_node node)
@@ -12327,6 +12327,15 @@ ufbxw_abi ufbxw_camera ufbxw_create_camera(ufbxw_scene *scene, ufbxw_node node)
 		ufbxwi_connect(scene, UFBXW_CONNECTION_NODE_ATTRIBUTE, camera.id, node.id, 0);
 	}
 	return camera;
+}
+
+ufbxw_abi ufbxw_bone ufbxw_create_bone(ufbxw_scene *scene, ufbxw_node node)
+{
+	ufbxw_bone bone = { ufbxw_create_element(scene, UFBXW_ELEMENT_BONE) };
+	if (node.id) {
+		ufbxwi_connect(scene, UFBXW_CONNECTION_NODE_ATTRIBUTE, bone.id, node.id, 0);
+	}
+	return bone;
 }
 
 ufbxw_abi void ufbxw_mesh_set_uvs(ufbxw_scene *scene, ufbxw_mesh mesh, int32_t set, ufbxw_vec2_buffer uvs, ufbxw_attribute_mapping mapping)
