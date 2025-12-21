@@ -451,6 +451,11 @@ static void compare_light(ufbx_light *src_light, ufbx_light *ref_light)
 	check_approx(src_light, ref_light, outer_angle);
 }
 
+static void compare_bone(ufbx_bone *src_bone, ufbx_bone *ref_bone)
+{
+	check_approx(src_bone, ref_bone, is_root);
+}
+
 static void compare_node(ufbx_node *src_node, ufbx_node *ref_node, bool full)
 {
 	check_equal(src_node, ref_node, name);
@@ -472,11 +477,21 @@ static void compare_node(ufbx_node *src_node, ufbx_node *ref_node, bool full)
 	check_approx(src_node, ref_node, geometry_transform.rotation);
 	check_approx(src_node, ref_node, geometry_transform.scale);
 
+	check_approx(src_node, ref_node, inherit_mode);
+
 	if (ref_node->light) {
 		compare_scope scope { "light" };
 		check(src_node->light);
 		if (src_node->light) {
 			compare_light(src_node->light, ref_node->light);
+		}
+	}
+
+	if (ref_node->bone) {
+		compare_scope scope { "bone" };
+		check(src_node->bone);
+		if (src_node->bone) {
+			compare_bone(src_node->bone, ref_node->bone);
 		}
 	}
 
