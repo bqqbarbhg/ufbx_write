@@ -2126,7 +2126,7 @@ static ufbxwi_noinline uint32_t ufbxwi_deflate_encode_codelens(ufbxwi_deflate_en
 				cl.codelen_sym = 18;
 				cl.extra_bits = 7;
 				cl.extra = (uint8_t)(num - 11);
-			} else { 
+			} else {
 				if (num > 6) num = 6;
 				cl.codelen_sym = 16;
 				cl.extra_bits = 2;
@@ -3307,6 +3307,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_BackgroundAlphaTreshold,
 	UFBXWI_BackgroundColor,
 	UFBXWI_BindPose,
+	UFBXWI_BindingTable,
 	UFBXWI_BlendMode,
 	UFBXWI_BlendModeBypass,
 	UFBXWI_BlendShape,
@@ -3321,7 +3322,11 @@ typedef enum ufbxwi_token {
 	UFBXWI_CastShadows,
 	UFBXWI_Casts_Shadows,
 	UFBXWI_Cluster,
+	UFBXWI_CodeAbsoluteURL,
+	UFBXWI_CodeRelativeURL,
+	UFBXWI_CodeTAG,
 	UFBXWI_Color,
+	UFBXWI_Constants,
 	UFBXWI_CoordAxis,
 	UFBXWI_CoordAxisSign,
 	UFBXWI_CurrentMappingType,
@@ -3334,6 +3339,9 @@ typedef enum ufbxwi_token {
 	UFBXWI_DefaultCamera,
 	UFBXWI_DeformPercent,
 	UFBXWI_Deformer,
+	UFBXWI_DescAbsoluteURL,
+	UFBXWI_DescRelativeURL,
+	UFBXWI_DescTAG,
 	UFBXWI_Description,
 	UFBXWI_DiffuseColor,
 	UFBXWI_DiffuseFactor,
@@ -3358,8 +3366,10 @@ typedef enum ufbxwi_token {
 	UFBXWI_FbxAnimCurveNode,
 	UFBXWI_FbxAnimLayer,
 	UFBXWI_FbxAnimStack,
+	UFBXWI_FbxBindingTable,
 	UFBXWI_FbxCamera,
 	UFBXWI_FbxFileTexture,
+	UFBXWI_FbxImplementation,
 	UFBXWI_FbxLight,
 	UFBXWI_FbxMesh,
 	UFBXWI_FbxNode,
@@ -3412,6 +3422,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_GeometricTranslation,
 	UFBXWI_Geometry,
 	UFBXWI_GlobalSettings,
+	UFBXWI_Implementation,
 	UFBXWI_InheritType,
 	UFBXWI_InnerAngle,
 	UFBXWI_Intensity,
@@ -3490,8 +3501,11 @@ typedef enum ufbxwi_token {
 	UFBXWI_ReferenceStart,
 	UFBXWI_ReferenceStop,
 	UFBXWI_RelPath,
+	UFBXWI_RenderAPI,
+	UFBXWI_RenderAPIVersion,
 	UFBXWI_RightBarnDoor,
 	UFBXWI_Roll,
+	UFBXWI_RootBindingName,
 	UFBXWI_Rotation,
 	UFBXWI_RotationAccumulationMode,
 	UFBXWI_RotationActive,
@@ -3526,6 +3540,8 @@ typedef enum ufbxwi_token {
 	UFBXWI_ScalingOffset,
 	UFBXWI_ScalingPivot,
 	UFBXWI_SceneInfo,
+	UFBXWI_ShaderLanguage,
+	UFBXWI_ShaderLanguageVersion,
 	UFBXWI_ShadingModel,
 	UFBXWI_ShadowColor,
 	UFBXWI_Shape,
@@ -3546,6 +3562,8 @@ typedef enum ufbxwi_token {
 	UFBXWI_SourceObject,
 	UFBXWI_SrcDocumentUrl,
 	UFBXWI_SubDeformer,
+	UFBXWI_TargetName,
+	UFBXWI_TargetType,
 	UFBXWI_Texture,
 	UFBXWI_Texture_alpha,
 	UFBXWI_TextureRotationPivot,
@@ -3651,6 +3669,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "BackgroundAlphaTreshold", 23 },
 	{ "BackgroundColor", 15 },
 	{ "BindPose", 8 },
+	{ "BindingTable", 12 },
 	{ "BlendMode", 9 },
 	{ "BlendModeBypass", 15 },
 	{ "BlendShape", 10 },
@@ -3665,7 +3684,11 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "CastShadows", 11 },
 	{ "Casts Shadows", 13 },
 	{ "Cluster", 7 },
+	{ "CodeAbsoluteURL", 15 },
+	{ "CodeRelativeURL", 15 },
+	{ "CodeTAG", 7 },
 	{ "Color", 5 },
+	{ "Constants", 9 },
 	{ "CoordAxis", 9 },
 	{ "CoordAxisSign", 13 },
 	{ "CurrentMappingType", 18 },
@@ -3678,6 +3701,9 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "DefaultCamera", 13 },
 	{ "DeformPercent", 13 },
 	{ "Deformer", 8 },
+	{ "DescAbsoluteURL", 15 },
+	{ "DescRelativeURL", 15 },
+	{ "DescTAG", 7 },
 	{ "Description", 11 },
 	{ "DiffuseColor", 12 },
 	{ "DiffuseFactor", 13 },
@@ -3702,8 +3728,10 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "FbxAnimCurveNode", 16 },
 	{ "FbxAnimLayer", 12 },
 	{ "FbxAnimStack", 12 },
+	{ "FbxBindingTable", 15 },
 	{ "FbxCamera", 9 },
 	{ "FbxFileTexture", 14 },
+	{ "FbxImplementation", 17 },
 	{ "FbxLight", 8 },
 	{ "FbxMesh", 7 },
 	{ "FbxNode", 7 },
@@ -3756,6 +3784,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "GeometricTranslation", 20 },
 	{ "Geometry", 8 },
 	{ "GlobalSettings", 14 },
+	{ "Implementation", 14 },
 	{ "InheritType", 11 },
 	{ "InnerAngle", 10 },
 	{ "Intensity", 9 },
@@ -3834,8 +3863,11 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "ReferenceStart", 14 },
 	{ "ReferenceStop", 13 },
 	{ "RelPath", 7 },
+	{ "RenderAPI", 9 },
+	{ "RenderAPIVersion", 16 },
 	{ "RightBarnDoor", 13 },
 	{ "Roll", 4 },
+	{ "RootBindingName", 15 },
 	{ "Rotation", 8 },
 	{ "RotationAccumulationMode", 24 },
 	{ "RotationActive", 14 },
@@ -3870,6 +3902,8 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "ScalingOffset", 13 },
 	{ "ScalingPivot", 12 },
 	{ "SceneInfo", 9 },
+	{ "ShaderLanguage", 14 },
+	{ "ShaderLanguageVersion", 21 },
 	{ "ShadingModel", 12 },
 	{ "ShadowColor", 11 },
 	{ "Shape", 5 },
@@ -3890,6 +3924,8 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "SourceObject", 12 },
 	{ "SrcDocumentUrl", 14 },
 	{ "SubDeformer", 11 },
+	{ "TargetName", 10 },
+	{ "TargetType", 10 },
 	{ "Texture", 7 },
 	{ "Texture alpha", 13 },
 	{ "TextureRotationPivot", 20 },
@@ -5005,8 +5041,35 @@ typedef struct {
 	ufbxwi_conn_list textures;
 	ufbxwi_id_list conn_nodes;
 	ufbxw_string shading_model;
+	ufbxw_implementation implementation;
 	bool multi_layer;
 } ufbxwi_material;
+
+typedef struct {
+	ufbxwi_element element;
+	ufbxwi_id_list materials;
+	ufbxw_binding_table binding_table;
+	ufbxw_string shader_language;
+	ufbxw_string shader_language_version;
+	ufbxw_string render_api;
+	ufbxw_string render_api_version;
+	ufbxw_string root_binding_name;
+} ufbxwi_implementation;
+
+typedef struct {
+	ufbxw_string property_entry;
+	ufbxw_string semantic_entry;
+} ufbxwi_binding_entry;
+
+UFBXWI_LIST_TYPE(ufbxwi_binding_entry_list, ufbxwi_binding_entry);
+
+typedef struct {
+	ufbxwi_element element;
+	ufbxwi_id_list implementations;
+	ufbxw_string target_name;
+	ufbxw_string target_type;
+	ufbxwi_binding_entry_list entries;
+} ufbxwi_binding_table;
 
 typedef struct {
 	ufbxwi_element element;
@@ -5267,6 +5330,8 @@ static const ufbxwi_object_desc ufbxwi_object_types[] = {
 	{ UFBXWI_NodeAttribute },
 	{ UFBXWI_Geometry },
 	{ UFBXWI_Material },
+	{ UFBXWI_Implementation },
+	{ UFBXWI_BindingTable },
 	{ UFBXWI_Texture },
 	{ UFBXWI_Model },
 	{ UFBXWI_AnimationCurveNode },
@@ -5682,6 +5747,26 @@ static const ufbxwi_prop_desc ufbxwi_file_texture_props[] = {
 	{ UFBXWI_UseMipMap, UFBXW_PROP_TYPE_BOOL },
 };
 
+static const ufbxwi_prop_desc ufbxwi_implementation_props[] = {
+	{ UFBXWI_ShaderLanguage, UFBXW_PROP_TYPE_STRING, ufbxwi_field(ufbxwi_implementation, shader_language), ufbxwi_default(string_default) },
+	{ UFBXWI_ShaderLanguageVersion, UFBXW_PROP_TYPE_STRING, ufbxwi_field(ufbxwi_implementation, shader_language_version),ufbxwi_default(string_default) },
+	{ UFBXWI_RenderAPI, UFBXW_PROP_TYPE_STRING, ufbxwi_field(ufbxwi_implementation, render_api),ufbxwi_default(string_default) },
+	{ UFBXWI_RenderAPIVersion, UFBXW_PROP_TYPE_STRING, ufbxwi_field(ufbxwi_implementation, render_api_version), ufbxwi_default(string_default) },
+	{ UFBXWI_RootBindingName, UFBXW_PROP_TYPE_STRING, ufbxwi_field(ufbxwi_implementation, root_binding_name), ufbxwi_default(string_default) },
+	{ UFBXWI_Constants, UFBXW_PROP_TYPE_COMPOUND },
+};
+
+static const ufbxwi_prop_desc ufbxwi_binding_table_props[] = {
+	{ UFBXWI_TargetName, UFBXW_PROP_TYPE_STRING, ufbxwi_field(ufbxwi_binding_table, target_name), ufbxwi_default(string_default) },
+	{ UFBXWI_TargetType, UFBXW_PROP_TYPE_STRING, ufbxwi_field(ufbxwi_binding_table, target_type), ufbxwi_default(string_default) },
+	{ UFBXWI_CodeAbsoluteURL, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_default) },
+	{ UFBXWI_CodeRelativeURL, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_default) },
+	{ UFBXWI_CodeTAG, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_default) },
+	{ UFBXWI_DescAbsoluteURL, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_default) },
+	{ UFBXWI_DescRelativeURL, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_default) },
+	{ UFBXWI_DescTAG, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_default) },
+};
+
 static const ufbxwi_prop_desc ufbxwi_anim_prop_props[] = {
 	{ UFBXWI_d, UFBXW_PROP_TYPE_COMPOUND },
 };
@@ -5731,6 +5816,8 @@ static const ufbxwi_prop_desc ufbxwi_document_props[] = {
 #define UFBXWI_CONN_BIT_TYPE_BLEND_DEFORMER UINT64_C(0x10000)
 #define UFBXWI_CONN_BIT_TYPE_BLEND_CHANNEL UINT64_C(0x20000)
 #define UFBXWI_CONN_BIT_TYPE_BLEND_SHAPE UINT64_C(0x40000)
+#define UFBXWI_CONN_BIT_TYPE_IMPLEMENTATION UINT64_C(0x80000)
+#define UFBXWI_CONN_BIT_TYPE_BINDING_TABLE UINT64_C(0x100000)
 
 #define UFBXWI_CONN_BIT_ELEMENT_NODE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_NODE)
 #define UFBXWI_CONN_BIT_ELEMENT_NODE_ATTRIBUTE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE)
@@ -5747,6 +5834,8 @@ static const ufbxwi_prop_desc ufbxwi_document_props[] = {
 #define UFBXWI_CONN_BIT_ELEMENT_ANIM_PROP (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_ANIM_PROP)
 #define UFBXWI_CONN_BIT_ELEMENT_ANIM_LAYER (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_ANIM_LAYER)
 #define UFBXWI_CONN_BIT_ELEMENT_ANIM_STACK (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_ANIM_STACK)
+#define UFBXWI_CONN_BIT_ELEMENT_IMPLEMENTATION (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_IMPLEMENTATION)
+#define UFBXWI_CONN_BIT_ELEMENT_BINDING_TABLE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_BINDING_TABLE)
 
 #define UFBXWI_CONN_BIT_PROPERTY_ANY (UFBXWI_CONN_BIT_PROPERTY | UFBXWI_CONN_BIT_TYPE_ANY)
 #define UFBXWI_CONN_BIT_PROPERTY_MATERIAL (UFBXWI_CONN_BIT_PROPERTY | UFBXWI_CONN_BIT_TYPE_MATERIAL)
@@ -5773,6 +5862,8 @@ static const ufbxwi_element_type_info ufbxwi_element_type_infos[] = {
 	{ sizeof(ufbxwi_skeleton), UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE },
 	{ sizeof(ufbxwi_bind_pose) },
 	{ sizeof(ufbxwi_material), UFBXWI_CONN_BIT_TYPE_MATERIAL },
+	{ sizeof(ufbxwi_implementation), UFBXWI_CONN_BIT_TYPE_IMPLEMENTATION },
+	{ sizeof(ufbxwi_binding_table), UFBXWI_CONN_BIT_TYPE_BINDING_TABLE },
 	{ sizeof(ufbxwi_texture), UFBXWI_CONN_BIT_TYPE_TEXTURE },
 	{ sizeof(ufbxwi_anim_curve), UFBXWI_CONN_BIT_TYPE_ANIM_CURVE },
 	{ sizeof(ufbxwi_anim_prop), UFBXWI_CONN_BIT_TYPE_ANIM_PROP },
@@ -5800,6 +5891,8 @@ static const char *ufbxwi_element_type_names[] = {
 	"skeleton",
 	"bind_pose",
 	"material",
+	"implementation",
+	"binding_table",
 	"texture",
 	"anim_curve",
 	"anim_prop",
@@ -5857,6 +5950,8 @@ static const ufbxwi_connection_info ufbxwi_connection_infos[] = {
 	{ "Skin Cluster Node", UFBXWI_CONN_BIT_ELEMENT_NODE, UFBXWI_CONN_BIT_ELEMENT_SKIN_CLUSTER, ufbxwi_conn_id_list_ex(ufbxwi_node, skin_clusters, UFBXWI_CONN_TYPE_UNORDERED), ufbxwi_conn_id(ufbxwi_skin_cluster, node) },
 	{ "Blend Channel", UFBXWI_CONN_BIT_ELEMENT_BLEND_CHANNEL, UFBXWI_CONN_BIT_ELEMENT_BLEND_DEFORMER, ufbxwi_conn_id(ufbxwi_blend_channel, deformer), ufbxwi_conn_id_list(ufbxwi_blend_deformer, channels) },
 	{ "Blend Shape", UFBXWI_CONN_BIT_ELEMENT_BLEND_SHAPE, UFBXWI_CONN_BIT_ELEMENT_BLEND_CHANNEL, ufbxwi_conn_id(ufbxwi_blend_shape, blend_channels), ufbxwi_conn_blend_shape_list(ufbxwi_blend_channel, blend_shapes) },
+	{ "Material Implementation", UFBXWI_CONN_BIT_ELEMENT_MATERIAL, UFBXWI_CONN_BIT_ELEMENT_IMPLEMENTATION, ufbxwi_conn_id(ufbxwi_material, implementation), ufbxwi_conn_id_list_ex(ufbxwi_implementation, materials, UFBXWI_CONN_TYPE_UNORDERED) },
+	{ "Binding Table Implementation", UFBXWI_CONN_BIT_ELEMENT_MATERIAL, UFBXWI_CONN_BIT_ELEMENT_IMPLEMENTATION, ufbxwi_conn_id_list_ex(ufbxwi_binding_table, implementations, UFBXWI_CONN_TYPE_UNORDERED), ufbxwi_conn_id(ufbxwi_implementation, binding_table) },
 	{ "Animated Property", UFBXWI_CONN_BIT_ELEMENT_ANIM_PROP, UFBXWI_CONN_BIT_PROPERTY_ANY, ufbxwi_conn_conn(ufbxwi_anim_prop, prop), ufbxwi_conn_conn_list_ex(ufbxwi_element, anim_props, UFBXWI_CONN_TYPE_UNORDERED) },
 	{ "Animation Curve Property", UFBXWI_CONN_BIT_ELEMENT_ANIM_CURVE, UFBXWI_CONN_BIT_PROPERTY_ANIM_PROP, ufbxwi_conn_conn(ufbxwi_anim_curve, prop), ufbxwi_conn_conn_list(ufbxwi_anim_prop, curves) },
 	{ "Animation Property Layer", UFBXWI_CONN_BIT_ELEMENT_ANIM_PROP, UFBXWI_CONN_BIT_ELEMENT_ANIM_LAYER, ufbxwi_conn_id(ufbxwi_anim_prop, layer), ufbxwi_conn_id_list_ex(ufbxwi_anim_layer, anim_props, UFBXWI_CONN_TYPE_UNORDERED) },
@@ -6266,6 +6361,25 @@ static bool ufbxwi_init_material_lambert(ufbxw_scene *scene, void *data)
 	return true;
 }
 
+static bool ufbxwi_init_implementation(ufbxw_scene *scene, void *data)
+{
+	ufbxwi_implementation *implementation = (ufbxwi_implementation*)data;
+	implementation->shader_language.data = ufbxwi_empty_char;
+	implementation->shader_language_version.data = ufbxwi_empty_char;
+	implementation->render_api.data = ufbxwi_empty_char;
+	implementation->render_api_version.data = ufbxwi_empty_char;
+	implementation->root_binding_name.data = ufbxwi_empty_char;
+	return true;
+}
+
+static bool ufbxwi_init_binding_table(ufbxw_scene *scene, void *data)
+{
+	ufbxwi_binding_table *binding_table = (ufbxwi_binding_table*)data;
+	binding_table->target_name = ufbxwi_c_str("root");
+	binding_table->target_type = ufbxwi_c_str("shader");
+	return true;
+}
+
 static bool ufbxwi_init_file_texture(ufbxw_scene *scene, void *data)
 {
 	ufbxwi_texture *texture = (ufbxwi_texture*)data;
@@ -6412,6 +6526,16 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 	{
 		UFBXW_ELEMENT_TEXTURE, UFBXWI_FbxFileTexture, UFBXWI_TOKEN_EMPTY, UFBXWI_Texture, UFBXWI_Texture, UFBXWI_FbxFileTexture,
 		ufbxwi_file_texture_props, ufbxwi_arraycount(ufbxwi_file_texture_props), &ufbxwi_init_file_texture,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_IMPLEMENTATION, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_EMPTY, UFBXWI_Implementation, UFBXWI_Implementation, UFBXWI_FbxImplementation,
+		ufbxwi_implementation_props, ufbxwi_arraycount(ufbxwi_implementation_props), &ufbxwi_init_implementation,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_BINDING_TABLE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_EMPTY, UFBXWI_BindingTable, UFBXWI_BindingTable, UFBXWI_FbxBindingTable,
+		ufbxwi_binding_table_props, ufbxwi_arraycount(ufbxwi_binding_table_props), &ufbxwi_init_binding_table,
 		0,
 	},
 };
@@ -7274,6 +7398,9 @@ static ufbxwi_forceinline ufbxwi_blend_shape *ufbxwi_get_blend_shape(ufbxw_scene
 static ufbxwi_forceinline ufbxwi_light *ufbxwi_get_light(ufbxw_scene *scene, ufbxw_light id) { return (ufbxwi_light*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_LIGHT); }
 static ufbxwi_forceinline ufbxwi_camera *ufbxwi_get_camera(ufbxw_scene *scene, ufbxw_camera id) { return (ufbxwi_camera*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_CAMERA); }
 static ufbxwi_forceinline ufbxwi_bind_pose *ufbxwi_get_bind_pose(ufbxw_scene *scene, ufbxw_bind_pose id) { return (ufbxwi_bind_pose*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BIND_POSE); }
+static ufbxwi_forceinline ufbxwi_material *ufbxwi_get_material(ufbxw_scene *scene, ufbxw_material id) { return (ufbxwi_material*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_MATERIAL); }
+static ufbxwi_forceinline ufbxwi_implementation *ufbxwi_get_implementation(ufbxw_scene *scene, ufbxw_implementation id) { return (ufbxwi_implementation*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_IMPLEMENTATION); }
+static ufbxwi_forceinline ufbxwi_binding_table *ufbxwi_get_binding_table(ufbxw_scene *scene, ufbxw_binding_table id) { return (ufbxwi_binding_table*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BINDING_TABLE); }
 static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve(ufbxw_scene *scene, ufbxw_anim_curve id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_CURVE); }
 static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop(ufbxw_scene *scene, ufbxw_anim_prop id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_PROP); }
 static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer(ufbxw_scene *scene, ufbxw_anim_layer id) { return (ufbxwi_anim_layer*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_LAYER); }
@@ -7289,6 +7416,9 @@ static ufbxwi_forceinline ufbxwi_blend_shape *ufbxwi_get_blend_shape_by_id(ufbxw
 static ufbxwi_forceinline ufbxwi_light *ufbxwi_get_light_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_light*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_LIGHT); }
 static ufbxwi_forceinline ufbxwi_camera *ufbxwi_get_camera_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_camera*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_CAMERA); }
 static ufbxwi_forceinline ufbxwi_bind_pose *ufbxwi_get_bind_pose_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_bind_pose*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BIND_POSE); }
+static ufbxwi_forceinline ufbxwi_material *ufbxwi_get_material_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_material*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_MATERIAL); }
+static ufbxwi_forceinline ufbxwi_implementation *ufbxwi_get_implementation_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_implementation*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_IMPLEMENTATION); }
+static ufbxwi_forceinline ufbxwi_binding_table *ufbxwi_get_binding_table_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_binding_table*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BINDING_TABLE); }
 static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_CURVE); }
 static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_PROP); }
 static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_layer*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_LAYER); }
@@ -9571,7 +9701,7 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 
 	ufbxwi_buffer_type type = ufbxwi_buffer_id_type(buffer_id);
 	ufbxwi_buffer_type_info type_info = ufbxwi_buffer_type_infos[type];
-	
+
 	size_t buffer_count = buffer->count;
 	size_t scalar_count = buffer_count * type_info.components;
 	size_t data_size = buffer_count * type_info.size;
@@ -12684,6 +12814,73 @@ ufbxw_abi void ufbxw_bind_pose_add_node(ufbxw_scene *scene, ufbxw_bind_pose pose
 
 	pose_node->node = node;
 	pose_node->matrix = matrix;
+}
+
+ufbxw_abi ufbxw_material ufbxw_create_material(ufbxw_scene *scene)
+{
+	ufbxw_material material = { ufbxw_create_element(scene, UFBXW_ELEMENT_MATERIAL) };
+	return material;
+}
+
+ufbxw_abi void ufbxw_material_set_implementation(ufbxw_scene *scene, ufbxw_material material, ufbxw_implementation implementation)
+{
+	if (implementation.id == ufbxw_null_id) {
+		ufbxwi_disconnect_all_src(scene, UFBXW_CONNECTION_MATERIAL_IMPLEMENTATION, implementation.id);
+	} else {
+		ufbxwi_connect(scene, UFBXW_CONNECTION_MATERIAL_IMPLEMENTATION, material.id, implementation.id, UFBXWI_CONNECT_FLAG_DISCONNECT_DST);
+	}
+}
+
+ufbxw_abi ufbxw_implementation ufbxw_material_get_implementation(ufbxw_scene *scene, ufbxw_material material)
+{
+	ufbxwi_material *mt = ufbxwi_get_material(scene, material);
+	if (!mt) return ufbxw_null_implementation;
+	return mt->implementation;
+}
+
+ufbxw_abi ufbxw_implementation ufbxw_create_implementation(ufbxw_scene *scene)
+{
+	ufbxw_implementation material = { ufbxw_create_element(scene, UFBXW_ELEMENT_IMPLEMENTATION) };
+	return material;
+}
+
+ufbxw_abi void ufbxw_implementation_set_binding_table(ufbxw_scene *scene, ufbxw_implementation implementation, ufbxw_binding_table binding_table)
+{
+	if (binding_table.id == ufbxw_null_id) {
+		ufbxwi_disconnect_all_src(scene, UFBXW_CONNECTION_BINDING_IMPLEMENTATION, implementation.id);
+	} else {
+		ufbxwi_connect(scene, UFBXW_CONNECTION_BINDING_IMPLEMENTATION, binding_table.id, implementation.id, UFBXWI_CONNECT_FLAG_DISCONNECT_DST);
+	}
+}
+
+ufbxw_abi ufbxw_binding_table ufbxw_implementation_get_binding_table(ufbxw_scene *scene, ufbxw_implementation implementation)
+{
+	ufbxwi_implementation *im = ufbxwi_get_implementation(scene, implementation);
+	if (!im) return ufbxw_null_binding_table;
+	return im->binding_table;
+}
+
+ufbxw_abi ufbxw_binding_table ufbxw_create_binding_table(ufbxw_scene *scene)
+{
+	ufbxw_binding_table binding_table = { ufbxw_create_element(scene, UFBXW_ELEMENT_BINDING_TABLE) };
+	return binding_table;
+}
+
+ufbxw_abi void ufbxw_implementation_add_entry(ufbxw_scene *scene, ufbxw_binding_table binding_table, const char *property, const char *semantic)
+{
+	ufbxw_implementation_add_entry_len(scene, binding_table, property, strlen(property), semantic, strlen(semantic));
+}
+
+ufbxw_abi void ufbxw_implementation_add_entry_len(ufbxw_scene *scene, ufbxw_binding_table binding_table, const char *property, size_t property_len, const char *semantic, size_t semantic_len)
+{
+	ufbxwi_binding_table *bt = ufbxwi_get_binding_table(scene, binding_table);
+	if (!bt) return ufbxw_null_binding_table;
+
+	ufbxwi_binding_entry *entry = ufbxwi_list_push_zero(&scene->ator, &bt->entries, ufbxwi_binding_entry);
+	if (!entry) return;
+
+	ufbxwi_intern_string(&scene->string_pool, &entry->property_entry, property, property_len);
+	ufbxwi_intern_string(&scene->string_pool, &entry->semantic_entry, semantic, semantic_len);
 }
 
 ufbxw_abi ufbxw_anim_stack ufbxw_get_default_anim_stack(ufbxw_scene *scene)

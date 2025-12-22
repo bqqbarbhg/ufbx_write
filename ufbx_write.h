@@ -169,6 +169,8 @@ typedef enum ufbxw_element_type {
 	UFBXW_ELEMENT_BIND_POSE,
 
 	UFBXW_ELEMENT_MATERIAL,
+	UFBXW_ELEMENT_IMPLEMENTATION,
+	UFBXW_ELEMENT_BINDING_TABLE,
 
 	UFBXW_ELEMENT_TEXTURE,
 
@@ -198,6 +200,8 @@ typedef struct ufbxw_camera { ufbxw_id id; } ufbxw_camera;
 typedef struct ufbxw_bone { ufbxw_id id; } ufbxw_bone;
 typedef struct ufbxw_bind_pose { ufbxw_id id; } ufbxw_bind_pose;
 typedef struct ufbxw_material { ufbxw_id id; } ufbxw_material;
+typedef struct ufbxw_implementation { ufbxw_id id; } ufbxw_implementation;
+typedef struct ufbxw_binding_table { ufbxw_id id; } ufbxw_binding_table;
 typedef struct ufbxw_anim_prop { ufbxw_id id; } ufbxw_anim_prop;
 typedef struct ufbxw_anim_curve { ufbxw_id id; } ufbxw_anim_curve;
 typedef struct ufbxw_anim_layer { ufbxw_id id; } ufbxw_anim_layer;
@@ -246,26 +250,30 @@ typedef struct ufbxw_ktime_range {
 #define ufbxw_null_bone (ufbxw_new(ufbxw_bone){0})
 #define ufbxw_null_bind_pose (ufbxw_new(ufbxw_bind_pose){0})
 #define ufbxw_null_material (ufbxw_new(ufbxw_material){0})
+#define ufbxw_null_implementation (ufbxw_new(ufbxw_implementation){0})
+#define ufbxw_null_binding_table (ufbxw_new(ufbxw_binding_table){0})
 #define ufbxw_null_anim_prop (ufbxw_new(ufbxw_anim_prop){0})
 #define ufbxw_null_anim_curve (ufbxw_new(ufbxw_anim_curve){0})
 #define ufbxw_null_anim_layer (ufbxw_new(ufbxw_anim_layer){0})
 #define ufbxw_null_anim_stack (ufbxw_new(ufbxw_anim_stack){0})
 
 typedef enum ufbxw_connection_type {
-	UFBXW_CONNECTION_NODE_PARENT = 1,   // NODE* -> NODE
-	UFBXW_CONNECTION_NODE_ATTRIBUTE,    // NODE_ATTRIBUTE -> NODE*
-	UFBXW_CONNECTION_MATERIAL,          // MATERIAL* -> NODE*
-	UFBXW_CONNECTION_TEXTURE,           // TEXTURE* -> MATERIAL(property)*
-	UFBXW_CONNECTION_MESH_DEFORMER,     // DEFORMER -> MESH
-	UFBXW_CONNECTION_SKIN_CLUSTER,      // SKIN_CLUSTER -> SKIN_DEFORMER
-	UFBXW_CONNECTION_SKIN_CLUSTER_NODE, // NODE -> SKIN_CLUSTER
-	UFBXW_CONNECTION_BLEND_CHANNEL,     // BLEND_CHANNEL -> BLEND_DEFORMER
-	UFBXW_CONNECTION_BLEND_SHAPE,       // BLEND_SHAPE -> BLEND_CHANNEL
-	UFBXW_CONNECTION_ANIM_PROPERTY,     // ANIM_PROP* -> ANY(property)*
-	UFBXW_CONNECTION_ANIM_CURVE_PROP,   // ANIM_CURVE* -> ANIM_PROP
-	UFBXW_CONNECTION_ANIM_PROP_LAYER,   // ANIM_PROP* -> ANIM_LAYER
-	UFBXW_CONNECTION_ANIM_LAYER_STACK,  // ANIM_LAYER* -> ANIM_STACK
-	UFBXW_CONNECTION_CUSTOM,            // ANY* -> ANY*
+	UFBXW_CONNECTION_NODE_PARENT = 1,         // NODE* -> NODE
+	UFBXW_CONNECTION_NODE_ATTRIBUTE,          // NODE_ATTRIBUTE -> NODE*
+	UFBXW_CONNECTION_MATERIAL,                // MATERIAL* -> NODE*
+	UFBXW_CONNECTION_TEXTURE,                 // TEXTURE* -> MATERIAL(property)*
+	UFBXW_CONNECTION_MESH_DEFORMER,           // DEFORMER -> MESH
+	UFBXW_CONNECTION_SKIN_CLUSTER,            // SKIN_CLUSTER -> SKIN_DEFORMER
+	UFBXW_CONNECTION_SKIN_CLUSTER_NODE,       // NODE -> SKIN_CLUSTER
+	UFBXW_CONNECTION_BLEND_CHANNEL,           // BLEND_CHANNEL -> BLEND_DEFORMER
+	UFBXW_CONNECTION_BLEND_SHAPE,             // BLEND_SHAPE -> BLEND_CHANNEL
+	UFBXW_CONNECTION_MATERIAL_IMPLEMENTATION, // MATERIAL -> IMPLEMENTATION
+	UFBXW_CONNECTION_BINDING_IMPLEMENTATION,  // BINDING_TABLE -> IMPLEMENTATION
+	UFBXW_CONNECTION_ANIM_PROPERTY,           // ANIM_PROP* -> ANY(property)*
+	UFBXW_CONNECTION_ANIM_CURVE_PROP,         // ANIM_CURVE* -> ANIM_PROP
+	UFBXW_CONNECTION_ANIM_PROP_LAYER,         // ANIM_PROP* -> ANIM_LAYER
+	UFBXW_CONNECTION_ANIM_LAYER_STACK,        // ANIM_LAYER* -> ANIM_STACK
+	UFBXW_CONNECTION_CUSTOM,                  // ANY* -> ANY*
 
 	UFBXW_CONNECTION_TYPE_COUNT,
 } ufbxw_connection_type;
@@ -1035,6 +1043,28 @@ ufbxw_abi ufbxw_bone ufbxw_create_bone(ufbxw_scene *scene, ufbxw_node node);
 ufbxw_abi ufbxw_bind_pose ufbxw_create_bind_pose(ufbxw_scene *scene);
 
 ufbxw_abi void ufbxw_bind_pose_add_node(ufbxw_scene *scene, ufbxw_bind_pose pose, ufbxw_node node, ufbxw_matrix matrix);
+
+// -- Material
+
+ufbxw_abi ufbxw_material ufbxw_create_material(ufbxw_scene *scene);
+
+ufbxw_abi void ufbxw_material_set_implementation(ufbxw_scene *scene, ufbxw_material material, ufbxw_implementation implementation);
+ufbxw_abi ufbxw_implementation ufbxw_material_get_implementation(ufbxw_scene *scene, ufbxw_material material);
+
+// -- Implementation (material)
+// TODO: Hide these somehow?
+
+ufbxw_abi ufbxw_implementation ufbxw_create_implementation(ufbxw_scene *scene);
+
+ufbxw_abi void ufbxw_implementation_set_binding_table(ufbxw_scene *scene, ufbxw_implementation implementation, ufbxw_binding_table binding_table);
+ufbxw_abi ufbxw_binding_table ufbxw_implementation_get_binding_table(ufbxw_scene *scene, ufbxw_implementation implementation);
+
+// -- BindingTable (material)
+
+ufbxw_abi ufbxw_binding_table ufbxw_create_binding_table(ufbxw_scene *scene);
+
+ufbxw_abi void ufbxw_binding_table_add_entry(ufbxw_scene *scene, ufbxw_binding_table binding_table, const char *property, const char *semantic);
+ufbxw_abi void ufbxw_binding_table_add_entry_len(ufbxw_scene *scene, ufbxw_binding_table binding_table, const char *property, size_t property_len, const char *semantic, size_t semantic_len);
 
 // -- Animation stack
 
