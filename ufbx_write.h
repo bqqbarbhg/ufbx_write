@@ -1046,7 +1046,13 @@ ufbxw_abi void ufbxw_bind_pose_add_node(ufbxw_scene *scene, ufbxw_bind_pose pose
 
 // -- Material
 
-ufbxw_abi ufbxw_material ufbxw_create_material(ufbxw_scene *scene);
+typedef enum {
+	UFBXW_MATERIAL_FBX_LAMBERT,
+	UFBXW_MATERIAL_FBX_PHONG,
+	UFBXW_MATERIAL_CUSTOM,
+} ufbxw_material_type;
+
+ufbxw_abi ufbxw_material ufbxw_create_material(ufbxw_scene *scene, ufbxw_material_type type);
 
 ufbxw_abi void ufbxw_material_set_implementation(ufbxw_scene *scene, ufbxw_material material, ufbxw_implementation implementation);
 ufbxw_abi ufbxw_implementation ufbxw_material_get_implementation(ufbxw_scene *scene, ufbxw_material material);
