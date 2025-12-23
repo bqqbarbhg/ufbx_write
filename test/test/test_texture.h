@@ -29,12 +29,25 @@ UFBXWT_SCENE_CHECK(texture_file_simple)
 UFBXWT_SCENE_TEST(video_content)
 #if UFBXWT_IMPL
 {
+	ufbxw_video video = ufbxw_create_video(scene);
+	ufbxw_set_name(scene, video.id, "EmbeddedVideo");
+
+	const char content[] = "Hello, world!";
+	ufbxwt_assert(sizeof(content) - 1 == 13);
+
+	ufbxw_byte_buffer content_buffer = ufbxw_copy_byte_array(scene, content, sizeof(content) - 1);
+	ufbxw_video_set_content(scene, video, content_buffer);
 }
 #endif
 
 UFBXWT_SCENE_CHECK(video_content)
 #if UFBXWT_IMPL
 {
+	ufbx_video *video = (ufbx_video*)ufbx_find_element(scene, UFBX_ELEMENT_VIDEO, "EmbeddedVideo");
+	ufbxwt_assert(video);
+
+	ufbxwt_assert(video->content.size == 13);
+	ufbxwt_assert(!memcmp(video->content.data, "Hello, world!", 13));
 }
 #endif
 

@@ -9599,7 +9599,7 @@ static ufbxwi_noinline void ufbxwi_ascii_dom_write_base64(ufbxwi_save_context *s
 
 		const size_t to_write = ufbxwi_min_sz(size - offset, dst_span.count / 4 * 3);
 		const size_t write_end = offset + to_write;
-		const size_t write_fast_end = ufbxwi_min_sz(write_end, size > 3 ? size - 3 : 0);
+		const size_t write_fast_end = ufbxwi_min_sz(write_end, size / 3 * 3);
 
 		const char *src = (const char*)data + offset;
 		char *dst = (char*)dst_span.data;
@@ -9615,9 +9615,9 @@ static ufbxwi_noinline void ufbxwi_ascii_dom_write_base64(ufbxwi_save_context *s
 			dst += 4;
 		}
 
-		const size_t padding = write_end - offset;
-		ufbxw_assert(padding <= 2);
-		if (padding == 2) {
+		const size_t remaining = write_end - offset;
+		ufbxw_assert(remaining <= 2);
+		if (remaining == 2) {
 			uint32_t word = (uint32_t)(uint8_t)src[0] << 16 | (uint32_t)(uint8_t)src[1] << 8;
 			dst[0] = b64_chars[(word >> 18) & 0x3f];
 			dst[1] = b64_chars[(word >> 12) & 0x3f];
@@ -9627,7 +9627,7 @@ static ufbxwi_noinline void ufbxwi_ascii_dom_write_base64(ufbxwi_save_context *s
 			offset += 2;
 			src += 2;
 			dst += 4;
-		} else if (padding == 1) {
+		} else if (remaining == 1) {
 			uint32_t word = (uint32_t)(uint8_t)src[0] << 16;
 			dst[0] = b64_chars[(word >> 18) & 0x3f];
 			dst[1] = b64_chars[(word >> 12) & 0x3f];
@@ -9638,6 +9638,9 @@ static ufbxwi_noinline void ufbxwi_ascii_dom_write_base64(ufbxwi_save_context *s
 			src += 1;
 			dst += 4;
 		}
+
+		size_t num_written = ufbxwi_to_size(dst - (char*)dst_span.data);
+		ufbxwi_write_commit(sc, num_written);
 	}
 }
 
