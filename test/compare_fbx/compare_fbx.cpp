@@ -79,6 +79,12 @@ void format(char *&dst, char *end, ufbx_quat value)
 	dst += snprintf(dst, end - dst, "(%g, %g, %g, %g)", value.x, value.y, value.z, value.w);
 }
 
+void format(char *&dst, char *end, ufbx_matrix value)
+{
+	dst += snprintf(dst, end - dst, "(%g, %g, %g, %g, %g, %g, %g, %g, %g, %g, %g, %g)",
+		value.m00, value.m10, value.m20, value.m01, value.m11, value.m21, value.m02, value.m12, value.m22, value.m03, value.m13, value.m23);
+}
+
 void format(char *&dst, char *end, ufbx_edge value)
 {
 	dst += snprintf(dst, end - dst, "(%u, %u)", value.a, value.b);
@@ -232,6 +238,13 @@ static bool approx(ufbx_quat a, ufbx_quat b) {
 	a = ufbx_quat_fix_antipodal(a, b);
 	return approx(a.x, b.x) && approx(a.y, b.y) && approx(a.z, b.z) && approx(a.w, b.w);
 }
+static bool approx(ufbx_matrix a, ufbx_matrix b) {
+	if (!approx(a.cols[0], b.cols[0])) return false;
+	if (!approx(a.cols[1], b.cols[1])) return false;
+	if (!approx(a.cols[2], b.cols[2])) return false;
+	if (!approx(a.cols[3], b.cols[3])) return false;
+	return true;
+}
 
 #define check(m_cond) do { \
 		g_check_total_count++; \
@@ -324,6 +337,54 @@ static void check_vertex_attrib_imp(const char *file, int line, const char *fiel
 #define check_vertex_attrib(m_src, m_ref, m_field) \
 	check_vertex_attrib_imp(__FILE__, __LINE__, #m_field, (m_src)->m_field, (m_ref)->m_field)
 
+static void compare_skin(ufbx_skin_deformer* src_skin, ufbx_skin_deformer* ref_skin)
+{
+	check_equal(src_skin, ref_skin, clusters.count);
+	for (size_t cluster_ix = 0; cluster_ix < min(src_skin->clusters.count, ref_skin->clusters.count); cluster_ix++) {
+		compare_scope scope { "cluster %zu", cluster_ix };
+
+		ufbx_skin_cluster *src_cluster = src_skin->clusters[cluster_ix];
+		ufbx_skin_cluster *ref_cluster = ref_skin->clusters[cluster_ix];
+
+		ufbx_node* src_node = src_cluster->bone_node;
+		ufbx_node *ref_node = src_cluster->bone_node;
+		check_equal(src_node, ref_node, name);
+
+		check_list_equal(src_cluster, ref_cluster, vertices);
+		check_list_approx(src_cluster, ref_cluster, weights);
+
+		check_approx(src_cluster, ref_cluster, mesh_node_to_bone);
+		check_approx(src_cluster, ref_cluster, bind_to_world);
+	}
+}
+
+static void compare_blend(ufbx_blend_deformer* src_blend, ufbx_blend_deformer* ref_blend)
+{
+	check_equal(src_blend, ref_blend, channels.count);
+	for (size_t channel_ix = 0; channel_ix < min(src_blend->channels.count, ref_blend->channels.count); channel_ix++) {
+		compare_scope scope { "channel %zu", channel_ix };
+
+		ufbx_blend_channel *src_channel = src_blend->channels[channel_ix];
+		ufbx_blend_channel *ref_channel = ref_blend->channels[channel_ix];
+
+		check_equal(src_channel, ref_channel, keyframes.count);
+		for (size_t key_ix = 0; key_ix < min(src_channel->keyframes.count, ref_channel->keyframes.count); key_ix++) {
+			compare_scope scope { "keyframe %zu", key_ix };
+
+			ufbx_blend_keyframe *src_key = &src_channel->keyframes[key_ix];
+			ufbx_blend_keyframe *ref_key = &ref_channel->keyframes[key_ix];
+
+			check_approx(src_key, ref_key, target_weight);
+
+			ufbx_blend_shape *src_shape = src_key->shape;
+			ufbx_blend_shape *ref_shape = ref_key->shape;
+
+			check_list_equal(src_shape, ref_shape, offset_vertices);
+			check_list_approx(src_shape, ref_shape, position_offsets);
+		}
+	}
+}
+
 static void compare_mesh(ufbx_mesh *src_mesh, ufbx_mesh *ref_mesh)
 {
 	check_equal(src_mesh, ref_mesh, num_vertices);
@@ -359,6 +420,24 @@ static void compare_mesh(ufbx_mesh *src_mesh, ufbx_mesh *ref_mesh)
 
 		check_vertex_attrib(src_set, ref_set, vertex_color);
 	}
+
+	check_equal(src_mesh, ref_mesh, skin_deformers.count);
+	for (size_t skin_ix = 0; skin_ix < min(src_mesh->skin_deformers.count, ref_mesh->skin_deformers.count); skin_ix++) {
+		compare_scope scope { "skin %zu", skin_ix };
+
+		ufbx_skin_deformer *src_skin = src_mesh->skin_deformers[skin_ix];
+		ufbx_skin_deformer *ref_skin = ref_mesh->skin_deformers[skin_ix];
+		compare_skin(src_skin, ref_skin);
+	}
+
+	check_equal(src_mesh, ref_mesh, blend_deformers.count);
+	for (size_t blend_ix = 0; blend_ix < min(src_mesh->blend_deformers.count, ref_mesh->blend_deformers.count); blend_ix++) {
+		compare_scope scope { "blend %zu", blend_ix };
+
+		ufbx_blend_deformer *src_blend = src_mesh->blend_deformers[blend_ix];
+		ufbx_blend_deformer *ref_blend = ref_mesh->blend_deformers[blend_ix];
+		compare_blend(src_blend, ref_blend);
+	}
 }
 
 static void compare_light(ufbx_light *src_light, ufbx_light *ref_light)
@@ -370,6 +449,11 @@ static void compare_light(ufbx_light *src_light, ufbx_light *ref_light)
 	check_approx(src_light, ref_light, area_shape);
 	check_approx(src_light, ref_light, inner_angle);
 	check_approx(src_light, ref_light, outer_angle);
+}
+
+static void compare_bone(ufbx_bone *src_bone, ufbx_bone *ref_bone)
+{
+	check_approx(src_bone, ref_bone, is_root);
 }
 
 static void compare_node(ufbx_node *src_node, ufbx_node *ref_node, bool full)
@@ -393,11 +477,21 @@ static void compare_node(ufbx_node *src_node, ufbx_node *ref_node, bool full)
 	check_approx(src_node, ref_node, geometry_transform.rotation);
 	check_approx(src_node, ref_node, geometry_transform.scale);
 
+	check_approx(src_node, ref_node, inherit_mode);
+
 	if (ref_node->light) {
 		compare_scope scope { "light" };
 		check(src_node->light);
 		if (src_node->light) {
 			compare_light(src_node->light, ref_node->light);
+		}
+	}
+
+	if (ref_node->bone) {
+		compare_scope scope { "bone" };
+		check(src_node->bone);
+		if (src_node->bone) {
+			compare_bone(src_node->bone, ref_node->bone);
 		}
 	}
 
@@ -429,21 +523,45 @@ static void compare_anim(ufbx_scene *src_scene, ufbx_anim *src_anim, ufbx_scene 
 	double frame_begin = ref_anim->time_begin * ref_scene->settings.frames_per_second;
 	double frame_end = ref_anim->time_end * ref_scene->settings.frames_per_second;
 
-	size_t num_samples = 8;
-	for (size_t sample_ix = 0; sample_ix < num_samples; sample_ix++) {
-		double frame = frame_begin + (frame_end - frame_begin) * sample_ix / (num_samples - 1);
-		double time = frame / ref_scene->settings.frames_per_second;
+	if (g_opts.evaluate_scene_anim) {
+		size_t num_samples = 8;
+		for (size_t sample_ix = 0; sample_ix < num_samples; sample_ix++) {
+			double frame = frame_begin + (frame_end - frame_begin) * sample_ix / (num_samples - 1);
+			double time = frame / ref_scene->settings.frames_per_second;
 
-		ufbx_scene *src_state = ufbx_evaluate_scene(src_scene, src_anim, time, NULL, NULL);
-		ufbx_scene *ref_state = ufbx_evaluate_scene(ref_scene, ref_anim, time, NULL, NULL);
-		ufbxwt_assert(src_state);
-		ufbxwt_assert(ref_state);
+			ufbx_scene *src_state = ufbx_evaluate_scene(src_scene, src_anim, time, NULL, NULL);
+			ufbx_scene *ref_state = ufbx_evaluate_scene(ref_scene, ref_anim, time, NULL, NULL);
+			ufbxwt_assert(src_state);
+			ufbxwt_assert(ref_state);
 
-		compare_scope scope { "frame %.2f", frame };
-		compare_scene(src_state, ref_state, false);
+			compare_scope scope { "frame %.2f", frame };
+			compare_scene(src_state, ref_state, false);
 
-		ufbx_free_scene(src_state);
-		ufbx_free_scene(ref_state);
+			ufbx_free_scene(src_state);
+			ufbx_free_scene(ref_state);
+		}
+	} else {
+		size_t num_samples = 16;
+		for (size_t sample_ix = 0; sample_ix < num_samples; sample_ix++) {
+			double frame = frame_begin + (frame_end - frame_begin) * sample_ix / (num_samples - 1);
+			double time = frame / ref_scene->settings.frames_per_second;
+
+			compare_scope scope { "frame %.2f", frame };
+
+			check_equal(src_scene, ref_scene, nodes.count);
+			for (size_t node_ix = 0; node_ix < min(src_scene->nodes.count, ref_scene->nodes.count); node_ix++) {
+				ufbx_node *src_node = src_scene->nodes[node_ix];
+				ufbx_node *ref_node = ref_scene->nodes[node_ix];
+
+				compare_scope scope { "node '%s'", ref_node->name.data };
+
+				ufbx_transform src_transform = ufbx_evaluate_transform(src_anim, src_node, time);
+				ufbx_transform ref_transform = ufbx_evaluate_transform(ref_anim, ref_node, time);
+				check_approx(&src_transform, &ref_transform, translation);
+				check_approx(&src_transform, &ref_transform, rotation);
+				check_approx(&src_transform, &ref_transform, scale);
+			}
+		}
 	}
 }
 
@@ -474,21 +592,21 @@ extern "C" bool compare_fbx(const char *src_path, const char *ref_path, const co
 
 	compare_scene(src_scene, ref_scene, true);
 
-#if 0
-	check_equal(src_scene, ref_scene, anim_stacks.count);
-	for (size_t stack_ix = 0; stack_ix < min(src_scene->anim_stacks.count, ref_scene->anim_stacks.count); stack_ix++) {
-		ufbx_anim_stack *src_stack = src_scene->anim_stacks[stack_ix];
-		ufbx_anim_stack *ref_stack = ref_scene->anim_stacks[stack_ix];
+	if (opts->compare_anim) {
+		check_equal(src_scene, ref_scene, anim_stacks.count);
+		for (size_t stack_ix = 0; stack_ix < min(src_scene->anim_stacks.count, ref_scene->anim_stacks.count); stack_ix++) {
+			ufbx_anim_stack *src_stack = src_scene->anim_stacks[stack_ix];
+			ufbx_anim_stack *ref_stack = ref_scene->anim_stacks[stack_ix];
 
-		compare_scope scope { "anim '%s'", ref_stack->name.data };
+			compare_scope scope { "anim '%s'", ref_stack->name.data };
 
-		check_equal(ref_stack, src_stack, name);
-		check_approx(ref_stack, src_stack, time_begin);
-		check_approx(ref_stack, src_stack, time_end);
+			check_equal(ref_stack, src_stack, name);
+			check_approx(ref_stack, src_stack, time_begin);
+			check_approx(ref_stack, src_stack, time_end);
 
-		compare_anim(src_scene, src_stack->anim, ref_scene, ref_stack->anim);
+			compare_anim(src_scene, src_stack->anim, ref_scene, ref_stack->anim);
+		}
 	}
-#endif
 
 	ufbx_free_scene(src_scene);
 	ufbx_free_scene(ref_scene);
