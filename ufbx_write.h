@@ -821,6 +821,11 @@ ufbxw_abi ufbxw_rotation_order ufbxw_node_get_rotation_order(ufbxw_scene *scene,
 // Set the rotation as a quaternion.
 ufbxw_abi void ufbxw_node_set_rotation_quat(ufbxw_scene *scene, ufbxw_node node, ufbxw_quat rotation, ufbxw_rotation_order order);
 
+// -- Materials
+
+ufbxw_abi void ufbxw_node_set_material(ufbxw_scene *scene, ufbxw_node node, size_t index, ufbxw_material material);
+ufbxw_abi ufbxw_material ufbxw_node_get_material(ufbxw_scene *scene, ufbxw_node node, size_t index);
+
 // -- Advanced transform
 
 // Controls how transformations are inherited to from the parent.
@@ -1074,6 +1079,7 @@ ufbxw_abi void ufbxw_material_set_implementation(ufbxw_scene *scene, ufbxw_mater
 ufbxw_abi ufbxw_implementation ufbxw_material_get_implementation(ufbxw_scene *scene, ufbxw_material material);
 
 ufbxw_abi void ufbxw_material_set_texture(ufbxw_scene *scene, ufbxw_material material, const char *prop, ufbxw_texture texture);
+ufbxw_abi void ufbxw_material_set_texture_len(ufbxw_scene *scene, ufbxw_material material, const char *prop, size_t prop_len, ufbxw_texture texture);
 
 // -- Texture
 

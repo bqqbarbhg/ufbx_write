@@ -12485,6 +12485,44 @@ ufbxw_abi void ufbxw_node_set_rotation_quat(ufbxw_scene *scene, ufbxw_node node,
 	data->rotation_order = (int32_t)order;
 }
 
+ufbxw_abi void ufbxw_node_set_material(ufbxw_scene *scene, ufbxw_node node, size_t index, ufbxw_material material)
+{
+	ufbxwi_node *nd = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, nd);
+
+	if (nd->materials.count <= index) {
+		const size_t num_push = nd->materials.count + 1 - index;
+		ufbxwi_check(ufbxwi_list_push_zero_n(&scene->ator, &nd->materials, ufbxw_material, num_push));
+	}
+
+	ufbxw_material prev = nd->materials.data[index];
+	if (prev.id == material.id) return;
+
+	if (prev.id != 0) {
+		ufbxwi_material *prev_mat = ufbxwi_get_material(scene, prev);
+		if (prev_mat) {
+			// TODO: This is O(n^2) worst case, optimize unordered
+			ufbxwi_id_list_remove_one(&prev_mat->conn_nodes, node.id);
+		}
+	}
+
+	nd->materials.data[index] = material;
+
+	if (material.id != 0) {
+		ufbxwi_material *new_mat = ufbxwi_get_material(scene, material);
+		ufbxwi_check_element(scene, material.id, new_mat);
+		ufbxwi_check(ufbxwi_id_list_add(&scene->ator, &new_mat->conn_nodes, node.id));
+	}
+}
+
+ufbxw_abi ufbxw_material ufbxw_node_get_material(ufbxw_scene *scene, ufbxw_node node, size_t index)
+{
+	ufbxwi_node *nd = ufbxwi_get_node(scene, node);
+	ufbxwi_check_element(scene, node.id, nd, ufbxw_null_material);
+	if (index >= nd->materials.count) return ufbxw_null_material;
+	return nd->materials.data[index];
+}
+
 ufbxw_abi void ufbxw_node_set_inherit_type(ufbxw_scene *scene, ufbxw_node node, ufbxw_inherit_type type)
 {
 	ufbxwi_node *data = ufbxwi_get_node(scene, node);
@@ -13299,6 +13337,17 @@ ufbxw_abi ufbxw_implementation ufbxw_material_get_implementation(ufbxw_scene *sc
 	ufbxwi_material *mt = ufbxwi_get_material(scene, material);
 	if (!mt) return ufbxw_null_implementation;
 	return mt->implementation;
+}
+
+ufbxw_abi void ufbxw_material_set_texture(ufbxw_scene *scene, ufbxw_material material, const char *prop, ufbxw_texture texture)
+{
+	ufbxw_material_set_texture_len(scene, material, prop, strlen(prop), texture);
+}
+
+ufbxw_abi void ufbxw_material_set_texture_len(ufbxw_scene *scene, ufbxw_material material, const char *prop, size_t prop_len, ufbxw_texture texture)
+{
+	ufbxwi_token token = ufbxwi_intern_token(&scene->string_pool, prop, prop_len);
+	ufbxwi_connect_imp(scene, UFBXW_CONNECTION_TEXTURE, texture.id, material.id, UFBXWI_TOKEN_NONE, token, 0);
 }
 
 ufbxw_abi ufbxw_texture ufbxw_create_texture(ufbxw_scene *scene, ufbxw_texture_type type)
