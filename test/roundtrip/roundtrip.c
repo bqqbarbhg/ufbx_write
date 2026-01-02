@@ -343,6 +343,13 @@ int main(int argc, char **argv)
 		ufbxw_mesh_set_vertices(out_scene, out_mesh, vertices);
 		ufbxw_mesh_set_polygons(out_scene, out_mesh, vertex_indices, face_offsets);
 
+		if (in_mesh->materials.count == 1) {
+			ufbxw_mesh_set_single_material(out_scene, out_mesh, 0);
+		} else if (in_mesh->materials.count > 1) {
+			ufbxw_int_buffer face_material = to_ufbxw_uint_buffer(out_scene, in_mesh->face_material);
+			ufbxw_mesh_set_face_material(out_scene, out_mesh, face_material);
+		}
+
 		if (in_mesh->num_edges > 0) {
 			ufbxw_int_buffer edges = ufbxw_create_int_buffer(out_scene, in_mesh->num_edges);
 			ufbxw_int_list edge_data = ufbxw_edit_int_buffer(out_scene, edges);
@@ -387,6 +394,81 @@ int main(int argc, char **argv)
 
 			ufbxw_mesh_set_colors_indexed(out_scene, out_mesh, (int32_t)color_set, color_values, color_indices, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
 			ufbxw_mesh_set_attribute_name(out_scene, out_mesh, UFBXW_MESH_ATTRIBUTE_COLOR, (int32_t)color_set, set.name.data);
+		}
+	}
+
+	for (size_t texture_ix = 0; texture_ix < in_scene->textures.count; texture_ix++) {
+		ufbx_texture *in_texture = in_scene->textures.data[texture_ix];
+
+		ufbxw_texture out_texture = ufbxw_create_texture(out_scene, UFBXW_TEXTURE_FILE);
+		element_ids[in_texture->element_id] = out_texture.id;
+
+		ufbxw_texture_set_filename(out_scene, out_texture, in_texture->absolute_filename.data);
+		ufbxw_texture_set_relative_filename(out_scene, out_texture, in_texture->relative_filename.data);
+
+		if (in_texture->content.size > 0) {
+			ufbxw_byte_buffer buffer = ufbxw_view_byte_array(out_scene, in_texture->content.data, in_texture->content.size);
+			ufbxw_texture_set_content(out_scene, out_texture, buffer);
+		}
+	}
+
+	for (size_t material_ix = 0; material_ix < in_scene->materials.count; material_ix++) {
+		ufbx_material *in_material = in_scene->materials.data[material_ix];
+
+		ufbxw_material_type material_type = UFBXW_MATERIAL_CUSTOM;
+		switch (in_material->shader_type) {
+		case UFBX_SHADER_FBX_LAMBERT:
+			material_type = UFBXW_MATERIAL_FBX_LAMBERT;
+			break;
+		case UFBX_SHADER_FBX_PHONG:
+			material_type = UFBXW_MATERIAL_FBX_PHONG;
+			break;
+		}
+
+		ufbxw_material out_material = ufbxw_create_material(out_scene, material_type);
+		ufbxw_set_name(out_scene, out_material.id, in_material->name.data);
+		element_ids[in_material->element_id] = out_material.id;
+
+		for (size_t i = 0; i < in_material->props.props.count; i++) {
+			const ufbx_prop *prop = &in_material->props.props.data[i];
+
+			if (prop->flags & UFBX_PROP_FLAG_VALUE_INT) {
+				ufbxw_add_int(out_scene, out_material.id, prop->name.data, UFBXW_PROP_TYPE_INT, (int32_t)prop->value_int);
+			} else if (prop->flags & UFBX_PROP_FLAG_VALUE_REAL) {
+				ufbxw_add_real(out_scene, out_material.id, prop->name.data, UFBXW_PROP_TYPE_DOUBLE, prop->value_real);
+			} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC2) {
+				ufbxw_add_vec2(out_scene, out_material.id, prop->name.data, UFBXW_PROP_TYPE_VECTOR, to_ufbxw_vec2(prop->value_vec2));
+			} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC3) {
+				ufbxw_add_vec3(out_scene, out_material.id, prop->name.data, UFBXW_PROP_TYPE_COLOR, to_ufbxw_vec3(prop->value_vec3));
+			} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC4) {
+				ufbxw_add_vec4(out_scene, out_material.id, prop->name.data, UFBXW_PROP_TYPE_COLOR_RGBA, to_ufbxw_vec4(prop->value_vec4));
+			}
+		}
+
+		for (size_t i = 0; i < in_material->textures.count; i++) {
+			ufbx_material_texture in_texture = in_material->textures.data[i];
+
+			ufbxw_id texture_id = element_ids[in_texture.texture->element_id];
+			if (texture_id == 0) continue;
+
+			ufbxw_texture out_texture = { texture_id };
+			ufbxw_material_set_texture(out_scene, out_material, in_texture.material_prop.data, out_texture);
+		}
+
+		if (in_material->shader && in_material->shader->bindings.count > 0) {
+			ufbx_shader *in_shader = in_material->shader;
+			ufbx_shader_binding* in_binding = in_shader->bindings.data[0];
+
+			ufbxw_implementation out_implementation = ufbxw_create_implementation(out_scene);
+			ufbxw_binding_table out_binding = ufbxw_create_binding_table(out_scene);
+
+			ufbxw_implementation_set_binding_table(out_scene, out_implementation, out_binding);
+			ufbxw_material_set_implementation(out_scene, out_material, out_implementation);
+
+			for (size_t entry_ix = 0; entry_ix < in_binding->prop_bindings.count; entry_ix++) {
+				ufbx_shader_prop_binding binding = in_binding->prop_bindings.data[entry_ix];
+				ufbxw_binding_table_add_entry(out_scene, out_binding, binding.material_prop.data, binding.shader_prop.data);
+			}
 		}
 	}
 
@@ -464,6 +546,14 @@ int main(int argc, char **argv)
 			if (attrib_id != 0) {
 				ufbxw_node_set_attribute(out_scene, out_node, attrib_id);
 			}
+		}
+
+		for (size_t i = 0; i < in_node->materials.count; i++) {
+			ufbxw_id material_id = element_ids[in_node->materials.data[i]->element_id];
+			if (material_id == 0) continue;
+
+			ufbxw_material out_material = { material_id };
+			ufbxw_node_set_material(out_scene, out_node, i, out_material);
 		}
 	}
 
