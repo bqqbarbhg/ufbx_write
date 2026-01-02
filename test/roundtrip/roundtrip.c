@@ -355,6 +355,9 @@ int main(int argc, char **argv)
 
 	ufbx_load_opts load_opts = { 0 };
 
+	load_opts.allow_unsafe = true;
+	load_opts.index_error_handling = UFBX_INDEX_ERROR_HANDLING_UNSAFE_IGNORE;
+
 	ufbx_error load_error;
 	ufbx_scene *in_scene = ufbx_load_file(input_path, &load_opts, &load_error);
 	if (!in_scene) {
