@@ -11033,7 +11033,15 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 		default_props = &elem_type->props;
 	}
 
-	ufbxwi_element *tmpl = ufbxwi_get_element(sc->scene, elem_type->template_id);
+	// TODO: Is this filtering a good idea?
+	ufbxwi_element *tmpl = NULL;
+	if (elem_type->object_type_id != ~0u) {
+		ufbxwi_save_object_type *object_type = &sc->object_types.data[elem_type->object_type_id];
+		if (object_type->template_id == elem_type->template_id) {
+			tmpl = ufbxwi_get_element(sc->scene, elem_type->template_id);
+		}
+	}
+
 	ufbxwi_save_props(sc, element, default_props, tmpl);
 
 	if (type == UFBXW_ELEMENT_DOCUMENT) {
@@ -12381,6 +12389,18 @@ ufbxw_abi ufbxw_string ufbxw_get_string(ufbxw_scene *scene, ufbxw_id id, const c
 	return ret;
 }
 
+ufbxw_abi ufbxw_prop_data_type ufbxw_get_prop_data_type(ufbxw_scene *scene, ufbxw_id id, const char *prop)
+{
+	ufbxwi_token token = ufbxwi_get_token(&scene->string_pool, prop, strlen(prop));
+	ufbxwi_element *element = ufbxwi_get_element(scene, id);
+	if (!token || !element) return UFBXW_PROP_DATA_NONE;
+
+	ufbxwi_prop *p = ufbxwi_element_find_prop(scene, element, token);
+	if (!p) return UFBXW_PROP_DATA_NONE;
+
+	return scene->prop_types.data[p->type].data_type;
+}
+
 ufbxw_abi ufbxw_anim_prop ufbxw_animate_prop(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_anim_layer layer)
 {
 	return ufbxw_animate_prop_len(scene, id, prop, strlen(prop), layer);
@@ -13408,6 +13428,25 @@ ufbxw_abi ufbxw_implementation ufbxw_create_implementation(ufbxw_scene *scene)
 {
 	ufbxw_implementation material = { ufbxw_create_element(scene, UFBXW_ELEMENT_IMPLEMENTATION) };
 	return material;
+}
+
+ufbxw_abi void ufbxw_implementation_set_render_api(ufbxw_scene *scene, ufbxw_implementation implementation, const char *api)
+{
+	ufbxw_implementation_set_render_api_len(scene, implementation, api, strlen(api));
+}
+
+ufbxw_abi void ufbxw_implementation_set_render_api_len(ufbxw_scene *scene, ufbxw_implementation implementation, const char *api, size_t api_len)
+{
+	ufbxwi_implementation *im = ufbxwi_get_implementation(scene, implementation);
+	if (!im) return;
+	ufbxwi_intern_string(&scene->string_pool, &im->render_api, api, api_len);
+}
+
+ufbxw_abi ufbxw_string ufbxw_implementation_get_render_api(ufbxw_scene *scene, ufbxw_implementation implementation)
+{
+	ufbxwi_implementation *im = ufbxwi_get_implementation(scene, implementation);
+	if (!im) return ufbxwi_empty_string;
+	return im->render_api;
 }
 
 ufbxw_abi void ufbxw_implementation_set_binding_table(ufbxw_scene *scene, ufbxw_implementation implementation, ufbxw_binding_table binding_table)

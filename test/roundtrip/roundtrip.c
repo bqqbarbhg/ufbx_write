@@ -202,6 +202,83 @@ static ufbx_element *find_deform_percent_element(ufbx_element *elem, const char 
 	return NULL;
 }
 
+static void set_prop_int(ufbxw_scene *out_scene, ufbxw_id out_id, const char *prop, ufbxw_prop_type type, int32_t value)
+{
+	ufbxw_prop_data_type data_type = ufbxw_get_prop_data_type(out_scene, out_id, prop);
+	if (data_type == UFBXW_PROP_DATA_INT32) {
+		ufbxw_set_int(out_scene, out_id, prop, value);
+	} else if (data_type == UFBXW_PROP_DATA_INT64) {
+		ufbxw_set_int64(out_scene, out_id, prop, value);
+	} else {
+		ufbxw_add_int(out_scene, out_id, prop, type, value);
+	}
+}
+
+static void set_prop_real(ufbxw_scene *out_scene, ufbxw_id out_id, const char *prop, ufbxw_prop_type type, ufbxw_real value)
+{
+	ufbxw_prop_data_type data_type = ufbxw_get_prop_data_type(out_scene, out_id, prop);
+	if (data_type == UFBXW_PROP_DATA_REAL) {
+		ufbxw_set_real(out_scene, out_id, prop, value);
+	} else {
+		ufbxw_add_real(out_scene, out_id, prop, type, value);
+	}
+}
+
+static void set_prop_vec2(ufbxw_scene *out_scene, ufbxw_id out_id, const char *prop, ufbxw_prop_type type, ufbxw_vec2 value)
+{
+	ufbxw_prop_data_type data_type = ufbxw_get_prop_data_type(out_scene, out_id, prop);
+	if (data_type == UFBXW_PROP_DATA_VEC2) {
+		ufbxw_set_vec2(out_scene, out_id, prop, value);
+	} else {
+		ufbxw_add_vec2(out_scene, out_id, prop, type, value);
+	}
+}
+
+static void set_prop_vec3(ufbxw_scene *out_scene, ufbxw_id out_id, const char *prop, ufbxw_prop_type type, ufbxw_vec3 value)
+{
+	ufbxw_prop_data_type data_type = ufbxw_get_prop_data_type(out_scene, out_id, prop);
+	if (data_type == UFBXW_PROP_DATA_VEC3) {
+		ufbxw_set_vec3(out_scene, out_id, prop, value);
+	} else {
+		ufbxw_add_vec3(out_scene, out_id, prop, type, value);
+	}
+}
+
+static void set_prop_vec4(ufbxw_scene *out_scene, ufbxw_id out_id, const char *prop, ufbxw_prop_type type, ufbxw_vec4 value)
+{
+	ufbxw_prop_data_type data_type = ufbxw_get_prop_data_type(out_scene, out_id, prop);
+	if (data_type == UFBXW_PROP_DATA_VEC4) {
+		ufbxw_set_vec4(out_scene, out_id, prop, value);
+	} else {
+		ufbxw_add_vec4(out_scene, out_id, prop, type, value);
+	}
+}
+
+
+static void copy_props(ufbxw_scene *out_scene, ufbxw_id out_id, const ufbx_props *in_props)
+{
+	if (in_props->defaults) {
+		copy_props(out_scene, out_id, in_props->defaults);
+	}
+
+	for (size_t i = 0; i < in_props->props.count; i++) {
+		const ufbx_prop *prop = &in_props->props.data[i];
+		if ((prop->flags & UFBX_PROP_FLAG_VALUE_INT) && prop->type == UFBX_PROP_BOOLEAN) {
+			set_prop_int(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_BOOL, (int32_t)prop->value_int);
+		} else if ((prop->flags & UFBX_PROP_FLAG_VALUE_INT) && prop->type == UFBX_PROP_INTEGER) {
+			set_prop_int(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_INT, (int32_t)prop->value_int);
+		} else if (prop->flags & UFBX_PROP_FLAG_VALUE_REAL) {
+			set_prop_real(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_DOUBLE, prop->value_real);
+		} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC2) {
+			set_prop_vec2(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_VECTOR, to_ufbxw_vec2(prop->value_vec2));
+		} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC3) {
+			set_prop_vec3(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_COLOR, to_ufbxw_vec3(prop->value_vec3));
+		} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC4) {
+			set_prop_vec4(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_COLOR_RGBA, to_ufbxw_vec4(prop->value_vec4));
+		}
+	}
+}
+
 int main(int argc, char **argv)
 {
 	const char *output_path = NULL;
@@ -429,21 +506,7 @@ int main(int argc, char **argv)
 		ufbxw_set_name(out_scene, out_material.id, in_material->name.data);
 		element_ids[in_material->element_id] = out_material.id;
 
-		for (size_t i = 0; i < in_material->props.props.count; i++) {
-			const ufbx_prop *prop = &in_material->props.props.data[i];
-
-			if (prop->flags & UFBX_PROP_FLAG_VALUE_INT) {
-				ufbxw_add_int(out_scene, out_material.id, prop->name.data, UFBXW_PROP_TYPE_INT, (int32_t)prop->value_int);
-			} else if (prop->flags & UFBX_PROP_FLAG_VALUE_REAL) {
-				ufbxw_add_real(out_scene, out_material.id, prop->name.data, UFBXW_PROP_TYPE_DOUBLE, prop->value_real);
-			} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC2) {
-				ufbxw_add_vec2(out_scene, out_material.id, prop->name.data, UFBXW_PROP_TYPE_VECTOR, to_ufbxw_vec2(prop->value_vec2));
-			} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC3) {
-				ufbxw_add_vec3(out_scene, out_material.id, prop->name.data, UFBXW_PROP_TYPE_COLOR, to_ufbxw_vec3(prop->value_vec3));
-			} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC4) {
-				ufbxw_add_vec4(out_scene, out_material.id, prop->name.data, UFBXW_PROP_TYPE_COLOR_RGBA, to_ufbxw_vec4(prop->value_vec4));
-			}
-		}
+		copy_props(out_scene, out_material.id, &in_material->props);
 
 		for (size_t i = 0; i < in_material->textures.count; i++) {
 			ufbx_material_texture in_texture = in_material->textures.data[i];
@@ -461,6 +524,9 @@ int main(int argc, char **argv)
 
 			ufbxw_implementation out_implementation = ufbxw_create_implementation(out_scene);
 			ufbxw_binding_table out_binding = ufbxw_create_binding_table(out_scene);
+
+			ufbx_string render_api = ufbx_find_string(&in_shader->props, "RenderAPI", ufbx_empty_string);
+			ufbxw_implementation_set_render_api(out_scene, out_implementation, render_api.data);
 
 			ufbxw_implementation_set_binding_table(out_scene, out_implementation, out_binding);
 			ufbxw_material_set_implementation(out_scene, out_material, out_implementation);

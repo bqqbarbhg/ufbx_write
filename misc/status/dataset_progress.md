@@ -66,3 +66,11 @@ Added bones to roundtrip, fixed inherit type handling
 ```
 3870/4454 files passed (365/410 test cases)
 ```
+
+#### Initial materials
+
+Implemented material support
+
+```
+3942/4454 files passed (376/410 test cases)
+```

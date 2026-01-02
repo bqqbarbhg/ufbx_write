@@ -780,6 +780,8 @@ ufbxw_abi ufbxw_vec3 ufbxw_get_vec3(ufbxw_scene *scene, ufbxw_id id, const char 
 ufbxw_abi ufbxw_vec4 ufbxw_get_vec4(ufbxw_scene *scene, ufbxw_id id, const char *prop);
 ufbxw_abi ufbxw_string ufbxw_get_string(ufbxw_scene *scene, ufbxw_id id, const char *prop);
 
+ufbxw_abi ufbxw_prop_data_type ufbxw_get_prop_data_type(ufbxw_scene *scene, ufbxw_id id, const char *prop);
+
 ufbxw_abi ufbxw_anim_prop ufbxw_animate_prop(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_anim_layer layer);
 ufbxw_abi ufbxw_anim_prop ufbxw_animate_prop_len(ufbxw_scene *scene, ufbxw_id id, const char *prop, size_t prop_len, ufbxw_anim_layer layer);
 
@@ -1104,6 +1106,10 @@ ufbxw_abi void ufbxw_texture_set_content(ufbxw_scene *scene, ufbxw_texture textu
 // TODO: Hide these somehow?
 
 ufbxw_abi ufbxw_implementation ufbxw_create_implementation(ufbxw_scene *scene);
+
+ufbxw_abi void ufbxw_implementation_set_render_api(ufbxw_scene *scene, ufbxw_implementation implementation, const char *api);
+ufbxw_abi void ufbxw_implementation_set_render_api_len(ufbxw_scene *scene, ufbxw_implementation implementation, const char *api, size_t api_len);
+ufbxw_abi ufbxw_string ufbxw_implementation_get_render_api(ufbxw_scene *scene, ufbxw_implementation implementation);
 
 ufbxw_abi void ufbxw_implementation_set_binding_table(ufbxw_scene *scene, ufbxw_implementation implementation, ufbxw_binding_table binding_table);
 ufbxw_abi ufbxw_binding_table ufbxw_implementation_get_binding_table(ufbxw_scene *scene, ufbxw_implementation implementation);
