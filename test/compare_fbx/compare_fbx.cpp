@@ -100,6 +100,11 @@ void format(char *&dst, char *end, ufbx_string value)
 	dst += snprintf(dst, end - dst, "\"%s\"", value.data);
 }
 
+void format(char *&dst, char *end, ufbx_blob value)
+{
+	dst += snprintf(dst, end - dst, "<%zu bytes>", value.size);
+}
+
 struct check_scope
 {
 	char name[128];
@@ -217,6 +222,7 @@ static bool equals(double a, double b) {
 }
 
 static bool equals(ufbx_string a, ufbx_string b) { return !strcmp(a.data, b.data); }
+static bool equals(ufbx_blob a, ufbx_blob b) { return a.size == b.size && !memcmp(a.data, b.data, a.size); }
 static bool equals(ufbx_vec2 a, ufbx_vec2 b) { return a.x == b.x && a.y == b.y; }
 static bool equals(ufbx_vec3 a, ufbx_vec3 b) { return a.x == b.x && a.y == b.y && a.z == b.z; }
 static bool equals(ufbx_vec4 a, ufbx_vec4 b) { return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w; }
@@ -503,6 +509,54 @@ static void compare_node(ufbx_node *src_node, ufbx_node *ref_node, bool full)
 				compare_mesh(src_node->mesh, ref_node->mesh);
 			}
 		}
+
+		check_equal(src_node, ref_node, materials.count);
+		for (size_t mat_ix = 0; mat_ix < min(src_node->materials.count, ref_node->materials.count); mat_ix++) {
+			compare_scope scope { "material %zu", mat_ix };
+			
+			ufbx_material *src_material = src_node->materials[mat_ix];
+			ufbx_material *ref_material = ref_node->materials[mat_ix];
+			check_equal(src_material, ref_material, typed_id);
+		}
+	}
+}
+
+static void compare_material_map(ufbx_material_map *src_map, ufbx_material_map *ref_map, bool full)
+{
+	check_equal(src_map, ref_map, value_int);
+	check_approx(src_map, ref_map, value_vec4);
+	check_approx(src_map, ref_map, value_components);
+
+	if (ref_map->texture) {
+		check(src_map->texture);
+
+		ufbx_texture *src_texture = src_map->texture;
+		ufbx_texture *ref_texture = ref_map->texture;
+
+		check_equal(src_texture, ref_texture, absolute_filename);
+		check_equal(src_texture, ref_texture, relative_filename);
+
+		if (full) {
+			check_equal(src_texture, ref_texture, content);
+		}
+	} else {
+		check(!src_map->texture);
+	}
+}
+
+static void compare_material(ufbx_material *src_material, ufbx_material *ref_material, bool full)
+{
+	check_equal(src_material, ref_material, name);
+	check_equal(src_material, ref_material, shader_type);
+
+	for (size_t map_ix = 0; map_ix < UFBX_MATERIAL_FBX_MAP_COUNT; map_ix++) {
+		compare_scope scope { "fbx map %zu", map_ix };
+		compare_material_map(&src_material->fbx.maps[map_ix], &ref_material->fbx.maps[map_ix], full);
+	}
+
+	for (size_t map_ix = 0; map_ix < UFBX_MATERIAL_PBR_MAP_COUNT; map_ix++) {
+		compare_scope scope { "pbr map %zu", map_ix };
+		compare_material_map(&src_material->pbr.maps[map_ix], &ref_material->pbr.maps[map_ix], full);
 	}
 }
 
@@ -515,6 +569,15 @@ static void compare_scene(ufbx_scene *src_scene, ufbx_scene *ref_scene, bool ful
 
 		compare_scope scope { "node '%s'", ref_node->name.data };
 		compare_node(src_node, ref_node, full);
+	}
+
+	check_equal(src_scene, ref_scene, materials.count);
+	for (size_t material_ix = 0; material_ix < min(src_scene->materials.count, ref_scene->materials.count); material_ix++) {
+		ufbx_material *src_material = src_scene->materials[material_ix];
+		ufbx_material *ref_material = ref_scene->materials[material_ix];
+
+		compare_scope scope { "material '%s'", ref_material->name.data };
+		compare_material(src_material, ref_material, full);
 	}
 }
 
