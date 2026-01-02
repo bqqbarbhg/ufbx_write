@@ -74,3 +74,11 @@ Implemented material support
 ```
 3942/4454 files passed (376/410 test cases)
 ```
+
+#### Fixed index passthrough
+
+Pass out-of-bounds indices as-is in roundtrip
+
+```
+4234/4454 files passed (391/410 test cases)
+```
