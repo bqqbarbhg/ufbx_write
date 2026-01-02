@@ -185,6 +185,84 @@ UFBXWT_SCENE_CHECK(mesh_material_dual)
 	ufbx_vec3 diffuse_blue = { 0.0f, 0.0f, 1.0f };
 	ufbxwt_assert_close_uvec3(err, material_red->fbx.diffuse_color.value_vec3, diffuse_red);
 	ufbxwt_assert_close_uvec3(err, material_blue->fbx.diffuse_color.value_vec3, diffuse_blue);
+}
+#endif
 
+UFBXWT_SCENE_TEST(mesh_material_texture)
+#if UFBXWT_IMPL
+{
+	ufbxw_node node = ufbxwt_create_node(scene, "Node");
+	ufbxw_mesh mesh = ufbxw_create_mesh(scene);
+
+	ufbxw_mesh_add_instance(scene, mesh, node);
+
+	ufbxw_vec3 vertices[] = {
+		{ -1.0f, 0.0f, -1.0f },
+		{ +1.0f, 0.0f, -1.0f },
+		{ -1.0f, 0.0f, +1.0f },
+		{ +1.0f, 0.0f, +1.0f },
+	};
+	ufbxw_vec2 uvs[] = {
+		{ 1.0f, 0.0f },
+		{ 1.0f, 1.0f },
+		{ 0.0f, 1.0f },
+		{ 0.0f, 0.0f },
+	};
+	int32_t indices[] = {
+		0, 2, 3, 1,
+	};
+	int32_t face_offsets[] = {
+		0, 4,
+	};
+
+	ufbxw_vec3_buffer vertex_buffer = ufbxw_view_vec3_array(scene, vertices, ufbxwt_arraycount(vertices));
+	ufbxw_vec2_buffer uv_buffer = ufbxw_view_vec2_array(scene, uvs, ufbxwt_arraycount(uvs));
+	ufbxw_int_buffer index_buffer = ufbxw_view_int_array(scene, indices, ufbxwt_arraycount(indices));
+	ufbxw_int_buffer face_buffer = ufbxw_view_int_array(scene, face_offsets, ufbxwt_arraycount(face_offsets));
+
+	ufbxw_mesh_set_vertices(scene, mesh, vertex_buffer);
+	ufbxw_mesh_set_polygons(scene, mesh, index_buffer, face_buffer);
+	ufbxw_mesh_set_uvs(scene, mesh, 0, uv_buffer, UFBXW_ATTRIBUTE_MAPPING_POLYGON_VERTEX);
+	ufbxw_mesh_set_single_material(scene, mesh, 0);
+
+	ufbxw_material material = ufbxw_create_material(scene, UFBXW_MATERIAL_FBX_LAMBERT);
+	ufbxw_set_name(scene, material.id, "Material");
+
+	ufbxw_node_set_material(scene, node, 0, material);
+
+	ufbxw_texture texture = ufbxw_create_texture(scene, UFBXW_TEXTURE_FILE);
+	ufbxw_set_name(scene, texture.id, "Diffuse");
+
+	ufbxw_byte_buffer texture_buffer;
+
+	{
+		char texture_path[256];
+		snprintf(texture_path, sizeof(texture_path), "%s/textures/checkerboard_diffuse.png", data_root);
+
+		FILE *f = fopen(texture_path, "rb");
+		ufbxwt_assert(f);
+		fseek(f, 0, SEEK_END);
+		size_t size = (size_t)ftell(f);
+
+		texture_buffer = ufbxw_create_byte_buffer(scene, size);
+		ufbxw_byte_list texture_data = ufbxw_edit_byte_buffer(scene, texture_buffer);
+
+		fseek(f, 0, SEEK_SET);
+		size_t num_read = fread(texture_data.data, 1, texture_data.count, f);
+		ufbxwt_assert(num_read == texture_data.count);
+	}
+
+	ufbxw_texture_set_filename(scene, texture, "textures/checkerboard_diffuse.png");
+	ufbxw_texture_set_relative_filename(scene, texture, "checkerboard_diffuse.png");
+	ufbxw_texture_set_content(scene, texture, texture_buffer);
+
+	ufbxw_material_set_texture(scene, material, "DiffuseColor", texture);
+}
+#endif
+
+UFBXWT_SCENE_CHECK(mesh_material_texture)
+#if UFBXWT_IMPL
+{
+	// TODO
 }
 #endif
