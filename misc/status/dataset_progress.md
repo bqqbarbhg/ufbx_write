@@ -82,3 +82,11 @@ Pass out-of-bounds indices as-is in roundtrip
 ```
 4234/4454 files passed (391/410 test cases)
 ```
+
+#### Base model suffix
+
+Load base model with suffix in roundtrip
+
+```
+4244/4454 files passed (393/410 test cases)
+```
