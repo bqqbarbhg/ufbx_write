@@ -5037,6 +5037,7 @@ typedef struct {
 typedef struct {
 	union {
 		ufbxwi_element element;
+		ufbxwi_deformer deformer;
 	};
 
 	ufbxwi_id_list channels;
