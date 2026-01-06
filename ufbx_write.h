@@ -1190,7 +1190,7 @@ ufbxw_abi void ufbxw_selection_set_add_node(ufbxw_scene *scene, ufbxw_selection_
 
 // -- Selection node
 
-ufbxw_abi ufbxw_selection_node ufbxw_create_selection_node(ufbxw_scene *scene);
+ufbxw_abi ufbxw_selection_node ufbxw_create_selection_node(ufbxw_scene *scene, ufbxw_selection_set set);
 
 ufbxw_abi void ufbxw_selection_node_set_node(ufbxw_scene *scene, ufbxw_selection_node selection, ufbxw_node node);
 

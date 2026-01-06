@@ -36,9 +36,7 @@ UFBXWT_SCENE_TEST(selection_set_simple)
 
 	{
 		ufbxw_selection_set set = ufbxw_create_selection_set(scene);
-
-		ufbxw_selection_node sel = ufbxw_create_selection_node(scene);
-		ufbxw_selection_set_add_node(scene, set, sel);
+		ufbxw_selection_node sel = ufbxw_create_selection_node(scene, set);
 
 		ufbxw_set_name(scene, set.id, "Node");
 		ufbxw_set_name(scene, sel.id, "Node");
@@ -49,9 +47,7 @@ UFBXWT_SCENE_TEST(selection_set_simple)
 
 	{
 		ufbxw_selection_set set = ufbxw_create_selection_set(scene);
-
-		ufbxw_selection_node sel = ufbxw_create_selection_node(scene);
-		ufbxw_selection_set_add_node(scene, set, sel);
+		ufbxw_selection_node sel = ufbxw_create_selection_node(scene, set);
 
 		ufbxw_set_name(scene, set.id, "Vertices");
 		ufbxw_set_name(scene, sel.id, "Vertices");
@@ -65,9 +61,7 @@ UFBXWT_SCENE_TEST(selection_set_simple)
 
 	{
 		ufbxw_selection_set set = ufbxw_create_selection_set(scene);
-
-		ufbxw_selection_node sel = ufbxw_create_selection_node(scene);
-		ufbxw_selection_set_add_node(scene, set, sel);
+		ufbxw_selection_node sel = ufbxw_create_selection_node(scene, set);
 
 		ufbxw_set_name(scene, set.id, "Edges");
 		ufbxw_set_name(scene, sel.id, "Edges");
@@ -81,9 +75,7 @@ UFBXWT_SCENE_TEST(selection_set_simple)
 
 	{
 		ufbxw_selection_set set = ufbxw_create_selection_set(scene);
-
-		ufbxw_selection_node sel = ufbxw_create_selection_node(scene);
-		ufbxw_selection_set_add_node(scene, set, sel);
+		ufbxw_selection_node sel = ufbxw_create_selection_node(scene, set);
 
 		ufbxw_set_name(scene, set.id, "Polygons");
 		ufbxw_set_name(scene, sel.id, "Polygons");
