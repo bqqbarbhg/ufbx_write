@@ -836,12 +836,16 @@ int main(int argc, char **argv)
 							if (prev_key) {
 								out_key.slope_left = in_key.left.dy / in_key.left.dx;
 								out_key.weight_left = in_key.left.dx / (in_key.time - prev_key->time);
-								out_key.flags |= UFBXW_KEYFRAME_WEIGHTED_LEFT;
+								if (fabsf(out_key.weight_left - 0.333333f) > 1e-6f) {
+									out_key.flags |= UFBXW_KEYFRAME_WEIGHTED_LEFT;
+								}
 							}
 							if (next_key) {
 								out_key.slope_right = in_key.right.dy / in_key.right.dx;
 								out_key.weight_right = in_key.right.dx / (next_key->time - in_key.time);
-								out_key.flags |= UFBXW_KEYFRAME_WEIGHTED_RIGHT;
+								if (fabsf(out_key.weight_right - 0.333333f) > 1e-6f) {
+									out_key.flags |= UFBXW_KEYFRAME_WEIGHTED_RIGHT;
+								}
 							}
 							break;
 						}
