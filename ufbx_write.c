@@ -1452,15 +1452,15 @@ static ufbxw_string ufbxwi_vformat(ufbxwi_allocator *ator, ufbxwi_byte_list *buf
 			case 's': {
 				const char *str = va_arg(args, const char *);
 				size_t len = strlen(str);
-				ufbxwi_check(ufbxwi_list_push_copy_n(ator, buf, char, len, str));
+				ufbxwi_check(ufbxwi_list_push_copy_n(ator, buf, char, len, str), ufbxwi_empty_string);
 			} break;
 			case 'S': {
 				ufbxw_string str = va_arg(args, ufbxw_string);
-				ufbxwi_check(ufbxwi_list_push_copy_n(ator, buf, char, str.length, str.data));
+				ufbxwi_check(ufbxwi_list_push_copy_n(ator, buf, char, str.length, str.data), ufbxwi_empty_string);
 			} break;
 			case '0': {
 				char *dst = ufbxwi_list_push_uninit(ator, buf, char);
-				ufbxwi_check(dst, ufbxwi_empty_string);
+				ufbxwi_check(dst, ufbxwi_empty_string, ufbxwi_empty_string);
 				*dst = '\0';
 			} break;
 			}
@@ -3392,6 +3392,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_CodeAbsoluteURL,
 	UFBXWI_CodeRelativeURL,
 	UFBXWI_CodeTAG,
+	UFBXWI_Collection,
 	UFBXWI_Color,
 	UFBXWI_Constants,
 	UFBXWI_CoordAxis,
@@ -3441,6 +3442,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_FbxLight,
 	UFBXWI_FbxMesh,
 	UFBXWI_FbxNode,
+	UFBXWI_FbxSelectionSet,
 	UFBXWI_FbxSkeleton,
 	UFBXWI_FbxSurfaceLambert,
 	UFBXWI_FbxSurfaceMaterial,
@@ -3624,6 +3626,9 @@ typedef enum ufbxwi_token {
 	UFBXWI_ScalingOffset,
 	UFBXWI_ScalingPivot,
 	UFBXWI_SceneInfo,
+	UFBXWI_SelectionNode,
+	UFBXWI_SelectionSet,
+	UFBXWI_SelectionSetAnnotation,
 	UFBXWI_ShaderLanguage,
 	UFBXWI_ShaderLanguageVersion,
 	UFBXWI_ShadingModel,
@@ -3790,6 +3795,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "CodeAbsoluteURL", 15 },
 	{ "CodeRelativeURL", 15 },
 	{ "CodeTAG", 7 },
+	{ "Collection", 10 },
 	{ "Color", 5 },
 	{ "Constants", 9 },
 	{ "CoordAxis", 9 },
@@ -3839,6 +3845,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "FbxLight", 8 },
 	{ "FbxMesh", 7 },
 	{ "FbxNode", 7 },
+	{ "FbxSelectionSet", 15 },
 	{ "FbxSkeleton", 11 },
 	{ "FbxSurfaceLambert", 17 },
 	{ "FbxSurfaceMaterial", 18 },
@@ -4022,6 +4029,9 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "ScalingOffset", 13 },
 	{ "ScalingPivot", 12 },
 	{ "SceneInfo", 9 },
+	{ "SelectionNode", 13 },
+	{ "SelectionSet", 12 },
+	{ "SelectionSetAnnotation", 22 },
 	{ "ShaderLanguage", 14 },
 	{ "ShaderLanguageVersion", 21 },
 	{ "ShadingModel", 12 },
@@ -4999,6 +5009,8 @@ typedef struct {
 	bool visibility_inheritance;
 
 	int32_t default_attribute_index;
+
+	ufbxwi_id_list selection_nodes;
 } ufbxwi_node;
 
 typedef struct {
@@ -5245,6 +5257,23 @@ typedef struct {
 	ufbxw_string relative_filename;
 	ufbxw_byte_buffer content;
 } ufbxwi_video;
+
+typedef struct {
+	ufbxwi_element element;
+	ufbxwi_id_list nodes;
+} ufbxwi_selection_set;
+
+typedef struct {
+	ufbxwi_element element;
+
+	ufbxw_node node;
+	ufbxw_selection_set set;
+
+	bool node_in_set;
+	ufbxw_int_buffer vertices;
+	ufbxw_int_buffer edges;
+	ufbxw_int_buffer polygons;
+} ufbxwi_selection_node;
 
 typedef struct {
 	uint32_t flags;
@@ -5507,6 +5536,8 @@ static const ufbxwi_object_desc ufbxwi_object_types[] = {
 	{ UFBXWI_Deformer },
 	{ UFBXWI_Cache },
 	{ UFBXWI_Pose },
+	{ UFBXWI_Collection },
+	{ UFBXWI_SelectionNode },
 };
 
 typedef struct {
@@ -5990,6 +6021,10 @@ static const ufbxwi_prop_desc ufbxwi_video_props[] = {
 	{ UFBXWI_InterlaceMode, UFBXW_PROP_TYPE_ENUM },
 };
 
+static const ufbxwi_prop_desc ufbxwi_selection_set_props[] = {
+	{ UFBXWI_SelectionSetAnnotation, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_empty) },
+};
+
 static const ufbxwi_prop_desc ufbxwi_implementation_props[] = {
 	{ UFBXWI_ShaderLanguage, UFBXW_PROP_TYPE_STRING, ufbxwi_field(ufbxwi_implementation, shader_language), ufbxwi_default(string_empty) },
 	{ UFBXWI_ShaderLanguageVersion, UFBXW_PROP_TYPE_STRING, ufbxwi_field(ufbxwi_implementation, shader_language_version),ufbxwi_default(string_empty) },
@@ -6064,6 +6099,8 @@ static const ufbxwi_prop_desc ufbxwi_document_props[] = {
 #define UFBXWI_CONN_BIT_TYPE_VIDEO UINT64_C(0x200000)
 #define UFBXWI_CONN_BIT_TYPE_CACHE_DEFORMER UINT64_C(0x400000)
 #define UFBXWI_CONN_BIT_TYPE_CACHE_FILE UINT64_C(0x800000)
+#define UFBXWI_CONN_BIT_TYPE_SELECTION_SET UINT64_C(0x1000000)
+#define UFBXWI_CONN_BIT_TYPE_SELECTION_NODE UINT64_C(0x2000000)
 
 #define UFBXWI_CONN_BIT_ELEMENT_NODE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_NODE)
 #define UFBXWI_CONN_BIT_ELEMENT_NODE_ATTRIBUTE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE)
@@ -6085,6 +6122,8 @@ static const ufbxwi_prop_desc ufbxwi_document_props[] = {
 #define UFBXWI_CONN_BIT_ELEMENT_VIDEO (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_VIDEO)
 #define UFBXWI_CONN_BIT_ELEMENT_CACHE_DEFORMER (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_CACHE_DEFORMER)
 #define UFBXWI_CONN_BIT_ELEMENT_CACHE_FILE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_CACHE_FILE)
+#define UFBXWI_CONN_BIT_ELEMENT_SELECTION_SET (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_SELECTION_SET)
+#define UFBXWI_CONN_BIT_ELEMENT_SELECTION_NODE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_SELECTION_NODE)
 
 #define UFBXWI_CONN_BIT_PROPERTY_ANY (UFBXWI_CONN_BIT_PROPERTY | UFBXWI_CONN_BIT_TYPE_ANY)
 #define UFBXWI_CONN_BIT_PROPERTY_MATERIAL (UFBXWI_CONN_BIT_PROPERTY | UFBXWI_CONN_BIT_TYPE_MATERIAL)
@@ -6117,6 +6156,8 @@ static const ufbxwi_element_type_info ufbxwi_element_type_infos[] = {
 	{ sizeof(ufbxwi_binding_table), UFBXWI_CONN_BIT_TYPE_BINDING_TABLE },
 	{ sizeof(ufbxwi_texture), UFBXWI_CONN_BIT_TYPE_TEXTURE },
 	{ sizeof(ufbxwi_video), UFBXWI_CONN_BIT_TYPE_VIDEO },
+	{ sizeof(ufbxwi_selection_set), UFBXWI_CONN_BIT_TYPE_SELECTION_SET },
+	{ sizeof(ufbxwi_selection_node), UFBXWI_CONN_BIT_TYPE_SELECTION_NODE },
 	{ sizeof(ufbxwi_anim_curve), UFBXWI_CONN_BIT_TYPE_ANIM_CURVE },
 	{ sizeof(ufbxwi_anim_prop), UFBXWI_CONN_BIT_TYPE_ANIM_PROP },
 	{ sizeof(ufbxwi_anim_layer), UFBXWI_CONN_BIT_TYPE_ANIM_LAYER },
@@ -6149,6 +6190,8 @@ static const char *ufbxwi_element_type_names[] = {
 	"binding_table",
 	"texture",
 	"video",
+	"selection_set",
+	"selection_node",
 	"anim_curve",
 	"anim_prop",
 	"anim_layer",
@@ -6209,6 +6252,8 @@ static const ufbxwi_connection_info ufbxwi_connection_infos[] = {
 	{ "Cache File", UFBXWI_CONN_BIT_ELEMENT_CACHE_FILE, UFBXWI_CONN_BIT_ELEMENT_CACHE_DEFORMER, ufbxwi_conn_id_list(ufbxwi_cache_file, deformers), ufbxwi_conn_id(ufbxwi_cache_deformer, cache_file) },
 	{ "Material Implementation", UFBXWI_CONN_BIT_ELEMENT_MATERIAL, UFBXWI_CONN_BIT_ELEMENT_IMPLEMENTATION, ufbxwi_conn_id(ufbxwi_material, implementation), ufbxwi_conn_id_list_ex(ufbxwi_implementation, materials, UFBXWI_CONN_TYPE_UNORDERED) },
 	{ "Binding Table Implementation", UFBXWI_CONN_BIT_ELEMENT_BINDING_TABLE, UFBXWI_CONN_BIT_ELEMENT_IMPLEMENTATION, ufbxwi_conn_id_list_ex(ufbxwi_binding_table, implementations, UFBXWI_CONN_TYPE_UNORDERED), ufbxwi_conn_id(ufbxwi_implementation, binding_table) },
+	{ "Selection Set Node", UFBXWI_CONN_BIT_ELEMENT_SELECTION_NODE, UFBXWI_CONN_BIT_ELEMENT_SELECTION_SET, ufbxwi_conn_id(ufbxwi_selection_node, set), ufbxwi_conn_id_list(ufbxwi_selection_set, nodes) },
+	{ "Selection Node Node", UFBXWI_CONN_BIT_ELEMENT_NODE, UFBXWI_CONN_BIT_ELEMENT_SELECTION_NODE, ufbxwi_conn_id_list_ex(ufbxwi_node, selection_nodes, UFBXWI_CONN_TYPE_UNORDERED), ufbxwi_conn_id(ufbxwi_selection_node, node) },
 	{ "Animated Property", UFBXWI_CONN_BIT_ELEMENT_ANIM_PROP, UFBXWI_CONN_BIT_PROPERTY_ANY, ufbxwi_conn_conn(ufbxwi_anim_prop, prop), ufbxwi_conn_conn_list_ex(ufbxwi_element, anim_props, UFBXWI_CONN_TYPE_UNORDERED) },
 	{ "Animation Curve Property", UFBXWI_CONN_BIT_ELEMENT_ANIM_CURVE, UFBXWI_CONN_BIT_PROPERTY_ANIM_PROP, ufbxwi_conn_conn(ufbxwi_anim_curve, prop), ufbxwi_conn_conn_list(ufbxwi_anim_prop, curves) },
 	{ "Animation Property Layer", UFBXWI_CONN_BIT_ELEMENT_ANIM_PROP, UFBXWI_CONN_BIT_ELEMENT_ANIM_LAYER, ufbxwi_conn_id(ufbxwi_anim_prop, layer), ufbxwi_conn_id_list_ex(ufbxwi_anim_layer, anim_props, UFBXWI_CONN_TYPE_UNORDERED) },
@@ -6855,6 +6900,16 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 	{
 		UFBXW_ELEMENT_BINDING_TABLE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_EMPTY, UFBXWI_BindingTable, UFBXWI_BindingTable, UFBXWI_FbxBindingTable,
 		ufbxwi_binding_table_props, ufbxwi_arraycount(ufbxwi_binding_table_props), &ufbxwi_init_binding_table,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_SELECTION_SET, UFBXWI_TOKEN_NONE, UFBXWI_SelectionSet, UFBXWI_Collection, UFBXWI_SelectionSet, UFBXWI_FbxSelectionSet,
+		ufbxwi_selection_set_props, ufbxwi_arraycount(ufbxwi_selection_set_props), NULL,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_SELECTION_NODE, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_EMPTY, UFBXWI_SelectionNode, UFBXWI_SelectionNode, UFBXWI_TOKEN_NONE,
+		NULL, 0, NULL,
 		0,
 	},
 };
@@ -7722,6 +7777,8 @@ static ufbxwi_forceinline ufbxwi_implementation *ufbxwi_get_implementation(ufbxw
 static ufbxwi_forceinline ufbxwi_binding_table *ufbxwi_get_binding_table(ufbxw_scene *scene, ufbxw_binding_table id) { return (ufbxwi_binding_table*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BINDING_TABLE); }
 static ufbxwi_forceinline ufbxwi_texture *ufbxwi_get_texture(ufbxw_scene *scene, ufbxw_texture id) { return (ufbxwi_texture*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_TEXTURE); }
 static ufbxwi_forceinline ufbxwi_video *ufbxwi_get_video(ufbxw_scene *scene, ufbxw_video id) { return (ufbxwi_video*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_VIDEO); }
+static ufbxwi_forceinline ufbxwi_selection_set *ufbxwi_get_selection_set(ufbxw_scene *scene, ufbxw_selection_set id) { return (ufbxwi_selection_set*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_SELECTION_SET); }
+static ufbxwi_forceinline ufbxwi_selection_node *ufbxwi_get_selection_node(ufbxw_scene *scene, ufbxw_selection_node id) { return (ufbxwi_selection_node*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_SELECTION_NODE); }
 static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve(ufbxw_scene *scene, ufbxw_anim_curve id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_CURVE); }
 static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop(ufbxw_scene *scene, ufbxw_anim_prop id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_PROP); }
 static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer(ufbxw_scene *scene, ufbxw_anim_layer id) { return (ufbxwi_anim_layer*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_LAYER); }
@@ -7744,6 +7801,8 @@ static ufbxwi_forceinline ufbxwi_implementation *ufbxwi_get_implementation_by_id
 static ufbxwi_forceinline ufbxwi_binding_table *ufbxwi_get_binding_table_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_binding_table*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BINDING_TABLE); }
 static ufbxwi_forceinline ufbxwi_texture *ufbxwi_get_texture_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_texture*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_TEXTURE); }
 static ufbxwi_forceinline ufbxwi_video *ufbxwi_get_video_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_video*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_VIDEO); }
+static ufbxwi_forceinline ufbxwi_selection_set *ufbxwi_get_selection_set_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_selection_set*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_SELECTION_SET); }
+static ufbxwi_forceinline ufbxwi_selection_node *ufbxwi_get_selection_node_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_selection_node*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_SELECTION_NODE); }
 static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_CURVE); }
 static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_PROP); }
 static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_layer*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_LAYER); }
@@ -10723,6 +10782,18 @@ static bool ufbxwi_less_mesh_attribute_ptr_set(void *user, const void *va, const
 	return a->attribute < b->attribute;
 }
 
+static ufbxw_string ufbxwi_format_element_type_and_name(ufbxwi_save_context *sc, ufbxwi_element *element)
+{
+	ufbxw_scene *scene = sc->scene;
+	const ufbxwi_element_type *et = &scene->element_types.data[element->type_id];
+	ufbxw_string fbx_type_str = scene->string_pool.tokens.data[et->fbx_type];
+	if (sc->ascii) {
+		return ufbxwi_save_format(sc, "%S::%S", fbx_type_str, element->name);
+	} else {
+		return ufbxwi_save_format(sc, "%S%0\x01%S", element->name, fbx_type_str);
+	}
+}
+
 typedef struct {
 	ufbxwi_buffer_input indices;
 	ufbxwi_buffer_input face_offsets;
@@ -10976,6 +11047,34 @@ static void ufbxwi_save_binding_table(ufbxwi_save_context *sc, ufbxwi_binding_ta
 	}
 }
 
+static void ufbxwi_save_selection_set(ufbxwi_save_context *sc, ufbxwi_selection_set *set)
+{
+	ufbxwi_dom_value(sc, "NbMembers", "I", (int32_t)set->nodes.count);
+	ufbxwi_for_id_list(ufbxw_id, id, set->nodes) {
+		ufbxwi_element *element = ufbxwi_get_element(sc->scene, id);
+		if (element) {
+			ufbxw_string name = ufbxwi_format_element_type_and_name(sc, element);
+			ufbxwi_dom_value(sc, "Member", "S", name);
+		}
+	}
+}
+
+static void ufbxwi_save_selection_node(ufbxwi_save_context *sc, ufbxwi_selection_node *selection)
+{
+	ufbxwi_dom_value(sc, "SelectionNode", "I", 100);
+
+	{
+		ufbxwi_node *node = ufbxwi_get_node(sc->scene, selection->node);
+		ufbxw_string name = ufbxwi_format_element_type_and_name(sc, &node->element);
+		ufbxwi_dom_value(sc, "Node", "S", name);
+	}
+
+	ufbxwi_dom_value(sc, "IsTheNodeInSet", "I", selection->node_in_set ? 1 : 0);
+	ufbxwi_dom_array(sc, "VertexIndexArray", selection->vertices.id);
+	ufbxwi_dom_array(sc, "EdgeIndexArray", selection->edges.id);
+	ufbxwi_dom_array(sc, "PolygonIndexArray", selection->polygons.id);
+}
+
 static uint32_t ufbxwi_pack_weight(float weight)
 {
 	if (!(weight >= 0.0f)) weight = 0.0f;
@@ -11160,15 +11259,9 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 	}
 
 	ufbxw_string obj_type_str = scene->string_pool.tokens.data[obj_type];
-	ufbxw_string fbx_type_str = scene->string_pool.tokens.data[fbx_type];
 
 	if ((flags & UFBXWI_SAVE_ELEMENT_MANUAL_OPEN) == 0) {
-		ufbxw_string name;
-		if (sc->ascii) {
-			name = ufbxwi_save_format(sc, "%S::%S", fbx_type_str, element->name);
-		} else {
-			name = ufbxwi_save_format(sc, "%S%0\x01%S", element->name, fbx_type_str);
-		}
+		ufbxw_string name = ufbxwi_format_element_type_and_name(sc, element);
 
 		if ((flags & UFBXWI_SAVE_ELEMENT_NO_ID) != 0) {
 			ufbxwi_dom_open(sc, obj_type_str.data, "ST", name, sub_type);
@@ -11187,6 +11280,8 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 	} else if (type == UFBXW_ELEMENT_CACHE_DEFORMER) {
 		ufbxwi_dom_value(sc, "Version", "I", 100);
 	} else if (type == UFBXW_ELEMENT_CACHE_FILE) {
+		ufbxwi_dom_value(sc, "Version", "I", 100);
+	} else if (type == UFBXW_ELEMENT_SELECTION_SET) {
 		ufbxwi_dom_value(sc, "Version", "I", 100);
 	} else if (type == UFBXW_ELEMENT_SCENE_INFO) {
 		ufbxwi_dom_value(sc, "Type", "C", "UserData");
@@ -11281,6 +11376,14 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 
 	if (type == UFBXW_ELEMENT_BINDING_TABLE) {
 		ufbxwi_save_binding_table(sc, (ufbxwi_binding_table*)element);
+	}
+
+	if (type == UFBXW_ELEMENT_SELECTION_SET) {
+		ufbxwi_save_selection_set(sc, (ufbxwi_selection_set*)element);
+	}
+
+	if (type == UFBXW_ELEMENT_SELECTION_NODE) {
+		ufbxwi_save_selection_node(sc, (ufbxwi_selection_node*)element);
 	}
 
 	if (type == UFBXW_ELEMENT_LIGHT) {
@@ -13789,6 +13892,56 @@ ufbxw_abi void ufbxw_video_set_content(ufbxw_scene *scene, ufbxw_video video, uf
 	ufbxwi_video *vd = ufbxwi_get_video(scene, video);
 	if (!vd) return;
 	ufbxwi_set_buffer_from_user(&scene->buffers, &vd->content.id, content.id);
+}
+
+ufbxw_abi ufbxw_selection_set ufbxw_create_selection_set(ufbxw_scene *scene)
+{
+	ufbxw_selection_set set = { ufbxw_create_element(scene, UFBXW_ELEMENT_SELECTION_SET) };
+	return set;
+}
+
+ufbxw_abi void ufbxw_selection_set_add_node(ufbxw_scene *scene, ufbxw_selection_set set, ufbxw_selection_node node)
+{
+	ufbxwi_connect(scene, UFBXW_CONNECTION_SELECTION_SET_NODE, node.id, set.id, UFBXWI_CONNECT_FLAG_DISCONNECT_SRC);
+}
+
+ufbxw_abi ufbxw_selection_node ufbxw_create_selection_node(ufbxw_scene *scene)
+{
+	ufbxw_selection_node selection = { ufbxw_create_element(scene, UFBXW_ELEMENT_SELECTION_NODE) };
+	return selection;
+}
+
+ufbxw_abi void ufbxw_selection_node_set_node(ufbxw_scene *scene, ufbxw_selection_node selection, ufbxw_node node)
+{
+	ufbxwi_connect(scene, UFBXW_CONNECTION_SELECTION_NODE_NODE, node.id, selection.id, UFBXWI_CONNECT_FLAG_DISCONNECT_SRC);
+}
+
+ufbxw_abi void ufbxw_selection_node_set_include_node(ufbxw_scene *scene, ufbxw_selection_node selection, bool included)
+{
+	ufbxwi_selection_node *sn = ufbxwi_get_selection_node(scene, selection);
+	ufbxwi_check_element(scene, selection.id, sn);
+	sn->node_in_set = included;
+}
+
+ufbxw_abi void ufbxw_selection_node_set_vertices(ufbxw_scene *scene, ufbxw_selection_node selection, ufbxw_int_buffer vertices)
+{
+	ufbxwi_selection_node *sn = ufbxwi_get_selection_node(scene, selection);
+	ufbxwi_check_element(scene, selection.id, sn);
+	ufbxwi_set_buffer_from_user(&scene->buffers, &sn->vertices.id, vertices.id);
+}
+
+ufbxw_abi void ufbxw_selection_node_set_edges(ufbxw_scene *scene, ufbxw_selection_node selection, ufbxw_int_buffer edges)
+{
+	ufbxwi_selection_node *sn = ufbxwi_get_selection_node(scene, selection);
+	ufbxwi_check_element(scene, selection.id, sn);
+	ufbxwi_set_buffer_from_user(&scene->buffers, &sn->edges.id, edges.id);
+}
+
+ufbxw_abi void ufbxw_selection_node_set_polygons(ufbxw_scene *scene, ufbxw_selection_node selection, ufbxw_int_buffer polygons)
+{
+	ufbxwi_selection_node *sn = ufbxwi_get_selection_node(scene, selection);
+	ufbxwi_check_element(scene, selection.id, sn);
+	ufbxwi_set_buffer_from_user(&scene->buffers, &sn->polygons.id, polygons.id);
 }
 
 ufbxw_abi ufbxw_anim_stack ufbxw_get_default_anim_stack(ufbxw_scene *scene)
