@@ -177,6 +177,9 @@ typedef enum ufbxw_element_type {
 	UFBXW_ELEMENT_TEXTURE,
 	UFBXW_ELEMENT_VIDEO,
 
+	UFBXW_ELEMENT_SELECTION_SET,
+	UFBXW_ELEMENT_SELECTION_NODE,
+
 	UFBXW_ELEMENT_ANIM_CURVE,
 	UFBXW_ELEMENT_ANIM_PROP,
 	UFBXW_ELEMENT_ANIM_LAYER,
@@ -209,6 +212,8 @@ typedef struct ufbxw_implementation { ufbxw_id id; } ufbxw_implementation;
 typedef struct ufbxw_binding_table { ufbxw_id id; } ufbxw_binding_table;
 typedef struct ufbxw_texture { ufbxw_id id; } ufbxw_texture;
 typedef struct ufbxw_video { ufbxw_id id; } ufbxw_video;
+typedef struct ufbxw_selection_set { ufbxw_id id; } ufbxw_selection_set;
+typedef struct ufbxw_selection_node { ufbxw_id id; } ufbxw_selection_node;
 typedef struct ufbxw_anim_prop { ufbxw_id id; } ufbxw_anim_prop;
 typedef struct ufbxw_anim_curve { ufbxw_id id; } ufbxw_anim_curve;
 typedef struct ufbxw_anim_layer { ufbxw_id id; } ufbxw_anim_layer;
@@ -265,6 +270,8 @@ typedef struct ufbxw_ktime_range {
 #define ufbxw_null_binding_table (ufbxw_new(ufbxw_binding_table){0})
 #define ufbxw_null_texture (ufbxw_new(ufbxw_texture){0})
 #define ufbxw_null_video (ufbxw_new(ufbxw_video){0})
+#define ufbxw_null_selection_set (ufbxw_new(ufbxw_selection_set){0})
+#define ufbxw_null_selection_node (ufbxw_new(ufbxw_selection_node){0})
 #define ufbxw_null_anim_prop (ufbxw_new(ufbxw_anim_prop){0})
 #define ufbxw_null_anim_curve (ufbxw_new(ufbxw_anim_curve){0})
 #define ufbxw_null_anim_layer (ufbxw_new(ufbxw_anim_layer){0})
@@ -284,6 +291,8 @@ typedef enum ufbxw_connection_type {
 	UFBXW_CONNECTION_CACHE_FILE,              // CACHE_FILE -> CACHE_DEFORMER
 	UFBXW_CONNECTION_MATERIAL_IMPLEMENTATION, // MATERIAL -> IMPLEMENTATION
 	UFBXW_CONNECTION_BINDING_IMPLEMENTATION,  // BINDING_TABLE -> IMPLEMENTATION
+	UFBXW_CONNECTION_SELECTION_SET_NODE,      // SELECTION_NODE -> SELECTION_SET
+	UFBXW_CONNECTION_SELECTION_NODE_NODE,     // NODE -> SELECTION_NODE
 	UFBXW_CONNECTION_ANIM_PROPERTY,           // ANIM_PROP* -> ANY(property)*
 	UFBXW_CONNECTION_ANIM_CURVE_PROP,         // ANIM_CURVE* -> ANIM_PROP
 	UFBXW_CONNECTION_ANIM_PROP_LAYER,         // ANIM_PROP* -> ANIM_LAYER
@@ -1172,6 +1181,23 @@ ufbxw_abi void ufbxw_video_set_relative_filename(ufbxw_scene *scene, ufbxw_video
 ufbxw_abi void ufbxw_video_set_relative_filename_len(ufbxw_scene *scene, ufbxw_video video, const char *relative_filename, size_t relative_filename_len);
 
 ufbxw_abi void ufbxw_video_set_content(ufbxw_scene *scene, ufbxw_video video, ufbxw_byte_buffer content);
+
+// -- Selection set
+
+ufbxw_abi ufbxw_selection_set ufbxw_create_selection_set(ufbxw_scene *scene);
+
+ufbxw_abi void ufbxw_selection_set_add_node(ufbxw_scene *scene, ufbxw_selection_set set, ufbxw_selection_node node);
+
+// -- Selection node
+
+ufbxw_abi ufbxw_selection_node ufbxw_create_selection_node(ufbxw_scene *scene);
+
+ufbxw_abi void ufbxw_selection_node_set_node(ufbxw_scene *scene, ufbxw_selection_node selection, ufbxw_node node);
+
+ufbxw_abi void ufbxw_selection_node_set_include_node(ufbxw_scene *scene, ufbxw_selection_node selection, bool included);
+ufbxw_abi void ufbxw_selection_node_set_vertices(ufbxw_scene *scene, ufbxw_selection_node selection, ufbxw_int_buffer vertices);
+ufbxw_abi void ufbxw_selection_node_set_edges(ufbxw_scene *scene, ufbxw_selection_node selection, ufbxw_int_buffer edges);
+ufbxw_abi void ufbxw_selection_node_set_polygons(ufbxw_scene *scene, ufbxw_selection_node selection, ufbxw_int_buffer polygons);
 
 // -- Animation stack
 

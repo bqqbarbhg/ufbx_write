@@ -10,6 +10,7 @@
 #include "test_camera.h"
 #include "test_material.h"
 #include "test_texture.h"
+#include "test_collection.h"
 #include "test_deflate.h"
 #include "test_ascii.h"
 #include "test_binary.h"
