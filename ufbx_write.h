@@ -969,6 +969,8 @@ ufbxw_abi void ufbxw_skin_deformer_set_mesh_bind_transform(ufbxw_scene *scene, u
 
 ufbxw_abi void ufbxw_skin_deformer_set_bind_pose(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_bind_pose pose);
 
+ufbxw_abi void ufbxw_skin_deformer_set_dual_quaternion_weights(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_int_buffer indices, ufbxw_real_buffer weights);
+
 // -- Skin cluster
 
 ufbxw_abi ufbxw_skin_cluster ufbxw_create_skin_cluster(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_node node);

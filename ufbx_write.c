@@ -5005,6 +5005,9 @@ typedef struct {
 	bool has_mesh_bind_transform;
 	ufbxw_matrix mesh_bind_transform;
 
+	ufbxw_int_buffer dual_quaternion_indices;
+	ufbxw_real_buffer dual_quaternion_weights;
+
 	// TODO: This is kind of cheesy..
 	ufbxw_bind_pose bind_pose;
 
@@ -10803,6 +10806,36 @@ static void ufbxwi_save_matrix(ufbxwi_save_context *sc, const char *tag, const u
 	ufbxwi_dom_array(sc, tag, buf);
 }
 
+static void ufbxwi_save_skin_deformer(ufbxwi_save_context *sc, ufbxwi_skin_deformer *deformer)
+{
+	ufbxwi_dom_value(sc, "Version", "I", 101);
+
+	// TODO: Should this be configurable?
+	// SIC: Typo in the format
+	ufbxwi_dom_value(sc, "Link_DeformAcuracy", "D", 50.0);
+
+	const char *skinning_type = "";
+	switch (deformer->skinning_type) {
+	case UFBXW_SKINNING_TYPE_RIGID:
+		skinning_type = "Rigid";
+		break;
+	case UFBXW_SKINNING_TYPE_LINEAR:
+		skinning_type = "Linear";
+		break;
+	case UFBXW_SKINNING_TYPE_DUAL_QUATERNION:
+		skinning_type = "DualQuaternion";
+		break;
+	case UFBXW_SKINNING_TYPE_BLEND:
+		skinning_type = "Blend";
+		break;
+	default:
+		ufbxwi_unreachable("unhandled skinning type");
+	}
+	ufbxwi_dom_value(sc, "SkinningType", "C", skinning_type);
+	ufbxwi_dom_array(sc, "Indexes", deformer->dual_quaternion_indices.id);
+	ufbxwi_dom_array(sc, "BlendWeights", deformer->dual_quaternion_weights.id);
+}
+
 static void ufbxwi_save_skin_cluster(ufbxwi_save_context *sc, ufbxwi_skin_cluster *cluster)
 {
 	ufbxwi_dom_value(sc, "Version", "I", 100);
@@ -11162,32 +11195,7 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 	}
 
 	if (type == UFBXW_ELEMENT_SKIN_DEFORMER) {
-		ufbxwi_skin_deformer *skin = (ufbxwi_skin_deformer*)element;
-
-		ufbxwi_dom_value(sc, "Version", "I", 101);
-
-		// TODO: Should this be configurable?
-		// SIC: Typo in the format
-		ufbxwi_dom_value(sc, "Link_DeformAcuracy", "D", 50.0);
-
-		const char *skinning_type = "";
-		switch (skin->skinning_type) {
-		case UFBXW_SKINNING_TYPE_RIGID:
-			skinning_type = "Rigid";
-			break;
-		case UFBXW_SKINNING_TYPE_LINEAR:
-			skinning_type = "Linear";
-			break;
-		case UFBXW_SKINNING_TYPE_DUAL_QUATERNION:
-			skinning_type = "DualQuaternion";
-			break;
-		case UFBXW_SKINNING_TYPE_BLEND:
-			skinning_type = "Blend";
-			break;
-		default:
-			ufbxwi_unreachable("unhandled skinning type");
-		}
-		ufbxwi_dom_value(sc, "SkinningType", "C", skinning_type);
+		ufbxwi_save_skin_deformer(sc, (ufbxwi_skin_deformer*)element);
 	}
 
 	if (type == UFBXW_ELEMENT_SKIN_CLUSTER) {
@@ -13256,6 +13264,19 @@ ufbxw_abi void ufbxw_skin_deformer_set_bind_pose(ufbxw_scene *scene, ufbxw_skin_
 	ufbxwi_skin_deformer *sd = ufbxwi_get_skin_deformer(scene, skin);
 	ufbxwi_check_element(scene, skin.id, sd);
 	sd->bind_pose = pose;
+}
+
+ufbxw_abi void ufbxw_skin_deformer_set_dual_quaternion_weights(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_int_buffer indices, ufbxw_real_buffer weights)
+{
+	ufbxwi_skin_deformer *sd = ufbxwi_get_skin_deformer(scene, skin);
+	ufbxwi_check_element(scene, skin.id, sd);
+
+	size_t index_count = ufbxwi_get_buffer_size(&scene->buffers, indices.id);
+	size_t weights_count = ufbxwi_get_buffer_size(&scene->buffers, weights.id);
+	ufbxw_assert(index_count == weights_count);
+
+	ufbxwi_set_buffer_from_user(&scene->buffers, &sd->dual_quaternion_indices.id, indices.id);
+	ufbxwi_set_buffer_from_user(&scene->buffers, &sd->dual_quaternion_weights.id, weights.id);
 }
 
 ufbxw_abi ufbxw_skin_cluster ufbxw_create_skin_cluster(ufbxw_scene *scene, ufbxw_skin_deformer skin, ufbxw_node node)
