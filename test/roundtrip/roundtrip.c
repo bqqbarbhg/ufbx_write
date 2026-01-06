@@ -92,6 +92,28 @@ static ufbxw_vec3 to_ufbxw_euler(ufbx_quat v)
 	return to_ufbxw_vec3(euler);
 }
 
+static ufbxw_matrix to_ufbxw_matrix(ufbx_matrix v)
+{
+	ufbxw_matrix r;
+	r.m00 = v.m00;
+	r.m10 = v.m10;
+	r.m20 = v.m20;
+	r.m30 = 0.0f;
+	r.m01 = v.m01;
+	r.m11 = v.m11;
+	r.m21 = v.m21;
+	r.m31 = 0.0f;
+	r.m02 = v.m02;
+	r.m12 = v.m12;
+	r.m22 = v.m22;
+	r.m32 = 0.0f;
+	r.m03 = v.m03;
+	r.m13 = v.m13;
+	r.m23 = v.m23;
+	r.m33 = 1.0f;
+	return r;
+}
+
 static const ufbx_vec3 one_vec3 = { 1.0f, 1.0f, 1.0f };
 
 static ufbxw_int_buffer to_ufbxw_int_buffer(ufbxw_scene *scene, ufbx_int32_list src)
@@ -156,6 +178,120 @@ static ufbxw_vec3_buffer to_ufbxw_vec3_buffer_by_index(ufbxw_scene *scene, ufbx_
 	return values;
 }
 
+static ufbxw_inherit_type to_ufbxw_inherit_type(ufbx_inherit_mode mode)
+{
+	switch (mode) {
+	case UFBX_INHERIT_MODE_NORMAL: return UFBXW_INHERIT_TYPE_NORMAL;
+	case UFBX_INHERIT_MODE_COMPONENTWISE_SCALE: return UFBXW_INHERIT_TYPE_COMPONENTWISE_SCALE;
+	case UFBX_INHERIT_MODE_IGNORE_PARENT_SCALE: return UFBXW_INHERIT_TYPE_IGNORE_PARENT_SCALE;
+	default:
+		ufbxwt_assert(0 && "unhandled inherit mode");
+		return UFBXW_INHERIT_TYPE_NORMAL;
+	}
+}
+
+static ufbx_element *find_deform_percent_element(ufbx_element *elem, const char *prop)
+{
+	for (size_t conn_ix = 0; conn_ix < elem->connections_src.count; conn_ix++) {
+		ufbx_connection *conn = &elem->connections_src.data[conn_ix];
+		if (conn->src_prop.length == 0 || conn->dst_prop.length == 0) continue;
+		if (strcmp(conn->src_prop.data, prop) != 0) continue;
+		if (strcmp(conn->dst_prop.data, "DeformPercent") != 0) continue;
+		return conn->dst;
+	}
+	return NULL;
+}
+
+static ufbxw_skinning_type to_ufbxw_skinning_type(ufbx_skinning_method method)
+{
+	switch (method) {
+	case UFBX_SKINNING_METHOD_LINEAR: return UFBXW_SKINNING_TYPE_LINEAR;
+	case UFBX_SKINNING_METHOD_RIGID: return UFBXW_SKINNING_TYPE_RIGID;
+	case UFBX_SKINNING_METHOD_DUAL_QUATERNION: return UFBXW_SKINNING_TYPE_DUAL_QUATERNION;
+	case UFBX_SKINNING_METHOD_BLENDED_DQ_LINEAR: return UFBXW_SKINNING_TYPE_BLEND;
+	default:
+		ufbxwt_assert(0 && "unhandled skinning method");
+		return UFBXW_SKINNING_TYPE_LINEAR;
+	}
+}
+
+static void set_prop_int(ufbxw_scene *out_scene, ufbxw_id out_id, const char *prop, ufbxw_prop_type type, int32_t value)
+{
+	ufbxw_prop_data_type data_type = ufbxw_get_prop_data_type(out_scene, out_id, prop);
+	if (data_type == UFBXW_PROP_DATA_INT32) {
+		ufbxw_set_int(out_scene, out_id, prop, value);
+	} else if (data_type == UFBXW_PROP_DATA_INT64) {
+		ufbxw_set_int64(out_scene, out_id, prop, value);
+	} else {
+		ufbxw_add_int(out_scene, out_id, prop, type, value);
+	}
+}
+
+static void set_prop_real(ufbxw_scene *out_scene, ufbxw_id out_id, const char *prop, ufbxw_prop_type type, ufbxw_real value)
+{
+	ufbxw_prop_data_type data_type = ufbxw_get_prop_data_type(out_scene, out_id, prop);
+	if (data_type == UFBXW_PROP_DATA_REAL) {
+		ufbxw_set_real(out_scene, out_id, prop, value);
+	} else {
+		ufbxw_add_real(out_scene, out_id, prop, type, value);
+	}
+}
+
+static void set_prop_vec2(ufbxw_scene *out_scene, ufbxw_id out_id, const char *prop, ufbxw_prop_type type, ufbxw_vec2 value)
+{
+	ufbxw_prop_data_type data_type = ufbxw_get_prop_data_type(out_scene, out_id, prop);
+	if (data_type == UFBXW_PROP_DATA_VEC2) {
+		ufbxw_set_vec2(out_scene, out_id, prop, value);
+	} else {
+		ufbxw_add_vec2(out_scene, out_id, prop, type, value);
+	}
+}
+
+static void set_prop_vec3(ufbxw_scene *out_scene, ufbxw_id out_id, const char *prop, ufbxw_prop_type type, ufbxw_vec3 value)
+{
+	ufbxw_prop_data_type data_type = ufbxw_get_prop_data_type(out_scene, out_id, prop);
+	if (data_type == UFBXW_PROP_DATA_VEC3) {
+		ufbxw_set_vec3(out_scene, out_id, prop, value);
+	} else {
+		ufbxw_add_vec3(out_scene, out_id, prop, type, value);
+	}
+}
+
+static void set_prop_vec4(ufbxw_scene *out_scene, ufbxw_id out_id, const char *prop, ufbxw_prop_type type, ufbxw_vec4 value)
+{
+	ufbxw_prop_data_type data_type = ufbxw_get_prop_data_type(out_scene, out_id, prop);
+	if (data_type == UFBXW_PROP_DATA_VEC4) {
+		ufbxw_set_vec4(out_scene, out_id, prop, value);
+	} else {
+		ufbxw_add_vec4(out_scene, out_id, prop, type, value);
+	}
+}
+
+
+static void copy_props(ufbxw_scene *out_scene, ufbxw_id out_id, const ufbx_props *in_props)
+{
+	if (in_props->defaults) {
+		copy_props(out_scene, out_id, in_props->defaults);
+	}
+
+	for (size_t i = 0; i < in_props->props.count; i++) {
+		const ufbx_prop *prop = &in_props->props.data[i];
+		if ((prop->flags & UFBX_PROP_FLAG_VALUE_INT) && prop->type == UFBX_PROP_BOOLEAN) {
+			set_prop_int(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_BOOL, (int32_t)prop->value_int);
+		} else if ((prop->flags & UFBX_PROP_FLAG_VALUE_INT) && prop->type == UFBX_PROP_INTEGER) {
+			set_prop_int(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_INT, (int32_t)prop->value_int);
+		} else if (prop->flags & UFBX_PROP_FLAG_VALUE_REAL) {
+			set_prop_real(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_DOUBLE, prop->value_real);
+		} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC2) {
+			set_prop_vec2(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_VECTOR, to_ufbxw_vec2(prop->value_vec2));
+		} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC3) {
+			set_prop_vec3(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_COLOR, to_ufbxw_vec3(prop->value_vec3));
+		} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC4) {
+			set_prop_vec4(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_COLOR_RGBA, to_ufbxw_vec4(prop->value_vec4));
+		}
+	}
+}
+
 int main(int argc, char **argv)
 {
 	const char *output_path = NULL;
@@ -197,7 +333,7 @@ int main(int argc, char **argv)
 				ascii_impl = UFBXWT_ASCII_FORMAT_IMPL_COUNT;
 				for (int i = 0; i < UFBXWT_ASCII_FORMAT_IMPL_COUNT; i++) {
 					if (!strcmp(ufbxwt_ascii_format_name((ufbxwt_ascii_format_impl)i), name)) {
-						ascii_impl = (ufbxwt_deflate_impl)i;
+						ascii_impl = (ufbxwt_ascii_format_impl)i;
 						break;
 					}
 				}
@@ -232,6 +368,9 @@ int main(int argc, char **argv)
 
 	ufbx_load_opts load_opts = { 0 };
 
+	load_opts.allow_unsafe = true;
+	load_opts.index_error_handling = UFBX_INDEX_ERROR_HANDLING_UNSAFE_IGNORE;
+
 	ufbx_error load_error;
 	ufbx_scene *in_scene = ufbx_load_file(input_path, &load_opts, &load_error);
 	if (!in_scene) {
@@ -246,6 +385,7 @@ int main(int argc, char **argv)
 	out_opts.no_default_anim_layer = true;
 	ufbxw_scene *out_scene = ufbxw_create_scene(&out_opts);
 
+	// Coordinate settings
 	{
 		ufbxw_coordinate_axes axes;
 		axes.right = (ufbxw_coordinate_axis)in_scene->settings.axes.right;
@@ -259,11 +399,24 @@ int main(int argc, char **argv)
 		ufbxw_scene_set_unit_scale_factor(out_scene, unit_scale);
 	}
 
+	// Time mode
+	{
+		ufbxw_time_mode time_mode = (ufbxw_time_mode)in_scene->settings.time_mode;
+		ufbxw_real custom_frame_rate = ufbx_find_real(&in_scene->settings.props, "CustomFrameRate", -1.0);
+
+		ufbxw_scene_set_time_mode(out_scene, time_mode);
+		ufbxw_scene_set_custom_frame_rate(out_scene, custom_frame_rate);
+	}
+
 	ufbxw_mesh *mesh_ids = (ufbxw_mesh*)calloc(in_scene->meshes.count, sizeof(ufbxw_mesh));
 	ufbxw_node *node_ids = (ufbxw_node*)calloc(in_scene->nodes.count, sizeof(ufbxw_node));
 	ufbxw_anim_stack *anim_stack_ids = (ufbxw_anim_stack*)calloc(in_scene->anim_stacks.count, sizeof(ufbxw_anim_stack));
 	ufbxw_anim_layer *anim_layer_ids = (ufbxw_anim_layer*)calloc(in_scene->anim_layers.count, sizeof(ufbxw_anim_layer));
+	ufbxw_skin_deformer *skin_deformer_ids = (ufbxw_skin_deformer*)calloc(in_scene->skin_deformers.count, sizeof(ufbxw_skin_deformer));
+	ufbxw_blend_deformer *blend_deformer_ids = (ufbxw_blend_deformer*)calloc(in_scene->blend_deformers.count, sizeof(ufbxw_blend_deformer));
+	ufbxw_cache_deformer *cache_deformer_ids = (ufbxw_cache_deformer*)calloc(in_scene->cache_deformers.count, sizeof(ufbxw_cache_deformer));
 	ufbxw_id *element_ids = (ufbxw_id*)calloc(in_scene->elements.count, sizeof(ufbxw_id));
+	bool *node_has_pose = (bool*)calloc(in_scene->nodes.count, sizeof(bool));
 
 	for (size_t mesh_ix = 0; mesh_ix < in_scene->meshes.count; mesh_ix++) {
 		ufbx_mesh *in_mesh = in_scene->meshes.data[mesh_ix];
@@ -284,6 +437,13 @@ int main(int argc, char **argv)
 
 		ufbxw_mesh_set_vertices(out_scene, out_mesh, vertices);
 		ufbxw_mesh_set_polygons(out_scene, out_mesh, vertex_indices, face_offsets);
+
+		if (in_mesh->materials.count == 1) {
+			ufbxw_mesh_set_single_material(out_scene, out_mesh, 0);
+		} else if (in_mesh->materials.count > 1) {
+			ufbxw_int_buffer face_material = to_ufbxw_uint_buffer(out_scene, in_mesh->face_material);
+			ufbxw_mesh_set_face_material(out_scene, out_mesh, face_material);
+		}
 
 		if (in_mesh->num_edges > 0) {
 			ufbxw_int_buffer edges = ufbxw_create_int_buffer(out_scene, in_mesh->num_edges);
@@ -332,6 +492,70 @@ int main(int argc, char **argv)
 		}
 	}
 
+	for (size_t texture_ix = 0; texture_ix < in_scene->textures.count; texture_ix++) {
+		ufbx_texture *in_texture = in_scene->textures.data[texture_ix];
+
+		ufbxw_texture out_texture = ufbxw_create_texture(out_scene, UFBXW_TEXTURE_FILE);
+		element_ids[in_texture->element_id] = out_texture.id;
+
+		ufbxw_texture_set_filename(out_scene, out_texture, in_texture->absolute_filename.data);
+		ufbxw_texture_set_relative_filename(out_scene, out_texture, in_texture->relative_filename.data);
+
+		if (in_texture->content.size > 0) {
+			ufbxw_byte_buffer buffer = ufbxw_view_byte_array(out_scene, in_texture->content.data, in_texture->content.size);
+			ufbxw_texture_set_content(out_scene, out_texture, buffer);
+		}
+	}
+
+	for (size_t material_ix = 0; material_ix < in_scene->materials.count; material_ix++) {
+		ufbx_material *in_material = in_scene->materials.data[material_ix];
+
+		ufbxw_material_type material_type = UFBXW_MATERIAL_CUSTOM;
+		switch (in_material->shader_type) {
+		case UFBX_SHADER_FBX_LAMBERT:
+			material_type = UFBXW_MATERIAL_FBX_LAMBERT;
+			break;
+		case UFBX_SHADER_FBX_PHONG:
+			material_type = UFBXW_MATERIAL_FBX_PHONG;
+			break;
+		}
+
+		ufbxw_material out_material = ufbxw_create_material(out_scene, material_type);
+		ufbxw_set_name(out_scene, out_material.id, in_material->name.data);
+		element_ids[in_material->element_id] = out_material.id;
+
+		copy_props(out_scene, out_material.id, &in_material->props);
+
+		for (size_t i = 0; i < in_material->textures.count; i++) {
+			ufbx_material_texture in_texture = in_material->textures.data[i];
+
+			ufbxw_id texture_id = element_ids[in_texture.texture->element_id];
+			if (texture_id == 0) continue;
+
+			ufbxw_texture out_texture = { texture_id };
+			ufbxw_material_set_texture(out_scene, out_material, in_texture.material_prop.data, out_texture);
+		}
+
+		if (in_material->shader && in_material->shader->bindings.count > 0) {
+			ufbx_shader *in_shader = in_material->shader;
+			ufbx_shader_binding* in_binding = in_shader->bindings.data[0];
+
+			ufbxw_implementation out_implementation = ufbxw_create_implementation(out_scene);
+			ufbxw_binding_table out_binding = ufbxw_create_binding_table(out_scene);
+
+			ufbx_string render_api = ufbx_find_string(&in_shader->props, "RenderAPI", ufbx_empty_string);
+			ufbxw_implementation_set_render_api(out_scene, out_implementation, render_api.data);
+
+			ufbxw_implementation_set_binding_table(out_scene, out_implementation, out_binding);
+			ufbxw_material_set_implementation(out_scene, out_material, out_implementation);
+
+			for (size_t entry_ix = 0; entry_ix < in_binding->prop_bindings.count; entry_ix++) {
+				ufbx_shader_prop_binding binding = in_binding->prop_bindings.data[entry_ix];
+				ufbxw_binding_table_add_entry(out_scene, out_binding, binding.material_prop.data, binding.shader_prop.data);
+			}
+		}
+	}
+
 	for (size_t light_ix = 0; light_ix < in_scene->lights.count; light_ix++) {
 		ufbx_light *in_light = in_scene->lights.data[light_ix];
 		ufbxw_light out_light = ufbxw_create_light(out_scene, ufbxw_null_node);
@@ -343,6 +567,12 @@ int main(int argc, char **argv)
 		ufbxw_light_set_decay(out_scene, out_light, (ufbxw_light_decay)in_light->decay);
 		ufbxw_light_set_inner_angle(out_scene, out_light, in_light->inner_angle);
 		ufbxw_light_set_outer_angle(out_scene, out_light, in_light->outer_angle);
+	}
+
+	for (size_t bone_ix = 0; bone_ix < in_scene->bones.count; bone_ix++) {
+		ufbx_bone *in_bone = in_scene->bones.data[bone_ix];
+		ufbxw_bone out_bone = ufbxw_create_bone(out_scene, ufbxw_null_node);
+		element_ids[in_bone->element_id] = out_bone.id;
 	}
 
 	// Create nodes in the original element order
@@ -361,7 +591,7 @@ int main(int argc, char **argv)
 
 		ufbxw_set_name(out_scene, out_node.id, in_node->name.data);
 
-		ufbxw_node_set_inherit_type(out_scene, out_node, (ufbxw_inherit_type)in_node->inherit_mode);
+		ufbxw_node_set_inherit_type(out_scene, out_node, to_ufbxw_inherit_type(in_node->inherit_mode));
 
 		if (advanced_transform) {
 			ufbxw_node_set_translation(out_scene, out_node, to_ufbxw_vec3(ufbx_find_vec3(&in_node->props, "Lcl Translation", ufbx_zero_vec3)));
@@ -393,6 +623,11 @@ int main(int argc, char **argv)
 			}
 		}
 
+		ufbx_string uv_set = ufbx_find_string(&in_node->props, "currentUVSet", ufbx_empty_string);
+		if (uv_set.length > 0) {
+			ufbxw_add_string(out_scene, out_node.id, "currentUVSet", UFBXW_PROP_TYPE_STRING, uv_set.data);
+		}
+
 		if (in_node->mesh) {
 			ufbxw_mesh_add_instance(out_scene, mesh_ids[in_node->mesh->typed_id], out_node);
 		} else if (in_node->attrib) {
@@ -400,6 +635,14 @@ int main(int argc, char **argv)
 			if (attrib_id != 0) {
 				ufbxw_node_set_attribute(out_scene, out_node, attrib_id);
 			}
+		}
+
+		for (size_t i = 0; i < in_node->materials.count; i++) {
+			ufbxw_id material_id = element_ids[in_node->materials.data[i]->element_id];
+			if (material_id == 0) continue;
+
+			ufbxw_material out_material = { material_id };
+			ufbxw_node_set_material(out_scene, out_node, i, out_material);
 		}
 	}
 
@@ -415,6 +658,179 @@ int main(int argc, char **argv)
 		}
 	}
 
+	// Skinning 
+	for (size_t skin_ix = 0; skin_ix < in_scene->skin_deformers.count; skin_ix++) {
+		ufbx_skin_deformer *in_skin = in_scene->skin_deformers.data[skin_ix];
+		ufbxw_skin_deformer out_skin = ufbxw_create_skin_deformer(out_scene, ufbxw_null_mesh);
+
+		skin_deformer_ids[skin_ix] = out_skin;
+		element_ids[in_skin->element_id] = out_skin.id;
+
+		ufbxw_skin_deformer_set_skinning_type(out_scene, out_skin, to_ufbxw_skinning_type(in_skin->skinning_method));
+
+		if (in_skin->dq_vertices.count > 0) {
+			ufbxw_int_buffer dq_indices = to_ufbxw_uint_buffer(out_scene, in_skin->dq_vertices);
+			ufbxw_real_buffer dq_weights = to_ufbxw_real_buffer(out_scene, in_skin->dq_weights);
+			ufbxw_skin_deformer_set_dual_quaternion_weights(out_scene, out_skin, dq_indices, dq_weights);
+		}
+
+		for (size_t cluster_ix = 0; cluster_ix < in_skin->clusters.count; cluster_ix++) {
+			ufbx_skin_cluster* in_cluster = in_skin->clusters.data[cluster_ix];
+
+			ufbxw_node out_node = node_ids[in_cluster->bone_node->typed_id];
+			ufbxw_skin_cluster out_cluster = ufbxw_create_skin_cluster(out_scene, out_skin, out_node);
+
+			ufbxw_int_buffer indices = to_ufbxw_uint_buffer(out_scene, in_cluster->vertices);
+			ufbxw_real_buffer weights = to_ufbxw_real_buffer(out_scene, in_cluster->weights);
+
+			ufbxw_skin_cluster_set_weights(out_scene, out_cluster, indices, weights);
+
+			ufbxw_skin_cluster_set_transform(out_scene, out_cluster, to_ufbxw_matrix(in_cluster->mesh_node_to_bone));
+			ufbxw_skin_cluster_set_link_transform(out_scene, out_cluster, to_ufbxw_matrix(in_cluster->bind_to_world));
+
+			node_has_pose[in_cluster->bone_node->typed_id] = true;
+		}
+	}
+
+	// Blend deformers
+	for (size_t blend_ix = 0; blend_ix < in_scene->blend_deformers.count; blend_ix++) {
+		ufbx_blend_deformer *in_blend = in_scene->blend_deformers.data[blend_ix];
+		ufbxw_blend_deformer out_blend = ufbxw_create_blend_deformer(out_scene, ufbxw_null_mesh);
+		element_ids[in_blend->element_id] = out_blend.id;
+		blend_deformer_ids[blend_ix] = out_blend;
+
+		for (size_t channel_ix = 0; channel_ix < in_blend->channels.count; channel_ix++) {
+			ufbx_blend_channel *in_channel = in_blend->channels.data[channel_ix];
+			ufbxw_blend_channel out_channel = ufbxw_create_blend_channel(out_scene, out_blend);
+			element_ids[in_channel->element_id] = out_channel.id;
+
+			ufbxw_blend_channel_set_weight(out_scene, out_channel, in_channel->weight * 100.0);
+
+			for (size_t shape_ix = 0; shape_ix < in_channel->keyframes.count; shape_ix++) {
+				ufbx_blend_keyframe in_keyframe = in_channel->keyframes.data[shape_ix];
+				ufbx_blend_shape *in_shape = in_keyframe.shape;
+				ufbxw_blend_shape out_shape = ufbxw_create_blend_shape(out_scene);
+				element_ids[in_shape->element_id] = out_shape.id;
+
+				ufbxw_int_buffer indices = to_ufbxw_uint_buffer(out_scene, in_shape->offset_vertices);
+				ufbxw_vec3_buffer offsets = to_ufbxw_vec3_buffer(out_scene, in_shape->position_offsets);
+				ufbxw_real target_weight = in_keyframe.target_weight * 100.0;
+
+				ufbxw_blend_shape_set_offsets(out_scene, out_shape, indices, offsets);
+				ufbxw_blend_channel_add_shape(out_scene, out_channel, out_shape, target_weight);
+			}
+		}
+	}
+
+	// Cache files
+	for (size_t cache_ix = 0; cache_ix < in_scene->cache_files.count; cache_ix++) {
+		ufbx_cache_file *in_cache = in_scene->cache_files.data[cache_ix];
+		ufbxw_cache_file out_cache = ufbxw_create_cache_file(out_scene);
+		element_ids[in_cache->element_id] = out_cache.id;
+
+		ufbxw_set_name(out_scene, out_cache.id, in_cache->name.data);
+		ufbxw_cache_file_set_format(out_scene, out_cache, (ufbxw_cache_file_format)(int32_t)in_cache->format);
+		ufbxw_cache_file_set_filename(out_scene, out_cache, in_cache->absolute_filename.data);
+		ufbxw_cache_file_set_relative_filename(out_scene, out_cache, in_cache->relative_filename.data);
+	}
+
+	// Cache deformers
+	for (size_t cache_ix = 0; cache_ix < in_scene->cache_deformers.count; cache_ix++) {
+		ufbx_cache_deformer *in_cache = in_scene->cache_deformers.data[cache_ix];
+		if (!in_cache->file) continue;
+
+		ufbxw_cache_deformer out_cache = ufbxw_create_cache_deformer(out_scene, ufbxw_null_mesh);
+		element_ids[in_cache->element_id] = out_cache.id;
+		cache_deformer_ids[in_cache->typed_id] = out_cache;
+
+		ufbxw_cache_file cache_file = { element_ids[in_cache->file->element_id] };
+		ufbxw_cache_deformer_set_channel_name(out_scene, out_cache, in_cache->channel.data);
+		ufbxw_cache_deformer_set_cache_file(out_scene, out_cache, cache_file);
+	}
+
+	// Create poses for non-bone nodes
+	{
+		ufbxw_bind_pose out_pose = { 0 };
+		for (size_t pose_ix = 0; pose_ix < in_scene->poses.count; pose_ix++) {
+			ufbx_pose *in_pose = in_scene->poses.data[pose_ix];
+			if (!in_pose->is_bind_pose) continue;
+
+			for (size_t bone_ix = 0; bone_ix < in_pose->bone_poses.count; bone_ix++) {
+				ufbx_bone_pose pose = in_pose->bone_poses.data[bone_ix];
+				ufbx_node *in_node = pose.bone_node;
+				if (!in_node) continue;
+				if (node_has_pose[in_node->typed_id]) continue;
+
+				if (out_pose.id == 0) {
+					out_pose = ufbxw_create_bind_pose(out_scene);
+					ufbxw_set_name(out_scene, out_pose.id, "RoundtripNonSkinPoses");
+				}
+
+				ufbxw_node out_node = node_ids[in_node->typed_id];
+				ufbxw_bind_pose_add_node(out_scene, out_pose, out_node, to_ufbxw_matrix(pose.bone_to_world));
+
+				node_has_pose[in_node->typed_id] = true;
+			}
+		}
+	}
+
+	for (size_t mesh_ix = 0; mesh_ix < in_scene->meshes.count; mesh_ix++) {
+		ufbx_mesh* in_mesh = in_scene->meshes.data[mesh_ix];
+		ufbxw_mesh out_mesh = mesh_ids[in_mesh->typed_id];
+
+		for (size_t skin_ix = 0; skin_ix < in_mesh->skin_deformers.count; skin_ix++) {
+			ufbx_skin_deformer* in_skin = in_mesh->skin_deformers.data[skin_ix];
+			ufbxw_skin_deformer out_skin = skin_deformer_ids[in_skin->typed_id];
+
+			ufbxw_skin_deformer_add_mesh(out_scene, out_skin, out_mesh);
+		}
+
+		for (size_t blend_ix = 0; blend_ix < in_mesh->blend_deformers.count; blend_ix++) {
+			ufbx_blend_deformer* in_blend = in_mesh->blend_deformers.data[blend_ix];
+			ufbxw_blend_deformer out_blend = blend_deformer_ids[in_blend->typed_id];
+
+			ufbxw_blend_deformer_add_mesh(out_scene, out_blend, out_mesh);
+		}
+
+		for (size_t cache_ix = 0; cache_ix < in_mesh->cache_deformers.count; cache_ix++) {
+			ufbx_cache_deformer* in_cache = in_mesh->cache_deformers.data[cache_ix];
+			ufbxw_cache_deformer out_cache = cache_deformer_ids[in_cache->typed_id];
+
+			ufbxw_cache_deformer_add_mesh(out_scene, out_cache, out_mesh);
+		}
+	}
+
+	for (size_t sel_ix = 0; sel_ix < in_scene->selection_sets.count; sel_ix++) {
+		ufbx_selection_set *in_set = in_scene->selection_sets.data[sel_ix];
+		ufbxw_selection_set out_set = ufbxw_create_selection_set(out_scene);
+
+		ufbxw_set_name(out_scene, out_set.id, in_set->name.data);
+		element_ids[in_set->element_id] = out_set.id;
+
+		for (size_t node_ix = 0; node_ix < in_set->nodes.count; node_ix++) {
+			ufbx_selection_node *in_node = in_set->nodes.data[node_ix];
+			ufbxw_selection_node out_node = ufbxw_create_selection_node(out_scene, out_set);
+
+			ufbxw_set_name(out_scene, out_node.id, in_node->name.data);
+
+			ufbx_node *in_target = in_node->target_node;
+			if (in_target) {
+				ufbxw_selection_node_set_node(out_scene, out_node, node_ids[in_target->typed_id]);
+			}
+
+			ufbxw_selection_node_set_include_node(out_scene, out_node, in_node->include_node);
+			if (in_node->vertices.count > 0) {
+				ufbxw_selection_node_set_vertices(out_scene, out_node, to_ufbxw_uint_buffer(out_scene, in_node->vertices));
+			}
+			if (in_node->edges.count > 0) {
+				ufbxw_selection_node_set_edges(out_scene, out_node, to_ufbxw_uint_buffer(out_scene, in_node->edges));
+			}
+			if (in_node->faces.count > 0) {
+				ufbxw_selection_node_set_polygons(out_scene, out_node, to_ufbxw_uint_buffer(out_scene, in_node->faces));
+			}
+		}
+	}
+
 	for (size_t layer_ix = 0; layer_ix < in_scene->anim_layers.count; layer_ix++) {
 		ufbx_anim_layer *in_layer = in_scene->anim_layers.data[layer_ix];
 		ufbxw_anim_layer out_layer = ufbxw_create_anim_layer(out_scene, ufbxw_null_anim_stack);
@@ -424,7 +840,7 @@ int main(int argc, char **argv)
 		for (size_t prop_ix = 0; prop_ix < in_layer->anim_props.count; prop_ix++) {
 			ufbx_anim_prop *in_prop = &in_layer->anim_props.data[prop_ix];
 
-			ufbxw_id dst_id = element_ids[in_prop->element->element_id];
+			const ufbxw_id dst_id = element_ids[in_prop->element->element_id];
 			if (!dst_id) {
 				fprintf(stderr, "Ignoring animation on missing %s '%s'\n",
 					ufbxwt_ufbx_element_type_names[in_prop->element->type],
@@ -432,7 +848,17 @@ int main(int argc, char **argv)
 				continue;
 			}
 
-			ufbxw_anim_prop out_anim = ufbxw_animate_prop(out_scene, dst_id, in_prop->prop_name.data, out_layer);
+			ufbxw_id anim_id = dst_id;
+			const char *anim_prop = in_prop->prop_name.data;
+
+			// Retarget legacy blend channel properties into DeformPercent
+			ufbx_element *deform_element = find_deform_percent_element(in_prop->element, anim_prop);
+			if (deform_element) {
+				anim_id = element_ids[deform_element->element_id];
+				anim_prop = "DeformPercent";
+			}
+
+			ufbxw_anim_prop out_anim = ufbxw_animate_prop(out_scene, anim_id, anim_prop, out_layer);
 
 			ufbx_anim_value *in_value = in_prop->anim_value;
 			for (size_t curve_ix = 0; curve_ix < 3; curve_ix++) {
@@ -443,6 +869,12 @@ int main(int argc, char **argv)
 				ufbxw_anim_set_default_value(out_scene, out_anim, curve_ix, in_value->default_value.v[curve_ix]);
 
 				if (in_curve) {
+					ufbxw_anim_curve_set_pre_extrapolation(out_scene, out_curve, (ufbxw_extrapolation_type)in_curve->pre_extrapolation.mode);
+					ufbxw_anim_curve_set_pre_extrapolation_repeat_count(out_scene, out_curve, in_curve->pre_extrapolation.repeat_count);
+
+					ufbxw_anim_curve_set_post_extrapolation(out_scene, out_curve, (ufbxw_extrapolation_type)in_curve->post_extrapolation.mode);
+					ufbxw_anim_curve_set_post_extrapolation_repeat_count(out_scene, out_curve, in_curve->post_extrapolation.repeat_count);
+
 					for (size_t key_ix = 0; key_ix < in_curve->keyframes.count; key_ix++) {
 						ufbx_keyframe in_key = in_curve->keyframes.data[key_ix];
 						ufbxw_keyframe_real out_key = { 0 };
@@ -452,7 +884,7 @@ int main(int argc, char **argv)
 						out_key.value = in_key.value;
 
 						ufbx_keyframe *prev_key = key_ix > 0 ? &in_curve->keyframes.data[key_ix - 1] : NULL;
-						ufbx_keyframe *next_key = key_ix > 0 ? &in_curve->keyframes.data[key_ix + 1] : NULL;
+						ufbx_keyframe *next_key = key_ix + 1 < in_curve->keyframes.count ? &in_curve->keyframes.data[key_ix + 1] : NULL;
 
 						switch (in_key.interpolation) {
 						case UFBX_INTERPOLATION_CONSTANT_PREV:
@@ -467,12 +899,18 @@ int main(int argc, char **argv)
 						case UFBX_INTERPOLATION_CUBIC:
 							out_key.flags = UFBXW_KEYFRAME_CUBIC_USER_BROKEN;
 							if (prev_key) {
-								out_key.slope_left = in_key.left.dy;
+								out_key.slope_left = in_key.left.dy / in_key.left.dx;
 								out_key.weight_left = in_key.left.dx / (in_key.time - prev_key->time);
+								if (fabsf(out_key.weight_left - 0.333333f) > 1e-6f) {
+									out_key.flags |= UFBXW_KEYFRAME_WEIGHTED_LEFT;
+								}
 							}
 							if (next_key) {
-								out_key.slope_right = in_key.left.dy;
+								out_key.slope_right = in_key.right.dy / in_key.right.dx;
 								out_key.weight_right = in_key.right.dx / (next_key->time - in_key.time);
+								if (fabsf(out_key.weight_right - 0.333333f) > 1e-6f) {
+									out_key.flags |= UFBXW_KEYFRAME_WEIGHTED_RIGHT;
+								}
 							}
 							break;
 						}
@@ -482,7 +920,6 @@ int main(int argc, char **argv)
 				}
 			}
 		}
-
 	}
 
 	for (size_t stack_ix = 0; stack_ix < in_scene->anim_stacks.count; stack_ix++) {
@@ -539,7 +976,8 @@ int main(int argc, char **argv)
 
 	if (compare) {
 		compare_fbx_opts compare_opts = { 0 };
-		compare_opts.approx_epsilon = 1e-4;
+		compare_opts.approx_epsilon = 1e-3;
+		compare_opts.compare_anim = true;
 
 		if (!compare_fbx(output_path, input_path, &compare_opts)) {
 			result = 1;
