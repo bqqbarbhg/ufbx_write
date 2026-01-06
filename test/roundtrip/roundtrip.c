@@ -911,8 +911,8 @@ int main(int argc, char **argv)
 
 	if (compare) {
 		compare_fbx_opts compare_opts = { 0 };
-		compare_opts.approx_epsilon = 1e-12;
-		compare_opts.compare_anim = false;
+		compare_opts.approx_epsilon = 1e-3;
+		compare_opts.compare_anim = true;
 
 		if (!compare_fbx(output_path, input_path, &compare_opts)) {
 			result = 1;
