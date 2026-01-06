@@ -10913,7 +10913,7 @@ static uint32_t ufbxwi_pack_weight(float weight)
 {
 	if (!(weight >= 0.0f)) weight = 0.0f;
 	if (weight > 1.0f) weight = 1.0f;
-	return (uint32_t)(weight * 10000.0f);
+	return (uint32_t)(weight * 10000.0f + 0.5f);
 }
 
 typedef enum {
