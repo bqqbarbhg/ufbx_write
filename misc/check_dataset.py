@@ -10,8 +10,9 @@ import itertools
 import datetime
 import asyncio
 import asyncio.subprocess
+import shutil
 
-LATEST_SUPPORTED_DATE = "2025-06-10"
+LATEST_SUPPORTED_DATE = "2026-01-07"
 
 class TestModel(NamedTuple):
     fbx_path: str
@@ -234,9 +235,18 @@ if __name__ == "__main__":
 
         case_run_count += 1
 
+        for extra in case.extra_files:
+            rel_extra = fmt_rel(extra, argv.root)
+            result_extra = os.path.join(argv.result, rel_extra)
+
+            os.makedirs(os.path.dirname(result_extra), exist_ok=True)
+            shutil.copyfile(extra, result_extra)
+
         for model in case.models:
 
             extra = []
+
+            rel_path = fmt_rel(model.fbx_path, argv.root)
 
             name = fmt_rel(model.fbx_path, case.root)
 
@@ -249,8 +259,6 @@ if __name__ == "__main__":
             log(f"    .fbx url: {fmt_url(model.fbx_path, case.root)}")
 
             log()
-
-            rel_path = fmt_rel(model.fbx_path, argv.root)
 
             for opts in iter_options(case.options):
                 test_count += 1
