@@ -122,3 +122,11 @@ Round animation keyframe weights and skip unnecessary weights
 ```
 4430/4454 files passed (406/410 test cases)
 ```
+
+#### Minor roundtrip fixes
+
+Allow specifying additional position scale and pass-through UV set
+
+```
+4440/4454 files passed (408/410 test cases)
+```
