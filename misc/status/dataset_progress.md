@@ -130,3 +130,11 @@ Allow specifying additional position scale and pass-through UV set
 ```
 4440/4454 files passed (408/410 test cases)
 ```
+
+#### Selection sets
+
+Implement selection sets and nodes
+
+```
+4442/4454 files passed (409/410 test cases)
+```
