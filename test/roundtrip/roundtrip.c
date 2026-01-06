@@ -622,6 +622,11 @@ int main(int argc, char **argv)
 			}
 		}
 
+		ufbx_string uv_set = ufbx_find_string(&in_node->props, "currentUVSet", ufbx_empty_string);
+		if (uv_set.length > 0) {
+			ufbxw_add_string(out_scene, out_node.id, "currentUVSet", UFBXW_PROP_TYPE_STRING, uv_set.data);
+		}
+
 		if (in_node->mesh) {
 			ufbxw_mesh_add_instance(out_scene, mesh_ids[in_node->mesh->typed_id], out_node);
 		} else if (in_node->attrib) {

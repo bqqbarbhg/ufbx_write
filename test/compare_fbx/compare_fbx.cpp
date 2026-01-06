@@ -424,6 +424,7 @@ static void compare_mesh(ufbx_mesh *src_mesh, ufbx_mesh *ref_mesh)
 
 	check_vertex_attrib(src_mesh, ref_mesh, vertex_normal);
 	check_vertex_attrib(src_mesh, ref_mesh, vertex_crease);
+	check_vertex_attrib(src_mesh, ref_mesh, vertex_uv);
 
 	check_equal(src_mesh, ref_mesh, uv_sets.count);
 	for (size_t set_ix = 0; set_ix < min(src_mesh->uv_sets.count, ref_mesh->uv_sets.count); set_ix++) {
