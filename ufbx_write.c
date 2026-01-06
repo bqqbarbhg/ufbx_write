@@ -13905,9 +13905,12 @@ ufbxw_abi void ufbxw_selection_set_add_node(ufbxw_scene *scene, ufbxw_selection_
 	ufbxwi_connect(scene, UFBXW_CONNECTION_SELECTION_SET_NODE, node.id, set.id, UFBXWI_CONNECT_FLAG_DISCONNECT_SRC);
 }
 
-ufbxw_abi ufbxw_selection_node ufbxw_create_selection_node(ufbxw_scene *scene)
+ufbxw_abi ufbxw_selection_node ufbxw_create_selection_node(ufbxw_scene *scene, ufbxw_selection_set set)
 {
 	ufbxw_selection_node selection = { ufbxw_create_element(scene, UFBXW_ELEMENT_SELECTION_NODE) };
+	if (set.id) {
+		ufbxwi_connect(scene, UFBXW_CONNECTION_SELECTION_SET_NODE, selection.id, set.id, 0);
+	}
 	return selection;
 }
 

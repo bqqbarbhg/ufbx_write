@@ -800,6 +800,37 @@ int main(int argc, char **argv)
 		}
 	}
 
+	for (size_t sel_ix = 0; sel_ix < in_scene->selection_sets.count; sel_ix++) {
+		ufbx_selection_set *in_set = in_scene->selection_sets.data[sel_ix];
+		ufbxw_selection_set out_set = ufbxw_create_selection_set(out_scene);
+
+		ufbxw_set_name(out_scene, out_set.id, in_set->name.data);
+		element_ids[in_set->element_id] = out_set.id;
+
+		for (size_t node_ix = 0; node_ix < in_set->nodes.count; node_ix++) {
+			ufbx_selection_node *in_node = in_set->nodes.data[node_ix];
+			ufbxw_selection_node out_node = ufbxw_create_selection_node(out_scene, out_set);
+
+			ufbxw_set_name(out_scene, out_node.id, in_node->name.data);
+
+			ufbx_node *in_target = in_node->target_node;
+			if (in_target) {
+				ufbxw_selection_node_set_node(out_scene, out_node, node_ids[in_target->typed_id]);
+			}
+
+			ufbxw_selection_node_set_include_node(out_scene, out_node, in_node->include_node);
+			if (in_node->vertices.count > 0) {
+				ufbxw_selection_node_set_vertices(out_scene, out_node, to_ufbxw_uint_buffer(out_scene, in_node->vertices));
+			}
+			if (in_node->edges.count > 0) {
+				ufbxw_selection_node_set_edges(out_scene, out_node, to_ufbxw_uint_buffer(out_scene, in_node->edges));
+			}
+			if (in_node->faces.count > 0) {
+				ufbxw_selection_node_set_polygons(out_scene, out_node, to_ufbxw_uint_buffer(out_scene, in_node->faces));
+			}
+		}
+	}
+
 	for (size_t layer_ix = 0; layer_ix < in_scene->anim_layers.count; layer_ix++) {
 		ufbx_anim_layer *in_layer = in_scene->anim_layers.data[layer_ix];
 		ufbxw_anim_layer out_layer = ufbxw_create_anim_layer(out_scene, ufbxw_null_anim_stack);
