@@ -674,6 +674,8 @@ int main(int argc, char **argv)
 			ufbxw_blend_channel out_channel = ufbxw_create_blend_channel(out_scene, out_blend);
 			element_ids[in_channel->element_id] = out_channel.id;
 
+			ufbxw_blend_channel_set_weight(out_scene, out_channel, in_channel->weight * 100.0);
+
 			for (size_t shape_ix = 0; shape_ix < in_channel->keyframes.count; shape_ix++) {
 				ufbx_blend_keyframe in_keyframe = in_channel->keyframes.data[shape_ix];
 				ufbx_blend_shape *in_shape = in_keyframe.shape;
