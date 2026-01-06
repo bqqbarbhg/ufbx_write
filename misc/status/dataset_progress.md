@@ -90,3 +90,11 @@ Load base model with suffix in roundtrip
 ```
 4244/4454 files passed (393/410 test cases)
 ```
+
+#### Initial blend deformer weight
+
+Fix initial non-animated blend deformer weight
+
+```
+4258/4454 files passed (396/410 test cases)
+```
