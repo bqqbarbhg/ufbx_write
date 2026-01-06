@@ -1466,9 +1466,12 @@ static ufbxw_string ufbxwi_vformat(ufbxwi_allocator *ator, ufbxwi_byte_list *buf
 			}
 		} else {
 			if (buf->count == buf->capacity) {
-				ufbxwi_check(ufbxwi_list_push_uninit(ator, buf, char), ufbxwi_empty_string);
+				char *dst = ufbxwi_list_push_uninit(ator, buf, char);
+				ufbxwi_check(dst, ufbxwi_empty_string, ufbxwi_empty_string);
+				*dst = c;
+			} else {
+				buf->data[buf->count++] = c;
 			}
-			buf->data[buf->count++] = c;
 		}
 	}
 
@@ -7734,7 +7737,7 @@ static ufbxw_anim_prop ufbxwi_animate_prop(ufbxw_scene *scene, ufbxw_id id, ufbx
 	// For single channel propertes, use the property name
 	if (curve_count == 1) {
 		ufbxw_string prop_name = scene->string_pool.tokens.data[prop];
-		ufbxw_string name = ufbxwi_format(&scene->ator, &scene->tmp_list, "d|%s", prop_name.data);
+		ufbxw_string name = ufbxwi_format(&scene->ator, &scene->tmp_list, "d|%S", prop_name);
 		first_curve_prop = ufbxwi_intern_token(&scene->string_pool, name.data, name.length);
 	}
 
