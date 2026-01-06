@@ -114,3 +114,11 @@ Roundtrip skinning mode and support blended dual quaternion weights
 ```
 4410/4454 files passed (404/410 test cases)
 ```
+
+#### Animation curve weights
+
+Round animation keyframe weights and skip unnecessary weights
+
+```
+4430/4454 files passed (406/410 test cases)
+```
