@@ -106,3 +106,11 @@ Implement vertex cache deformers
 ```
 4268/4454 files passed (398/410 test cases)
 ```
+
+#### Skinning mode
+
+Roundtrip skinning mode and support blended dual quaternion weights
+
+```
+4410/4454 files passed (404/410 test cases)
+```
