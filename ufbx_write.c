@@ -8340,6 +8340,8 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 	size_t real_count = ufbxw_get_elements(scene, elements.data, elements.count);
 	ufbxw_assert(real_count == element_count);
 
+	qsort(elements.data, elements.count, sizeof(ufbxw_id), &ufbxwi_cmp_id);
+
 	ufbxwi_id_span elements_by_type[UFBXW_ELEMENT_TYPE_COUNT] = { 0 };
 	for (size_t begin = 0; begin < elements.count; ) {
 		ufbxw_element_type type = ufbxwi_id_type(elements.data[begin]);
