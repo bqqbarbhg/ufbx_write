@@ -416,6 +416,7 @@ int main(int argc, char **argv)
 	ufbxw_blend_deformer *blend_deformer_ids = (ufbxw_blend_deformer*)calloc(in_scene->blend_deformers.count, sizeof(ufbxw_blend_deformer));
 	ufbxw_cache_deformer *cache_deformer_ids = (ufbxw_cache_deformer*)calloc(in_scene->cache_deformers.count, sizeof(ufbxw_cache_deformer));
 	ufbxw_id *element_ids = (ufbxw_id*)calloc(in_scene->elements.count, sizeof(ufbxw_id));
+	bool *node_has_pose = (bool*)calloc(in_scene->nodes.count, sizeof(bool));
 
 	for (size_t mesh_ix = 0; mesh_ix < in_scene->meshes.count; mesh_ix++) {
 		ufbx_mesh *in_mesh = in_scene->meshes.data[mesh_ix];
@@ -686,6 +687,8 @@ int main(int argc, char **argv)
 
 			ufbxw_skin_cluster_set_transform(out_scene, out_cluster, to_ufbxw_matrix(in_cluster->mesh_node_to_bone));
 			ufbxw_skin_cluster_set_link_transform(out_scene, out_cluster, to_ufbxw_matrix(in_cluster->bind_to_world));
+
+			node_has_pose[in_cluster->bone_node->typed_id] = true;
 		}
 	}
 
@@ -743,6 +746,32 @@ int main(int argc, char **argv)
 		ufbxw_cache_file cache_file = { element_ids[in_cache->file->element_id] };
 		ufbxw_cache_deformer_set_channel_name(out_scene, out_cache, in_cache->channel.data);
 		ufbxw_cache_deformer_set_cache_file(out_scene, out_cache, cache_file);
+	}
+
+	// Create poses for non-bone nodes
+	{
+		ufbxw_bind_pose out_pose = { 0 };
+		for (size_t pose_ix = 0; pose_ix < in_scene->poses.count; pose_ix++) {
+			ufbx_pose *in_pose = in_scene->poses.data[pose_ix];
+			if (!in_pose->is_bind_pose) continue;
+
+			for (size_t bone_ix = 0; bone_ix < in_pose->bone_poses.count; bone_ix++) {
+				ufbx_bone_pose pose = in_pose->bone_poses.data[bone_ix];
+				ufbx_node *in_node = pose.bone_node;
+				if (!in_node) continue;
+				if (node_has_pose[in_node->typed_id]) continue;
+
+				if (out_pose.id == 0) {
+					out_pose = ufbxw_create_bind_pose(out_scene);
+					ufbxw_set_name(out_scene, out_pose.id, "RoundtripNonSkinPoses");
+				}
+
+				ufbxw_node out_node = node_ids[in_node->typed_id];
+				ufbxw_bind_pose_add_node(out_scene, out_pose, out_node, to_ufbxw_matrix(pose.bone_to_world));
+
+				node_has_pose[in_node->typed_id] = true;
+			}
+		}
 	}
 
 	for (size_t mesh_ix = 0; mesh_ix < in_scene->meshes.count; mesh_ix++) {
