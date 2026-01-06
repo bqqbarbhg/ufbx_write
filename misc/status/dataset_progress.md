@@ -98,3 +98,11 @@ Fix initial non-animated blend deformer weight
 ```
 4258/4454 files passed (396/410 test cases)
 ```
+
+#### Cache deformers
+
+Implement vertex cache deformers
+
+```
+4268/4454 files passed (398/410 test cases)
+```
