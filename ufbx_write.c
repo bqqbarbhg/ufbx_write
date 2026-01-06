@@ -432,6 +432,7 @@
 	#define UFBXWI_FEATURE_ERROR 1
 	#define UFBXWI_FEATURE_ALLOCATOR 1
 	#define UFBXWI_FEATURE_LIST 1
+	#define UFBXWI_FEATURE_FORMAT 1
 	#define UFBXWI_FEATURE_DEFLATE 1
 	#define UFBXWI_FEATURE_TASK_QUEUE 1
 	#define UFBXWI_FEATURE_STRING_POOL 1
@@ -1434,6 +1435,61 @@ UFBXWI_LIST_TYPE(ufbxwi_ktime_list, ufbxw_ktime);
 UFBXWI_LIST_TYPE(ufbxwi_real_list, ufbxw_real);
 UFBXWI_LIST_TYPE(ufbxwi_float_list, float);
 UFBXWI_LIST_TYPE(ufbxwi_byte_list, char);
+
+#endif
+
+#ifdef UFBXWI_FEATURE_FORMAT
+
+static ufbxw_string ufbxwi_vformat(ufbxwi_allocator *ator, ufbxwi_byte_list *buf, const char *fmt, va_list args)
+{
+	buf->count = 0;
+
+	for (const char *f = fmt; *f; f++) {
+		char c = *f;
+		if (c == '%') {
+			c = *++f;
+			switch (c) {
+			case 's': {
+				const char *str = va_arg(args, const char *);
+				size_t len = strlen(str);
+				ufbxwi_check(ufbxwi_list_push_copy_n(ator, buf, char, len, str));
+			} break;
+			case 'S': {
+				ufbxw_string str = va_arg(args, ufbxw_string);
+				ufbxwi_check(ufbxwi_list_push_copy_n(ator, buf, char, str.length, str.data));
+			} break;
+			case '0': {
+				char *dst = ufbxwi_list_push_uninit(ator, buf, char);
+				ufbxwi_check(dst, ufbxwi_empty_string);
+				*dst = '\0';
+			} break;
+			}
+		} else {
+			if (buf->count == buf->capacity) {
+				ufbxwi_check(ufbxwi_list_push_uninit(ator, buf, char), ufbxwi_empty_string);
+			}
+			buf->data[buf->count++] = c;
+		}
+	}
+
+	{
+		char *dst = ufbxwi_list_push_uninit(ator, buf, char);
+		ufbxwi_check(dst, ufbxwi_empty_string);
+		*dst = '\0';
+	}
+
+	ufbxw_string result = { buf->data, buf->count - 1 };
+	return result;
+}
+
+static ufbxw_string ufbxwi_format(ufbxwi_allocator *ator, ufbxwi_byte_list *buf, const char *fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	ufbxw_string result = ufbxwi_vformat(ator, buf, fmt, args);
+	va_end(args);
+	return result;
+}
 
 #endif
 
@@ -7621,12 +7677,10 @@ static ufbxw_anim_prop ufbxwi_animate_prop(ufbxw_scene *scene, ufbxw_id id, ufbx
 	ufbxwi_token first_curve_prop = curve_props[0];
 
 	// For single channel propertes, use the property name
-	// TODO: Flexible buffer
-	char name_buf[256];
 	if (curve_count == 1) {
 		ufbxw_string prop_name = scene->string_pool.tokens.data[prop];
-		int name_len = snprintf(name_buf, sizeof(name_buf), "d|%s", prop_name.data);
-		first_curve_prop = ufbxwi_intern_token(&scene->string_pool, name_buf, (size_t)name_len);
+		ufbxw_string name = ufbxwi_format(&scene->ator, &scene->tmp_list, "d|%s", prop_name.data);
+		first_curve_prop = ufbxwi_intern_token(&scene->string_pool, name.data, name.length);
 	}
 
 	for (size_t i = 0; i < curve_count; i++) {
@@ -8310,7 +8364,7 @@ ufbxw_abi void ufbxw_set_save_info(ufbxw_scene *scene, const ufbxw_save_info *in
 	ufbxwi_intern_string_str_or_default(&scene->string_pool, &scene_info->original_application_version, info->original_application_version, info->application_version);
 	ufbxwi_intern_string_str_or_default(&scene->string_pool, &scene_info->original_filename, info->original_filename, info->document_url);
 
-	char date_buffer[128];
+	char date_buffer[32];
 	ufbxw_datetime last_time_utc = info->date_time_utc;
 	if (ufbxwi_is_zero_date(&last_time_utc) && !info->no_default_date_time) {
 		ufbxwi_get_utc_date(&last_time_utc);
@@ -9223,6 +9277,8 @@ typedef struct {
 	ufbxwi_task_queue task_queue;
 	ufbxwi_write_queue write_queue;
 
+	ufbxwi_byte_list fmt_buffer;
+
 	ufbxwi_builtin_deflate_opts builtin_deflate_opts;
 
 	ufbxwi_save_thread_context main_thread_ctx;
@@ -9239,6 +9295,17 @@ typedef struct {
 #define ufbxwi_write_reserve_small(sc, length) ufbxwi_queue_write_reserve_small(&(sc)->write_queue, (length))
 #define ufbxwi_write_reserve_at_least(sc, length) ufbxwi_queue_write_reserve_at_least(&(sc)->write_queue, (length))
 #define ufbxwi_write_commit(sc, length) ufbxwi_queue_write_commit(&(sc)->write_queue, (length))
+
+// -- Convenience API for formatting
+
+static ufbxw_string ufbxwi_save_format(ufbxwi_save_context *sc, const char *fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	ufbxw_string result = ufbxwi_vformat(&sc->ator, &sc->fmt_buffer, fmt, args);
+	va_end(args);
+	return result;
+}
 
 // -- Saving thread context
 
@@ -10767,10 +10834,8 @@ static void ufbxwi_save_mesh_data(ufbxwi_save_context *sc, ufbxwi_element *eleme
 			ufbxwi_dom_array(sc, info->values_name, attrib->values);
 		}
 		if (attrib->values_w) {
-			// TODO: Generic `sc` format function
-			char values_w_name[128];
-			snprintf(values_w_name, sizeof(values_w_name), "%sW", info->values_name);
-			ufbxwi_dom_array(sc, values_w_name, attrib->values_w);
+			ufbxw_string values_w_name = ufbxwi_save_format(sc, "%sW", info->values_name);
+			ufbxwi_dom_array(sc, values_w_name.data, attrib->values_w);
 		}
 		if (attrib->indices) {
 			ufbxwi_dom_array(sc, info->indices_name, attrib->indices);
@@ -11098,19 +11163,11 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 	ufbxw_string fbx_type_str = scene->string_pool.tokens.data[fbx_type];
 
 	if ((flags & UFBXWI_SAVE_ELEMENT_MANUAL_OPEN) == 0) {
-		// TODO: Dynamic buffer, do not use printf here
-		char name_buf[256];
 		ufbxw_string name;
 		if (sc->ascii) {
-			name.data = name_buf;
-			name.length = (size_t)snprintf(name_buf, sizeof(name_buf), "%s::%s", fbx_type_str.data, element->name.data);
+			name = ufbxwi_save_format(sc, "%S::%S", fbx_type_str, element->name);
 		} else {
-			name.data = name_buf;
-			memcpy(name_buf, element->name.data, element->name.length);
-			memcpy(name_buf + element->name.length, "\x00\x01", 2);
-			memcpy(name_buf + element->name.length + 2, fbx_type_str.data, fbx_type_str.length);
-			name_buf[element->name.length + 2 + fbx_type_str.length] = '\0';
-			name.length = element->name.length + 2 + fbx_type_str.length;
+			name = ufbxwi_save_format(sc, "%S%0\x01%S", element->name, fbx_type_str);
 		}
 
 		if ((flags & UFBXWI_SAVE_ELEMENT_NO_ID) != 0) {
@@ -11463,13 +11520,11 @@ static void ufbxwi_save_takes(ufbxwi_save_context *sc)
 		if (type != UFBXW_ELEMENT_ANIM_STACK) continue;
 		ufbxwi_element *element = slot->element;
 
-		// TODO: Format utility
-		char take_name[256];
-		snprintf(take_name, sizeof(take_name), "%s.tak", element->name.data);
+		ufbxw_string take_name = ufbxwi_save_format(sc, "%S.tak", element->name);
 
 		ufbxwi_anim_stack *stack = (ufbxwi_anim_stack*)element;
 		ufbxwi_dom_open(sc, "Take", "S", element->name);
-		ufbxwi_dom_value(sc, "FileName", "C", take_name);
+		ufbxwi_dom_value(sc, "FileName", "S", take_name);
 		ufbxwi_dom_value(sc, "LocalTime", "LL", stack->local_start, stack->local_stop);
 		ufbxwi_dom_value(sc, "ReferenceTime", "LL", stack->reference_start, stack->reference_stop);
 		ufbxwi_dom_close(sc);
