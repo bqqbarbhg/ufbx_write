@@ -163,6 +163,8 @@ typedef enum ufbxw_element_type {
 	UFBXW_ELEMENT_BLEND_DEFORMER,
 	UFBXW_ELEMENT_BLEND_CHANNEL,
 	UFBXW_ELEMENT_BLEND_SHAPE,
+	UFBXW_ELEMENT_CACHE_DEFORMER,
+	UFBXW_ELEMENT_CACHE_FILE,
 	UFBXW_ELEMENT_LIGHT,
 	UFBXW_ELEMENT_CAMERA,
 	UFBXW_ELEMENT_BONE,
@@ -196,6 +198,8 @@ typedef struct ufbxw_skin_cluster { ufbxw_id id; } ufbxw_skin_cluster;
 typedef struct ufbxw_blend_deformer { ufbxw_id id; } ufbxw_blend_deformer;
 typedef struct ufbxw_blend_channel { ufbxw_id id; } ufbxw_blend_channel;
 typedef struct ufbxw_blend_shape { ufbxw_id id; } ufbxw_blend_shape;
+typedef struct ufbxw_cache_deformer { ufbxw_id id; } ufbxw_cache_deformer;
+typedef struct ufbxw_cache_file { ufbxw_id id; } ufbxw_cache_file;
 typedef struct ufbxw_light { ufbxw_id id; } ufbxw_light;
 typedef struct ufbxw_camera { ufbxw_id id; } ufbxw_camera;
 typedef struct ufbxw_bone { ufbxw_id id; } ufbxw_bone;
@@ -250,6 +254,8 @@ typedef struct ufbxw_ktime_range {
 #define ufbxw_null_blend_deformer (ufbxw_new(ufbxw_blend_deformer){0})
 #define ufbxw_null_blend_channel (ufbxw_new(ufbxw_blend_channel){0})
 #define ufbxw_null_blend_shape (ufbxw_new(ufbxw_blend_shape){0})
+#define ufbxw_null_cache_deformer (ufbxw_new(ufbxw_cache_deformer){0})
+#define ufbxw_null_cache_file (ufbxw_new(ufbxw_cache_file){0})
 #define ufbxw_null_light (ufbxw_new(ufbxw_light){0})
 #define ufbxw_null_camera (ufbxw_new(ufbxw_camera){0})
 #define ufbxw_null_bone (ufbxw_new(ufbxw_bone){0})
@@ -275,6 +281,7 @@ typedef enum ufbxw_connection_type {
 	UFBXW_CONNECTION_SKIN_CLUSTER_NODE,       // NODE -> SKIN_CLUSTER
 	UFBXW_CONNECTION_BLEND_CHANNEL,           // BLEND_CHANNEL -> BLEND_DEFORMER
 	UFBXW_CONNECTION_BLEND_SHAPE,             // BLEND_SHAPE -> BLEND_CHANNEL
+	UFBXW_CONNECTION_CACHE_FILE,              // CACHE_FILE -> CACHE_DEFORMER
 	UFBXW_CONNECTION_MATERIAL_IMPLEMENTATION, // MATERIAL -> IMPLEMENTATION
 	UFBXW_CONNECTION_BINDING_IMPLEMENTATION,  // BINDING_TABLE -> IMPLEMENTATION
 	UFBXW_CONNECTION_ANIM_PROPERTY,           // ANIM_PROP* -> ANY(property)*
@@ -1000,6 +1007,37 @@ ufbxw_abi ufbxw_blend_shape ufbxw_create_blend_shape(ufbxw_scene *scene);
 
 ufbxw_abi void ufbxw_blend_shape_set_offsets(ufbxw_scene *scene, ufbxw_blend_shape shape, ufbxw_int_buffer indices, ufbxw_vec3_buffer offsets);
 ufbxw_abi void ufbxw_blend_shape_set_normals(ufbxw_scene *scene, ufbxw_blend_shape shape, ufbxw_vec3_buffer normals);
+
+// -- Cache deformer
+
+ufbxw_abi ufbxw_cache_deformer ufbxw_create_cache_deformer(ufbxw_scene *scene, ufbxw_mesh mesh);
+
+ufbxw_abi void ufbxw_cache_deformer_add_mesh(ufbxw_scene *scene, ufbxw_cache_deformer deformer, ufbxw_mesh mesh);
+
+ufbxw_abi void ufbxw_cache_deformer_set_channel_name(ufbxw_scene *scene, ufbxw_cache_deformer deformer, const char *name);
+ufbxw_abi void ufbxw_cache_deformer_set_channel_name_len(ufbxw_scene *scene, ufbxw_cache_deformer deformer, const char *name, size_t name_len);
+
+ufbxw_abi void ufbxw_cache_deformer_set_cache_file(ufbxw_scene *scene, ufbxw_cache_deformer deformer, ufbxw_cache_file cache);
+ufbxw_abi ufbxw_cache_file ufbxw_cache_deformer_get_cache_file(ufbxw_scene *scene, ufbxw_cache_deformer deformer);
+
+// -- Cache file
+
+typedef enum ufbxw_cache_file_format {
+	UFBXW_CACHE_FILE_FORMAT_UNKNOWN, // < Unknown cache file format
+	UFBXW_CACHE_FILE_FORMAT_PC2,     // < .pc2 Point cache file
+	UFBXW_CACHE_FILE_FORMAT_MC,      // < .mc/.mcx Maya cache file
+} ufbxw_cache_file_format;
+
+ufbxw_abi ufbxw_cache_file ufbxw_create_cache_file(ufbxw_scene *scene);
+
+ufbxw_abi void ufbxw_cache_file_set_format(ufbxw_scene *scene, ufbxw_cache_file cache, ufbxw_cache_file_format format);
+ufbxw_abi ufbxw_cache_file_format ufbxw_cache_file_get_format(ufbxw_scene *scene, ufbxw_cache_file cache);
+
+ufbxw_abi void ufbxw_cache_file_set_filename(ufbxw_scene *scene, ufbxw_cache_file cache, const char *filename);
+ufbxw_abi void ufbxw_cache_file_set_filename_len(ufbxw_scene *scene, ufbxw_cache_file cache, const char *filename, size_t filename_len);
+
+ufbxw_abi void ufbxw_cache_file_set_relative_filename(ufbxw_scene *scene, ufbxw_cache_file cache, const char *relative_filename);
+ufbxw_abi void ufbxw_cache_file_set_relative_filename_len(ufbxw_scene *scene, ufbxw_cache_file cache, const char *relative_filename, size_t relative_filename_len);
 
 // -- Light
 
