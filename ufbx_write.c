@@ -8516,7 +8516,7 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 				ufbxwi_node *node = ufbxwi_get_node(scene, cluster->node);
 				if (!node) continue;
 
-				ufbxw_bind_pose_add_node(scene, pose, cluster->node, cluster->transform);
+				ufbxw_bind_pose_add_node(scene, pose, cluster->node, cluster->transform_link);
 			}
 
 			ufbxwi_check(!ufbxwi_is_fatal(&scene->error));
