@@ -345,6 +345,10 @@ static void check_vertex_attrib_imp(const char *file, int line, const char *fiel
 
 static void compare_skin(ufbx_skin_deformer* src_skin, ufbx_skin_deformer* ref_skin)
 {
+	check_equal(src_skin, ref_skin, skinning_method);
+	check_list_equal(src_skin, ref_skin, dq_vertices);
+	check_list_approx(src_skin, ref_skin, dq_weights);
+
 	check_equal(src_skin, ref_skin, clusters.count);
 	for (size_t cluster_ix = 0; cluster_ix < min(src_skin->clusters.count, ref_skin->clusters.count); cluster_ix++) {
 		compare_scope scope { "cluster %zu", cluster_ix };

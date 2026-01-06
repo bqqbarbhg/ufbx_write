@@ -202,6 +202,19 @@ static ufbx_element *find_deform_percent_element(ufbx_element *elem, const char 
 	return NULL;
 }
 
+static ufbxw_skinning_type to_ufbxw_skinning_type(ufbx_skinning_method method)
+{
+	switch (method) {
+	case UFBX_SKINNING_METHOD_LINEAR: return UFBXW_SKINNING_TYPE_LINEAR;
+	case UFBX_SKINNING_METHOD_RIGID: return UFBXW_SKINNING_TYPE_RIGID;
+	case UFBX_SKINNING_METHOD_DUAL_QUATERNION: return UFBXW_SKINNING_TYPE_DUAL_QUATERNION;
+	case UFBX_SKINNING_METHOD_BLENDED_DQ_LINEAR: return UFBXW_SKINNING_TYPE_BLEND;
+	default:
+		ufbxwt_assert(0 && "unhandled skinning method");
+		return UFBXW_SKINNING_TYPE_LINEAR;
+	}
+}
+
 static void set_prop_int(ufbxw_scene *out_scene, ufbxw_id out_id, const char *prop, ufbxw_prop_type type, int32_t value)
 {
 	ufbxw_prop_data_type data_type = ufbxw_get_prop_data_type(out_scene, out_id, prop);
@@ -647,6 +660,14 @@ int main(int argc, char **argv)
 		skin_deformer_ids[skin_ix] = out_skin;
 		element_ids[in_skin->element_id] = out_skin.id;
 
+		ufbxw_skin_deformer_set_skinning_type(out_scene, out_skin, to_ufbxw_skinning_type(in_skin->skinning_method));
+
+		if (in_skin->dq_vertices.count > 0) {
+			ufbxw_int_buffer dq_indices = to_ufbxw_uint_buffer(out_scene, in_skin->dq_vertices);
+			ufbxw_real_buffer dq_weights = to_ufbxw_real_buffer(out_scene, in_skin->dq_weights);
+			ufbxw_skin_deformer_set_dual_quaternion_weights(out_scene, out_skin, dq_indices, dq_weights);
+		}
+
 		for (size_t cluster_ix = 0; cluster_ix < in_skin->clusters.count; cluster_ix++) {
 			ufbx_skin_cluster* in_cluster = in_skin->clusters.data[cluster_ix];
 
@@ -886,8 +907,8 @@ int main(int argc, char **argv)
 
 	if (compare) {
 		compare_fbx_opts compare_opts = { 0 };
-		compare_opts.approx_epsilon = 1e-3;
-		compare_opts.compare_anim = true;
+		compare_opts.approx_epsilon = 1e-12;
+		compare_opts.compare_anim = false;
 
 		if (!compare_fbx(output_path, input_path, &compare_opts)) {
 			result = 1;
