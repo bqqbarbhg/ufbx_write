@@ -13461,14 +13461,14 @@ ufbxw_abi void ufbxw_cache_file_set_format(ufbxw_scene *scene, ufbxw_cache_file 
 {
 	ufbxwi_cache_file *cf = ufbxwi_get_cache_file(scene, cache);
 	ufbxwi_check_element(scene, cache.id, cf);
-	cf->format = format;
+	cf->format = (int32_t)format;
 }
 
 ufbxw_abi ufbxw_cache_file_format ufbxw_cache_file_get_format(ufbxw_scene *scene, ufbxw_cache_file cache)
 {
 	ufbxwi_cache_file *cf = ufbxwi_get_cache_file(scene, cache);
 	ufbxwi_check_element(scene, cache.id, cf, UFBXW_CACHE_FILE_FORMAT_UNKNOWN);
-	return cf->format;
+	return (ufbxw_cache_file_format)cf->format;
 }
 
 ufbxw_abi void ufbxw_cache_file_set_filename(ufbxw_scene *scene, ufbxw_cache_file cache, const char *filename)

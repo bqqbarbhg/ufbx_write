@@ -391,6 +391,24 @@ static void compare_blend(ufbx_blend_deformer* src_blend, ufbx_blend_deformer* r
 	}
 }
 
+static void compare_cache(ufbx_cache_deformer* src_cache, ufbx_cache_deformer* ref_cache)
+{
+	check_equal(src_cache, ref_cache, channel);
+
+	if (ref_cache->file) {
+		check(src_cache->file);
+
+		ufbx_cache_file *src_file = src_cache->file;
+		ufbx_cache_file *ref_file = ref_cache->file;
+
+		check_equal(src_file, ref_file, absolute_filename);
+		check_equal(src_file, ref_file, relative_filename);
+		check_equal(src_file, ref_file, format);
+	} else {
+		check(!src_cache->file);
+	}
+}
+
 static void compare_mesh(ufbx_mesh *src_mesh, ufbx_mesh *ref_mesh)
 {
 	check_equal(src_mesh, ref_mesh, num_vertices);
@@ -443,6 +461,15 @@ static void compare_mesh(ufbx_mesh *src_mesh, ufbx_mesh *ref_mesh)
 		ufbx_blend_deformer *src_blend = src_mesh->blend_deformers[blend_ix];
 		ufbx_blend_deformer *ref_blend = ref_mesh->blend_deformers[blend_ix];
 		compare_blend(src_blend, ref_blend);
+	}
+
+	check_equal(src_mesh, ref_mesh, cache_deformers.count);
+	for (size_t cache_ix = 0; cache_ix < min(src_mesh->cache_deformers.count, ref_mesh->cache_deformers.count); cache_ix++) {
+		compare_scope scope { "cache %zu", cache_ix };
+
+		ufbx_cache_deformer *src_cache = src_mesh->cache_deformers[cache_ix];
+		ufbx_cache_deformer *ref_cache = ref_mesh->cache_deformers[cache_ix];
+		compare_cache(src_cache, ref_cache);
 	}
 }
 
