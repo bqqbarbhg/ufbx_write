@@ -401,6 +401,7 @@ int main(int argc, char **argv)
 	ufbxw_anim_layer *anim_layer_ids = (ufbxw_anim_layer*)calloc(in_scene->anim_layers.count, sizeof(ufbxw_anim_layer));
 	ufbxw_skin_deformer *skin_deformer_ids = (ufbxw_skin_deformer*)calloc(in_scene->skin_deformers.count, sizeof(ufbxw_skin_deformer));
 	ufbxw_blend_deformer *blend_deformer_ids = (ufbxw_blend_deformer*)calloc(in_scene->blend_deformers.count, sizeof(ufbxw_blend_deformer));
+	ufbxw_cache_deformer *cache_deformer_ids = (ufbxw_cache_deformer*)calloc(in_scene->cache_deformers.count, sizeof(ufbxw_cache_deformer));
 	ufbxw_id *element_ids = (ufbxw_id*)calloc(in_scene->elements.count, sizeof(ufbxw_id));
 
 	for (size_t mesh_ix = 0; mesh_ix < in_scene->meshes.count; mesh_ix++) {
@@ -692,6 +693,32 @@ int main(int argc, char **argv)
 		}
 	}
 
+	// Cache files
+	for (size_t cache_ix = 0; cache_ix < in_scene->cache_files.count; cache_ix++) {
+		ufbx_cache_file *in_cache = in_scene->cache_files.data[cache_ix];
+		ufbxw_cache_file out_cache = ufbxw_create_cache_file(out_scene);
+		element_ids[in_cache->element_id] = out_cache.id;
+
+		ufbxw_set_name(out_scene, out_cache.id, in_cache->name.data);
+		ufbxw_cache_file_set_format(out_scene, out_cache, (ufbxw_cache_file_format)(int32_t)in_cache->format);
+		ufbxw_cache_file_set_filename(out_scene, out_cache, in_cache->absolute_filename.data);
+		ufbxw_cache_file_set_relative_filename(out_scene, out_cache, in_cache->relative_filename.data);
+	}
+
+	// Cache deformers
+	for (size_t cache_ix = 0; cache_ix < in_scene->cache_deformers.count; cache_ix++) {
+		ufbx_cache_deformer *in_cache = in_scene->cache_deformers.data[cache_ix];
+		if (!in_cache->file) continue;
+
+		ufbxw_cache_deformer out_cache = ufbxw_create_cache_deformer(out_scene, ufbxw_null_mesh);
+		element_ids[in_cache->element_id] = out_cache.id;
+		cache_deformer_ids[in_cache->typed_id] = out_cache;
+
+		ufbxw_cache_file cache_file = { element_ids[in_cache->file->element_id] };
+		ufbxw_cache_deformer_set_channel_name(out_scene, out_cache, in_cache->channel.data);
+		ufbxw_cache_deformer_set_cache_file(out_scene, out_cache, cache_file);
+	}
+
 	for (size_t mesh_ix = 0; mesh_ix < in_scene->meshes.count; mesh_ix++) {
 		ufbx_mesh* in_mesh = in_scene->meshes.data[mesh_ix];
 		ufbxw_mesh out_mesh = mesh_ids[in_mesh->typed_id];
@@ -708,6 +735,13 @@ int main(int argc, char **argv)
 			ufbxw_blend_deformer out_blend = blend_deformer_ids[in_blend->typed_id];
 
 			ufbxw_blend_deformer_add_mesh(out_scene, out_blend, out_mesh);
+		}
+
+		for (size_t cache_ix = 0; cache_ix < in_mesh->cache_deformers.count; cache_ix++) {
+			ufbx_cache_deformer* in_cache = in_mesh->cache_deformers.data[cache_ix];
+			ufbxw_cache_deformer out_cache = cache_deformer_ids[in_cache->typed_id];
+
+			ufbxw_cache_deformer_add_mesh(out_scene, out_cache, out_mesh);
 		}
 	}
 
