@@ -9715,7 +9715,7 @@ static void ufbxwi_binary_write_footer(ufbxwi_save_context *sc, const char *crea
 
 	ufbxwi_write(sc, ufbxwi_binary_zero_buf, align);
 
-	uint32_t footer[36];
+	uint32_t footer[32];
 	memset(footer, 0, sizeof(footer));
 	footer[0] = 0; // TODO: This has some unknown value in <7000 files
 	footer[1] = sc->opts.version;
