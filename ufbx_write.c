@@ -7792,14 +7792,13 @@ static void ufbxwi_generate_indices(ufbxw_scene *scene, ufbxw_mesh_attribute_des
 
 	ufbxwi_free(&scene->ator, hashes);
 
-	// Currently assuming these are always user buffers
-	ufbxw_free_buffer(scene, desc->values);
-
 	ufbxw_buffer_id value_buffer = ufbxwi_create_owned_buffer(&scene->buffers, value_type, value_count);
 	ufbxwi_mutable_void_span result_values = ufbxwi_get_buffer_owned_data(&scene->buffers, value_buffer);
 	if (ufbxwi_is_fatal(&scene->error)) return;
 
 	memcpy(result_values.data, values.data, value_count * value_size);
+
+	ufbxw_free_buffer(scene, desc->values);
 
 	desc->values = ufbxwi_to_user_buffer(&scene->buffers, value_buffer);
 	desc->indices = index_buffer.id;
