@@ -61,6 +61,7 @@ if(USE_FMTLIB)
     FetchContent_Declare(
         fmtlib
         GIT_REPOSITORY "https://github.com/fmtlib/fmt"
+		GIT_TAG main
         EXCLUDE_FROM_ALL
     )
 
