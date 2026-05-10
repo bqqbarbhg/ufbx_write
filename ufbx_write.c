@@ -3426,6 +3426,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_CodeRelativeURL,
 	UFBXWI_CodeTAG,
 	UFBXWI_Collection,
+	UFBXWI_CollectionExclusive,
 	UFBXWI_Color,
 	UFBXWI_Constants,
 	UFBXWI_CoordAxis,
@@ -3448,6 +3449,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_DiffuseFactor,
 	UFBXWI_DisplacementColor,
 	UFBXWI_DisplacementFactor,
+	UFBXWI_DisplayLayer,
 	UFBXWI_DisplaySafeArea,
 	UFBXWI_DisplaySafeAreaOnRender,
 	UFBXWI_DisplayTurnTableIcon,
@@ -3470,6 +3472,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_FbxBindingTable,
 	UFBXWI_FbxCache,
 	UFBXWI_FbxCamera,
+	UFBXWI_FbxDisplayLayer,
 	UFBXWI_FbxFileTexture,
 	UFBXWI_FbxImplementation,
 	UFBXWI_FbxLight,
@@ -3829,6 +3832,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "CodeRelativeURL", 15 },
 	{ "CodeTAG", 7 },
 	{ "Collection", 10 },
+	{ "CollectionExclusive", 19 },
 	{ "Color", 5 },
 	{ "Constants", 9 },
 	{ "CoordAxis", 9 },
@@ -3851,6 +3855,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "DiffuseFactor", 13 },
 	{ "DisplacementColor", 17 },
 	{ "DisplacementFactor", 18 },
+	{ "DisplayLayer", 12 },
 	{ "DisplaySafeArea", 15 },
 	{ "DisplaySafeAreaOnRender", 23 },
 	{ "DisplayTurnTableIcon", 20 },
@@ -3873,6 +3878,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "FbxBindingTable", 15 },
 	{ "FbxCache", 8 },
 	{ "FbxCamera", 9 },
+	{ "FbxDisplayLayer", 15 },
 	{ "FbxFileTexture", 14 },
 	{ "FbxImplementation", 17 },
 	{ "FbxLight", 8 },
@@ -5021,6 +5027,8 @@ typedef struct {
 	ufbxw_id attribute;
 	ufbxw_material_list materials;
 	ufbxwi_id_list skin_clusters;
+	ufbxwi_id_list display_layers;
+	ufbxwi_id_list selection_nodes;
 
 	ufbxw_vec3 lcl_translation;
 	ufbxw_vec3 lcl_rotation;
@@ -5042,8 +5050,6 @@ typedef struct {
 	bool visibility_inheritance;
 
 	int32_t default_attribute_index;
-
-	ufbxwi_id_list selection_nodes;
 } ufbxwi_node;
 
 typedef struct {
@@ -5290,6 +5296,11 @@ typedef struct {
 	ufbxw_string relative_filename;
 	ufbxw_byte_buffer content;
 } ufbxwi_video;
+
+typedef struct {
+	ufbxwi_element element;
+	ufbxw_node_list nodes;
+} ufbxwi_display_layer;
 
 typedef struct {
 	ufbxwi_element element;
@@ -5570,6 +5581,7 @@ static const ufbxwi_object_desc ufbxwi_object_types[] = {
 	{ UFBXWI_Cache },
 	{ UFBXWI_Pose },
 	{ UFBXWI_Collection },
+	{ UFBXWI_CollectionExclusive },
 	{ UFBXWI_SelectionNode },
 };
 
@@ -6058,6 +6070,13 @@ static const ufbxwi_prop_desc ufbxwi_selection_set_props[] = {
 	{ UFBXWI_SelectionSetAnnotation, UFBXW_PROP_TYPE_STRING, ufbxwi_default(string_empty) },
 };
 
+static const ufbxwi_prop_desc ufbxwi_display_layer_props[] = {
+	{ UFBXWI_Color, UFBXW_PROP_TYPE_COLOR_RGB, ufbxwi_default(vec3_color) },
+	{ UFBXWI_Show, UFBXW_PROP_TYPE_BOOL, ufbxwi_default(bool_true) },
+	{ UFBXWI_Freeze, UFBXW_PROP_TYPE_BOOL },
+	{ UFBXWI_LODBox, UFBXW_PROP_TYPE_BOOL },
+};
+
 static const ufbxwi_prop_desc ufbxwi_implementation_props[] = {
 	{ UFBXWI_ShaderLanguage, UFBXW_PROP_TYPE_STRING, ufbxwi_field(ufbxwi_implementation, shader_language), ufbxwi_default(string_empty) },
 	{ UFBXWI_ShaderLanguageVersion, UFBXW_PROP_TYPE_STRING, ufbxwi_field(ufbxwi_implementation, shader_language_version),ufbxwi_default(string_empty) },
@@ -6134,6 +6153,7 @@ static const ufbxwi_prop_desc ufbxwi_document_props[] = {
 #define UFBXWI_CONN_BIT_TYPE_CACHE_FILE UINT64_C(0x800000)
 #define UFBXWI_CONN_BIT_TYPE_SELECTION_SET UINT64_C(0x1000000)
 #define UFBXWI_CONN_BIT_TYPE_SELECTION_NODE UINT64_C(0x2000000)
+#define UFBXWI_CONN_BIT_TYPE_DISPLAY_LAYER UINT64_C(0x4000000)
 
 #define UFBXWI_CONN_BIT_ELEMENT_NODE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_NODE)
 #define UFBXWI_CONN_BIT_ELEMENT_NODE_ATTRIBUTE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_NODE_ATTRIBUTE)
@@ -6157,6 +6177,7 @@ static const ufbxwi_prop_desc ufbxwi_document_props[] = {
 #define UFBXWI_CONN_BIT_ELEMENT_CACHE_FILE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_CACHE_FILE)
 #define UFBXWI_CONN_BIT_ELEMENT_SELECTION_SET (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_SELECTION_SET)
 #define UFBXWI_CONN_BIT_ELEMENT_SELECTION_NODE (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_SELECTION_NODE)
+#define UFBXWI_CONN_BIT_ELEMENT_DISPLAY_LAYER (UFBXWI_CONN_BIT_ELEMENT | UFBXWI_CONN_BIT_TYPE_DISPLAY_LAYER)
 
 #define UFBXWI_CONN_BIT_PROPERTY_ANY (UFBXWI_CONN_BIT_PROPERTY | UFBXWI_CONN_BIT_TYPE_ANY)
 #define UFBXWI_CONN_BIT_PROPERTY_MATERIAL (UFBXWI_CONN_BIT_PROPERTY | UFBXWI_CONN_BIT_TYPE_MATERIAL)
@@ -6189,6 +6210,7 @@ static const ufbxwi_element_type_info ufbxwi_element_type_infos[] = {
 	{ sizeof(ufbxwi_binding_table), UFBXWI_CONN_BIT_TYPE_BINDING_TABLE },
 	{ sizeof(ufbxwi_texture), UFBXWI_CONN_BIT_TYPE_TEXTURE },
 	{ sizeof(ufbxwi_video), UFBXWI_CONN_BIT_TYPE_VIDEO },
+	{ sizeof(ufbxwi_display_layer), UFBXWI_CONN_BIT_TYPE_DISPLAY_LAYER },
 	{ sizeof(ufbxwi_selection_set), UFBXWI_CONN_BIT_TYPE_SELECTION_SET },
 	{ sizeof(ufbxwi_selection_node), UFBXWI_CONN_BIT_TYPE_SELECTION_NODE },
 	{ sizeof(ufbxwi_anim_curve), UFBXWI_CONN_BIT_TYPE_ANIM_CURVE },
@@ -6223,6 +6245,7 @@ static const char *ufbxwi_element_type_names[] = {
 	"binding_table",
 	"texture",
 	"video",
+	"display_layer",
 	"selection_set",
 	"selection_node",
 	"anim_curve",
@@ -6285,6 +6308,7 @@ static const ufbxwi_connection_info ufbxwi_connection_infos[] = {
 	{ "Cache File", UFBXWI_CONN_BIT_ELEMENT_CACHE_FILE, UFBXWI_CONN_BIT_ELEMENT_CACHE_DEFORMER, ufbxwi_conn_id_list(ufbxwi_cache_file, deformers), ufbxwi_conn_id(ufbxwi_cache_deformer, cache_file) },
 	{ "Material Implementation", UFBXWI_CONN_BIT_ELEMENT_MATERIAL, UFBXWI_CONN_BIT_ELEMENT_IMPLEMENTATION, ufbxwi_conn_id(ufbxwi_material, implementation), ufbxwi_conn_id_list_ex(ufbxwi_implementation, materials, UFBXWI_CONN_TYPE_UNORDERED) },
 	{ "Binding Table Implementation", UFBXWI_CONN_BIT_ELEMENT_BINDING_TABLE, UFBXWI_CONN_BIT_ELEMENT_IMPLEMENTATION, ufbxwi_conn_id_list_ex(ufbxwi_binding_table, implementations, UFBXWI_CONN_TYPE_UNORDERED), ufbxwi_conn_id(ufbxwi_implementation, binding_table) },
+	{ "Display Layer Node", UFBXWI_CONN_BIT_ELEMENT_NODE, UFBXWI_CONN_BIT_ELEMENT_DISPLAY_LAYER, ufbxwi_conn_id_list(ufbxwi_node, display_layers), ufbxwi_conn_id_list(ufbxwi_display_layer, nodes) },
 	{ "Selection Set Node", UFBXWI_CONN_BIT_ELEMENT_SELECTION_NODE, UFBXWI_CONN_BIT_ELEMENT_SELECTION_SET, ufbxwi_conn_id(ufbxwi_selection_node, set), ufbxwi_conn_id_list(ufbxwi_selection_set, nodes) },
 	{ "Selection Node Node", UFBXWI_CONN_BIT_ELEMENT_NODE, UFBXWI_CONN_BIT_ELEMENT_SELECTION_NODE, ufbxwi_conn_id_list_ex(ufbxwi_node, selection_nodes, UFBXWI_CONN_TYPE_UNORDERED), ufbxwi_conn_id(ufbxwi_selection_node, node) },
 	{ "Animated Property", UFBXWI_CONN_BIT_ELEMENT_ANIM_PROP, UFBXWI_CONN_BIT_PROPERTY_ANY, ufbxwi_conn_conn(ufbxwi_anim_prop, prop), ufbxwi_conn_conn_list_ex(ufbxwi_element, anim_props, UFBXWI_CONN_TYPE_UNORDERED) },
@@ -6761,6 +6785,14 @@ static bool ufbxwi_init_video(ufbxw_scene *scene, void *data)
 	return true;
 }
 
+static bool ufbxwi_init_display_layer(ufbxw_scene *scene, void *data)
+{
+	ufbxwi_display_layer *layer = (ufbxwi_display_layer*)data;
+	(void)scene;
+	(void)layer;
+	return true;
+}
+
 static bool ufbxwi_init_anim_layer(ufbxw_scene *scene, void *data)
 {
 	ufbxwi_anim_layer *layer = (ufbxwi_anim_layer*)data;
@@ -6923,6 +6955,11 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 	{
 		UFBXW_ELEMENT_VIDEO, UFBXWI_TOKEN_NONE, UFBXWI_TOKEN_EMPTY, UFBXWI_Video, UFBXWI_Video, UFBXWI_FbxVideo,
 		ufbxwi_video_props, ufbxwi_arraycount(ufbxwi_video_props), &ufbxwi_init_video,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_DISPLAY_LAYER, UFBXWI_TOKEN_NONE, UFBXWI_DisplayLayer, UFBXWI_CollectionExclusive, UFBXWI_DisplayLayer, UFBXWI_FbxDisplayLayer,
+		ufbxwi_display_layer_props, ufbxwi_arraycount(ufbxwi_display_layer_props), &ufbxwi_init_display_layer,
 		0,
 	},
 	{
@@ -7812,6 +7849,7 @@ static ufbxwi_forceinline ufbxwi_implementation *ufbxwi_get_implementation(ufbxw
 static ufbxwi_forceinline ufbxwi_binding_table *ufbxwi_get_binding_table(ufbxw_scene *scene, ufbxw_binding_table id) { return (ufbxwi_binding_table*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_BINDING_TABLE); }
 static ufbxwi_forceinline ufbxwi_texture *ufbxwi_get_texture(ufbxw_scene *scene, ufbxw_texture id) { return (ufbxwi_texture*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_TEXTURE); }
 static ufbxwi_forceinline ufbxwi_video *ufbxwi_get_video(ufbxw_scene *scene, ufbxw_video id) { return (ufbxwi_video*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_VIDEO); }
+static ufbxwi_forceinline ufbxwi_display_layer *ufbxwi_get_display_layer(ufbxw_scene *scene, ufbxw_display_layer id) { return (ufbxwi_display_layer*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_DISPLAY_LAYER); }
 static ufbxwi_forceinline ufbxwi_selection_set *ufbxwi_get_selection_set(ufbxw_scene *scene, ufbxw_selection_set id) { return (ufbxwi_selection_set*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_SELECTION_SET); }
 static ufbxwi_forceinline ufbxwi_selection_node *ufbxwi_get_selection_node(ufbxw_scene *scene, ufbxw_selection_node id) { return (ufbxwi_selection_node*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_SELECTION_NODE); }
 static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve(ufbxw_scene *scene, ufbxw_anim_curve id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_CURVE); }
@@ -7836,6 +7874,7 @@ static ufbxwi_forceinline ufbxwi_implementation *ufbxwi_get_implementation_by_id
 static ufbxwi_forceinline ufbxwi_binding_table *ufbxwi_get_binding_table_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_binding_table*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_BINDING_TABLE); }
 static ufbxwi_forceinline ufbxwi_texture *ufbxwi_get_texture_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_texture*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_TEXTURE); }
 static ufbxwi_forceinline ufbxwi_video *ufbxwi_get_video_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_video*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_VIDEO); }
+static ufbxwi_forceinline ufbxwi_display_layer *ufbxwi_get_display_layer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_display_layer*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_DISPLAY_LAYER); }
 static ufbxwi_forceinline ufbxwi_selection_set *ufbxwi_get_selection_set_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_selection_set*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_SELECTION_SET); }
 static ufbxwi_forceinline ufbxwi_selection_node *ufbxwi_get_selection_node_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_selection_node*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_SELECTION_NODE); }
 static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_curve*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_CURVE); }
@@ -13932,6 +13971,17 @@ ufbxw_abi void ufbxw_video_set_content(ufbxw_scene *scene, ufbxw_video video, uf
 	ufbxwi_video *vd = ufbxwi_get_video(scene, video);
 	if (!vd) return;
 	ufbxwi_set_buffer_from_user(&scene->buffers, &vd->content.id, content.id);
+}
+
+ufbxw_abi ufbxw_display_layer ufbxw_create_display_layer(ufbxw_scene *scene)
+{
+	ufbxw_display_layer layer = { ufbxw_create_element(scene, UFBXW_ELEMENT_DISPLAY_LAYER) };
+	return layer;
+}
+
+ufbxw_abi void ufbxw_display_layer_add_node(ufbxw_scene *scene, ufbxw_display_layer layer, ufbxw_node node)
+{
+	ufbxwi_connect(scene, UFBXW_CONNECTION_DISPLAY_LAYER_NODE, node.id, layer.id, 0);
 }
 
 ufbxw_abi ufbxw_selection_set ufbxw_create_selection_set(ufbxw_scene *scene)

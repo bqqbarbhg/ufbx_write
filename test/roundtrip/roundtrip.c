@@ -831,6 +831,19 @@ int main(int argc, char **argv)
 		}
 	}
 
+	for (size_t layer_ix = 0; layer_ix < in_scene->display_layers.count; layer_ix++) {
+		ufbx_display_layer *in_layer = in_scene->display_layers.data[layer_ix];
+		ufbxw_display_layer out_layer = ufbxw_create_display_layer(out_scene);
+
+		ufbxw_set_name(out_scene, out_layer.id, in_layer->name.data);
+		element_ids[in_layer->element_id] = out_layer.id;
+
+		for (size_t node_ix = 0; node_ix < in_layer->nodes.count; node_ix++) {
+			ufbx_node *in_node = in_layer->nodes.data[node_ix];
+			ufbxw_display_layer_add_node(out_scene, out_layer, node_ids[in_node->typed_id]);
+		}
+	}
+
 	for (size_t layer_ix = 0; layer_ix < in_scene->anim_layers.count; layer_ix++) {
 		ufbx_anim_layer *in_layer = in_scene->anim_layers.data[layer_ix];
 		ufbxw_anim_layer out_layer = ufbxw_create_anim_layer(out_scene, ufbxw_null_anim_stack);

@@ -177,6 +177,7 @@ typedef enum ufbxw_element_type {
 	UFBXW_ELEMENT_TEXTURE,
 	UFBXW_ELEMENT_VIDEO,
 
+	UFBXW_ELEMENT_DISPLAY_LAYER,
 	UFBXW_ELEMENT_SELECTION_SET,
 	UFBXW_ELEMENT_SELECTION_NODE,
 
@@ -212,6 +213,7 @@ typedef struct ufbxw_implementation { ufbxw_id id; } ufbxw_implementation;
 typedef struct ufbxw_binding_table { ufbxw_id id; } ufbxw_binding_table;
 typedef struct ufbxw_texture { ufbxw_id id; } ufbxw_texture;
 typedef struct ufbxw_video { ufbxw_id id; } ufbxw_video;
+typedef struct ufbxw_display_layer { ufbxw_id id; } ufbxw_display_layer;
 typedef struct ufbxw_selection_set { ufbxw_id id; } ufbxw_selection_set;
 typedef struct ufbxw_selection_node { ufbxw_id id; } ufbxw_selection_node;
 typedef struct ufbxw_anim_prop { ufbxw_id id; } ufbxw_anim_prop;
@@ -270,6 +272,7 @@ typedef struct ufbxw_ktime_range {
 #define ufbxw_null_binding_table (ufbxw_new(ufbxw_binding_table){0})
 #define ufbxw_null_texture (ufbxw_new(ufbxw_texture){0})
 #define ufbxw_null_video (ufbxw_new(ufbxw_video){0})
+#define ufbxw_null_display_layer (ufbxw_new(ufbxw_display_layer){0})
 #define ufbxw_null_selection_set (ufbxw_new(ufbxw_selection_set){0})
 #define ufbxw_null_selection_node (ufbxw_new(ufbxw_selection_node){0})
 #define ufbxw_null_anim_prop (ufbxw_new(ufbxw_anim_prop){0})
@@ -291,6 +294,7 @@ typedef enum ufbxw_connection_type {
 	UFBXW_CONNECTION_CACHE_FILE,              // CACHE_FILE -> CACHE_DEFORMER
 	UFBXW_CONNECTION_MATERIAL_IMPLEMENTATION, // MATERIAL -> IMPLEMENTATION
 	UFBXW_CONNECTION_BINDING_IMPLEMENTATION,  // BINDING_TABLE -> IMPLEMENTATION
+	UFBXW_CONNECTION_DISPLAY_LAYER_NODE,      // NODE -> DISPLAY_LAYER
 	UFBXW_CONNECTION_SELECTION_SET_NODE,      // SELECTION_NODE -> SELECTION_SET
 	UFBXW_CONNECTION_SELECTION_NODE_NODE,     // NODE -> SELECTION_NODE
 	UFBXW_CONNECTION_ANIM_PROPERTY,           // ANIM_PROP* -> ANY(property)*
@@ -1182,6 +1186,12 @@ ufbxw_abi void ufbxw_video_set_relative_filename_len(ufbxw_scene *scene, ufbxw_v
 
 ufbxw_abi void ufbxw_video_set_content(ufbxw_scene *scene, ufbxw_video video, ufbxw_byte_buffer content);
 
+// -- Display layer
+
+ufbxw_abi ufbxw_display_layer ufbxw_create_display_layer(ufbxw_scene *scene);
+
+ufbxw_abi void ufbxw_display_layer_add_node(ufbxw_scene *scene, ufbxw_display_layer layer, ufbxw_node node);
+
 // -- Selection set
 
 ufbxw_abi ufbxw_selection_set ufbxw_create_selection_set(ufbxw_scene *scene);
@@ -1621,4 +1631,3 @@ ufbxw_abi ufbxw_string ufbxw_str(const char *str);
 #endif
 
 #endif
-
