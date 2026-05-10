@@ -96,7 +96,7 @@ UFBXWT_SCENE_CHECK(selection_set_simple)
 	ufbxwt_assert(node);
 
 	{
-		ufbx_selection_set *set = ufbx_find_element(scene, UFBX_ELEMENT_SELECTION_SET, "Node");
+		ufbx_selection_set *set = (ufbx_selection_set*)ufbx_find_element(scene, UFBX_ELEMENT_SELECTION_SET, "Node");
 		ufbxwt_assert(set);
 		ufbxwt_assert(set->nodes.count == 1);
 
@@ -106,7 +106,7 @@ UFBXWT_SCENE_CHECK(selection_set_simple)
 	}
 
 	{
-		ufbx_selection_set *set = ufbx_find_element(scene, UFBX_ELEMENT_SELECTION_SET, "Vertices");
+		ufbx_selection_set *set = (ufbx_selection_set*)ufbx_find_element(scene, UFBX_ELEMENT_SELECTION_SET, "Vertices");
 		ufbxwt_assert(set);
 		ufbxwt_assert(set->nodes.count == 1);
 
@@ -121,7 +121,7 @@ UFBXWT_SCENE_CHECK(selection_set_simple)
 	}
 
 	{
-		ufbx_selection_set *set = ufbx_find_element(scene, UFBX_ELEMENT_SELECTION_SET, "Edges");
+		ufbx_selection_set *set = (ufbx_selection_set*)ufbx_find_element(scene, UFBX_ELEMENT_SELECTION_SET, "Edges");
 		ufbxwt_assert(set);
 		ufbxwt_assert(set->nodes.count == 1);
 
@@ -136,7 +136,7 @@ UFBXWT_SCENE_CHECK(selection_set_simple)
 	}
 
 	{
-		ufbx_selection_set *set = ufbx_find_element(scene, UFBX_ELEMENT_SELECTION_SET, "Polygons");
+		ufbx_selection_set *set = (ufbx_selection_set*)ufbx_find_element(scene, UFBX_ELEMENT_SELECTION_SET, "Polygons");
 		ufbxwt_assert(set);
 		ufbxwt_assert(set->nodes.count == 1);
 
