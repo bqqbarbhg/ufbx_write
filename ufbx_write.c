@@ -9566,17 +9566,19 @@ static void ufbxwi_ascii_dom_string(ufbxwi_save_context *sc, const char *str, si
 {
 	ufbxwi_write(sc, "\"", 1);
 
-	const char *end = str + length;
-	for (;;) {
-		// TODO: Line break escaping, other special characters
-		const char *quote = memchr(str, '"', ufbxwi_to_size(end - str));
-		if (!quote) {
-			ufbxwi_write(sc, str, ufbxwi_to_size(end - str));
-			break;
-		} else {
-			ufbxwi_write(sc, str, ufbxwi_to_size(quote - str));
-			ufbxwi_write(sc, "&quot;", 6);
-			str = quote + 1;
+	if (length > 0) {
+		const char *end = str + length;
+		for (;;) {
+			// TODO: Line break escaping, other special characters
+			const char *quote = memchr(str, '"', ufbxwi_to_size(end - str));
+			if (!quote) {
+				ufbxwi_write(sc, str, ufbxwi_to_size(end - str));
+				break;
+			} else {
+				ufbxwi_write(sc, str, ufbxwi_to_size(quote - str));
+				ufbxwi_write(sc, "&quot;", 6);
+				str = quote + 1;
+			}
 		}
 	}
 
