@@ -7108,7 +7108,9 @@ static ufbxwi_prop_value ufbxwi_element_add_prop_data(ufbxw_scene *scene, ufbxwi
 		void *new_data = ufbxwi_alloc_size(&scene->ator, 1, new_capacity, &new_capacity);
 		ufbxwi_check(new_data, 0);
 
-		memcpy(new_data, element->prop_data, element->prop_data_size);
+		if (element->prop_data_size > 0) {
+			memcpy(new_data, element->prop_data, element->prop_data_size);
+		}
 		memset((char*)new_data + element->prop_data_size, 0, new_capacity - element->prop_data_size);
 
 		ufbxwi_free(&scene->ator, element->prop_data);
