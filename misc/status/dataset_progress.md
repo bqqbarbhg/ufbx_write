@@ -138,3 +138,11 @@ Implement selection sets and nodes
 ```
 4442/4454 files passed (409/410 test cases)
 ```
+
+#### Display layers
+
+Implement display layers
+
+```
+4454/4454 files passed (410/410 test cases)
+```
