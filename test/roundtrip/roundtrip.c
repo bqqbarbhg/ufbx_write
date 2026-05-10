@@ -965,7 +965,9 @@ int main(int argc, char **argv)
 	free(element_ids);
 	ufbx_free_scene(in_scene);
 
-	ufbxw_prepare_scene(out_scene, NULL);
+	ufbxw_prepare_opts prepare_opts = ufbxw_default_prepare_opts;
+	prepare_opts.patch_anim_stack_times = false;
+	ufbxw_prepare_scene(out_scene, &prepare_opts);
 
 	ufbxw_save_opts save_opts = { 0 };
 	if (!strcmp(format, "ascii")) {
