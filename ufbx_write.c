@@ -9252,12 +9252,12 @@ static ufbxwi_noinline bool ufbxwi_queue_write_slow(ufbxwi_write_queue *wq, cons
 
 static ufbxwi_forceinline void ufbxwi_queue_write(ufbxwi_write_queue *wq, const void *data, size_t length)
 {
+	if (length == 0) return;
+
 	char *dst = wq->buffer_pos;
 	size_t left = ufbxwi_to_size(wq->buffer_end - dst);
 	if (left >= length) {
-		if (length > 0) {
-			memcpy(dst, data, length);
-		}
+		memcpy(dst, data, length);
 		wq->buffer_pos = dst + length;
 	} else {
 		ufbxwi_queue_write_slow(wq, data, length);
