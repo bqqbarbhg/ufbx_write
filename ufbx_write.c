@@ -7792,14 +7792,13 @@ static void ufbxwi_generate_indices(ufbxw_scene *scene, ufbxw_mesh_attribute_des
 
 	ufbxwi_free(&scene->ator, hashes);
 
-	// Currently assuming these are always user buffers
-	ufbxw_free_buffer(scene, desc->values);
-
 	ufbxw_buffer_id value_buffer = ufbxwi_create_owned_buffer(&scene->buffers, value_type, value_count);
 	ufbxwi_mutable_void_span result_values = ufbxwi_get_buffer_owned_data(&scene->buffers, value_buffer);
 	if (ufbxwi_is_fatal(&scene->error)) return;
 
 	memcpy(result_values.data, values.data, value_count * value_size);
+
+	ufbxw_free_buffer(scene, desc->values);
 
 	desc->values = ufbxwi_to_user_buffer(&scene->buffers, value_buffer);
 	desc->indices = index_buffer.id;
@@ -9716,7 +9715,7 @@ static void ufbxwi_binary_write_footer(ufbxwi_save_context *sc, const char *crea
 
 	ufbxwi_write(sc, ufbxwi_binary_zero_buf, align);
 
-	uint32_t footer[36];
+	uint32_t footer[32];
 	memset(footer, 0, sizeof(footer));
 	footer[0] = 0; // TODO: This has some unknown value in <7000 files
 	footer[1] = sc->opts.version;
