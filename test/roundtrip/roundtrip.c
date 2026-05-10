@@ -968,7 +968,13 @@ int main(int argc, char **argv)
 	ufbx_free_scene(in_scene);
 
 	ufbxw_prepare_opts prepare_opts = ufbxw_default_prepare_opts;
+
+	// There are some files in the dataset with intentional `[0,0]` animation times, do not fix these.
 	prepare_opts.patch_anim_stack_times = false;
+
+	// There are some files in the dataset with out-of-order keyframes.
+	prepare_opts.finish_keyframes = false;
+
 	ufbxw_prepare_scene(out_scene, &prepare_opts);
 
 	ufbxw_save_opts save_opts = { 0 };
