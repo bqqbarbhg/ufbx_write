@@ -117,6 +117,10 @@ static void ufbxwt_deflate_test(const char *name, ufbxw_scene *scene, const ufbx
 						continue;
 					}
 
+					if (deflate_impl == UFBXWT_DEFLATE_IMPL_NONE) {
+						save_opts.disable_compression = true;
+					}
+
 					const char *deflate = ufbxwt_deflate_impl_name(deflate_impl);
 					const char *thread = ufbxwt_thread_impl_name(thread_impl);
 					ufbxwt_logf("format: %s, version: %u, deflate: %s, thread: %s", format, save_opts.version, deflate, thread);
