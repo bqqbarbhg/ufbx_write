@@ -4950,6 +4950,7 @@ typedef struct {
 
 typedef struct {
 	ufbxwi_token type;
+	ufbxw_template preferred_template_id;
 } ufbxwi_object_type;
 
 UFBXWI_LIST_TYPE(ufbxwi_object_type_list, ufbxwi_object_type);
@@ -4967,7 +4968,7 @@ typedef struct {
 
 	uint32_t object_type_id;
 	ufbxwi_props props;
-	ufbxw_id template_id;
+	ufbxw_template template_id;
 	uint32_t flags;
 	ufbxwi_element_init_data_fn *init_fn;
 
@@ -5384,6 +5385,7 @@ typedef struct {
 
 typedef struct {
 	ufbxwi_element element;
+	uint32_t object_type_id;
 	ufbxwi_token type;
 } ufbxwi_template;
 
@@ -7456,6 +7458,7 @@ static ufbxwi_forceinline bool ufbxwi_init_element_type_imp(ufbxw_scene *scene, 
 
 		ufbxwi_template *tmpl_data = (ufbxwi_template*)tmpl_elem;
 		tmpl_data->type = desc->tmpl_type;
+		tmpl_data->object_type_id = et->object_type_id;
 
 		ufbxwi_check(ufbxwi_props_rehash(scene, &tmpl_elem->props, desc->num_props), false);
 
@@ -7468,7 +7471,7 @@ static ufbxwi_forceinline bool ufbxwi_init_element_type_imp(ufbxw_scene *scene, 
 			prop->value = ufbxwi_prop_value_type(pd->value_offset) == UFBXWI_PROP_VALUE_DEFAULT ? pd->value_offset : pd->default_offset;
 			prop->flags = pd->flags & 0xff; // TODO: Better mapping, compact flags
 		}
-		et->template_id = template_id;
+		et->template_id.id = template_id;
 	}
 
 	return true;
@@ -7879,6 +7882,7 @@ static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve(ufbxw_scene *
 static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop(ufbxw_scene *scene, ufbxw_anim_prop id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_PROP); }
 static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer(ufbxw_scene *scene, ufbxw_anim_layer id) { return (ufbxwi_anim_layer*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_LAYER); }
 static ufbxwi_forceinline ufbxwi_anim_stack *ufbxwi_get_anim_stack(ufbxw_scene *scene, ufbxw_anim_stack id) { return (ufbxwi_anim_stack*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_ANIM_STACK); }
+static ufbxwi_forceinline ufbxwi_template *ufbxwi_get_template(ufbxw_scene *scene, ufbxw_template id) { return (ufbxwi_template*)ufbxwi_get_typed_element(scene, id.id, UFBXW_ELEMENT_TEMPLATE); }
 
 static ufbxwi_forceinline ufbxwi_node *ufbxwi_get_node_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_node*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_NODE); }
 static ufbxwi_forceinline ufbxwi_mesh *ufbxwi_get_mesh_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_mesh*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_MESH); }
@@ -7904,6 +7908,7 @@ static ufbxwi_forceinline ufbxwi_anim_curve *ufbxwi_get_anim_curve_by_id(ufbxw_s
 static ufbxwi_forceinline ufbxwi_anim_prop *ufbxwi_get_anim_prop_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_prop*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_PROP); }
 static ufbxwi_forceinline ufbxwi_anim_layer *ufbxwi_get_anim_layer_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_layer*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_LAYER); }
 static ufbxwi_forceinline ufbxwi_anim_stack *ufbxwi_get_anim_stack_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_anim_stack*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_ANIM_STACK); }
+static ufbxwi_forceinline ufbxwi_template *ufbxwi_get_template_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_template*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_TEMPLATE); }
 
 static ufbxwi_forceinline ufbxwi_global_settings *ufbxwi_get_global_settings_by_id(ufbxw_scene *scene, ufbxw_id id) { return (ufbxwi_global_settings*)ufbxwi_get_typed_element(scene, id, UFBXW_ELEMENT_GLOBAL_SETTINGS); }
 
@@ -9379,7 +9384,7 @@ static void ufbxwi_write_queue_finish_reloc(ufbxwi_write_queue *wq, uint32_t rel
 
 typedef struct {
 	uint32_t reference_count;
-	ufbxw_id template_id;
+	ufbxw_template template_id;
 } ufbxwi_save_object_type;
 
 UFBXWI_LIST_TYPE(ufbxwi_save_object_type_list, ufbxwi_save_object_type);
@@ -10730,6 +10735,11 @@ static void ufbxwi_save_props(ufbxwi_save_context *sc, const ufbxwi_element *ele
 			const ufbxwi_prop *base = &props[src_ix], *tmpl_prop = NULL;
 			ufbxwi_token token = base->token;
 
+			// If the base property is only in the template, it is not present in the type.
+			if ((base->flags & UFBXWI_PROP_FLAG_TEMP_MASK) == UFBXWI_PROP_FLAG_TEMP_TEMPLATE) {
+				continue;
+			}
+
 			// Skip properties with the same token, preferring the first one and look for a template
 			while (src_ix + 1 < prop_count && props[src_ix + 1].token == token) {
 				if ((props[src_ix + 1].flags & UFBXWI_PROP_FLAG_TEMP_MASK) == UFBXWI_PROP_FLAG_TEMP_TEMPLATE) {
@@ -10844,17 +10854,6 @@ static void ufbxwi_save_props(ufbxwi_save_context *sc, const ufbxwi_element *ele
 				ufbxwi_unreachable("bad data type");
 		}
 	}
-
-	ufbxwi_dom_close(sc);
-}
-
-static void ufbxwi_save_template(ufbxwi_save_context *sc, ufbxwi_element *element, uint32_t flags)
-{
-	ufbxwi_template *tmpl = (ufbxwi_template*)element;
-
-	ufbxwi_dom_open(sc, "PropertyTemplate", "T", tmpl->type);
-
-	ufbxwi_save_props(sc, &tmpl->element, NULL, NULL);
 
 	ufbxwi_dom_close(sc);
 }
@@ -11440,8 +11439,8 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 	ufbxwi_element *tmpl = NULL;
 	if (elem_type->object_type_id != ~0u) {
 		ufbxwi_save_object_type *object_type = &sc->object_types.data[elem_type->object_type_id];
-		if (object_type->template_id == elem_type->template_id) {
-			tmpl = ufbxwi_get_element(sc->scene, elem_type->template_id);
+		if (object_type->template_id.id == elem_type->template_id.id) {
+			tmpl = ufbxwi_get_element(sc->scene, elem_type->template_id.id);
 		}
 	}
 
@@ -11597,7 +11596,7 @@ static void ufbxwi_save_definitions(ufbxwi_save_context *sc)
 		ufbxwi_dom_open(sc, "ObjectType", "T", scene_obj_type->type);
 		ufbxwi_dom_value(sc, "Count", "I", (int32_t)obj_type->reference_count);
 
-		ufbxwi_element *tmpl_elem = ufbxwi_get_element(scene, obj_type->template_id);
+		ufbxwi_element *tmpl_elem = ufbxwi_get_element(scene, obj_type->template_id.id);
 		if (tmpl_elem) {
 			ufbxwi_template *tmpl = (ufbxwi_template*)tmpl_elem;
 			ufbxwi_dom_open(sc, "PropertyTemplate", "T", tmpl->type);
@@ -11865,11 +11864,12 @@ static void ufbxwi_save_init(ufbxwi_save_context *sc)
 
 		const ufbxwi_element_type *et = &scene->element_types.data[element->type_id];
 		if (et->object_type_id != ~0u) {
+			const ufbxwi_object_type *scene_object_type = &sc->scene->object_types.data[et->object_type_id];
 			ufbxwi_save_object_type *object_type = &object_types[et->object_type_id];
 			object_type->reference_count++;
 
 			// TODO: Better prioritization?
-			if (object_type->template_id == 0 && et->template_id != 0) {
+			if (et->template_id.id != 0 && (object_type->template_id.id == 0 || et->template_id.id == scene_object_type->preferred_template_id.id)) {
 				object_type->template_id = et->template_id;
 			}
 		}
@@ -12633,6 +12633,20 @@ ufbxw_abi void ufbxw_connect_prop_len(ufbxw_scene *scene, ufbxw_id src, const ch
 	}
 }
 
+ufbxw_abi void ufbxw_clear_props(ufbxw_scene *scene, ufbxw_id id)
+{
+	ufbxwi_element *element = ufbxwi_get_element(scene, id);
+	ufbxwi_check_element(scene, id, element);
+
+	ufbxwi_free(&scene->ator, element->props.props);
+	memset(&element->props, 0, sizeof(element->props));
+
+	ufbxwi_free(&scene->ator, element->prop_data);
+	element->prop_data = NULL;
+	element->prop_data_size = 0;
+	element->prop_data_capacity = 0;
+}
+
 ufbxw_abi void ufbxw_set_bool(ufbxw_scene *scene, ufbxw_id id, const char *prop, bool value)
 {
 	ufbxwi_set_prop(scene, id, prop, strlen(prop), &value, UFBXW_PROP_DATA_BOOL);
@@ -12796,6 +12810,15 @@ ufbxw_abi ufbxw_anim_prop ufbxw_animate_prop_len(ufbxw_scene *scene, ufbxw_id id
 	if (!token) return ufbxw_null_anim_prop;
 
 	return ufbxwi_animate_prop(scene, id, token, layer);
+}
+
+ufbxw_abi ufbxw_template ufbxw_get_element_template(ufbxw_scene *scene, ufbxw_id id)
+{
+	ufbxwi_element *element = ufbxwi_get_element(scene, id);
+	ufbxwi_check_element(scene, id, element, ufbxw_null_template);
+
+	ufbxwi_element_type *et = &scene->element_types.data[element->type_id];
+	return et->template_id;
 }
 
 ufbxw_abi ufbxw_node ufbxw_create_node(ufbxw_scene *scene)
@@ -14548,13 +14571,36 @@ ufbxw_abi ufbxw_id ufbxw_get_scene_info_id(ufbxw_scene *scene)
 	return ufbxw_null_id;
 }
 
-ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type type)
+ufbxw_abi ufbxw_template ufbxw_get_template(ufbxw_scene *scene, ufbxw_element_type type)
 {
 	uint32_t type_id = ufbxwi_find_element_type_id(scene, type, UFBXWI_TOKEN_NONE);
-	if (type_id == ~0u) return ufbxw_null_id;
+	if (type_id == ~0u) return ufbxw_null_template;
 	ufbxwi_element_type *et = &scene->element_types.data[type_id];
-	ufbxwi_check(ufbxwi_init_element_type(scene, et), 0);
+	ufbxwi_check(ufbxwi_init_element_type(scene, et), ufbxw_null_template);
 	return et->template_id;
+}
+
+ufbxw_abi ufbxw_template ufbxw_get_template_ex(ufbxw_scene *scene, ufbxw_element_type type, const char *class_type)
+{
+	return ufbxw_get_template_ex_len(scene, type, class_type, strlen(class_type));
+}
+
+ufbxw_abi ufbxw_template ufbxw_get_template_ex_len(ufbxw_scene *scene, ufbxw_element_type type, const char *class_type, size_t class_type_len)
+{
+	ufbxwi_token class_type_token = ufbxwi_get_token(&scene->string_pool, class_type, class_type_len);
+	uint32_t type_id = ufbxwi_find_element_type_id(scene, type, class_type_token);
+	if (type_id == ~0u) return ufbxw_null_template;
+	ufbxwi_element_type *et = &scene->element_types.data[type_id];
+	ufbxwi_check(ufbxwi_init_element_type(scene, et), ufbxw_null_template);
+	return et->template_id;
+}
+
+ufbxw_abi void ufbxw_set_template_preferred(ufbxw_scene *scene, ufbxw_template template_id)
+{
+	ufbxwi_template *tmpl = ufbxwi_get_template(scene, template_id);
+	ufbxwi_check_element(scene, template_id.id, tmpl);
+
+	scene->object_types.data[tmpl->object_type_id].preferred_template_id = template_id;
 }
 
 // -- Pre-saving

@@ -220,6 +220,7 @@ typedef struct ufbxw_anim_prop { ufbxw_id id; } ufbxw_anim_prop;
 typedef struct ufbxw_anim_curve { ufbxw_id id; } ufbxw_anim_curve;
 typedef struct ufbxw_anim_layer { ufbxw_id id; } ufbxw_anim_layer;
 typedef struct ufbxw_anim_stack { ufbxw_id id; } ufbxw_anim_stack;
+typedef struct ufbxw_template { ufbxw_id id; } ufbxw_template;
 
 typedef uint64_t ufbxw_buffer_id;
 typedef struct ufbxw_byte_buffer { ufbxw_buffer_id id; } ufbxw_byte_buffer;
@@ -279,6 +280,7 @@ typedef struct ufbxw_ktime_range {
 #define ufbxw_null_anim_curve (ufbxw_new(ufbxw_anim_curve){0})
 #define ufbxw_null_anim_layer (ufbxw_new(ufbxw_anim_layer){0})
 #define ufbxw_null_anim_stack (ufbxw_new(ufbxw_anim_stack){0})
+#define ufbxw_null_template (ufbxw_new(ufbxw_template){0})
 
 typedef enum ufbxw_connection_type {
 	UFBXW_CONNECTION_NODE_PARENT = 1,         // NODE* -> NODE
@@ -773,6 +775,8 @@ ufbxw_abi void ufbxw_connect(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst);
 ufbxw_abi void ufbxw_connect_prop(ufbxw_scene *scene, ufbxw_id src, const char *src_prop, ufbxw_id dst, const char *dst_prop);
 ufbxw_abi void ufbxw_connect_prop_len(ufbxw_scene *scene, ufbxw_id src, const char *src_prop, size_t src_prop_len, ufbxw_id dst, const char *dst_prop, size_t dst_prop_len);
 
+ufbxw_abi void ufbxw_clear_props(ufbxw_scene *scene, ufbxw_id id);
+
 ufbxw_abi void ufbxw_set_bool(ufbxw_scene *scene, ufbxw_id id, const char *prop, bool value);
 ufbxw_abi void ufbxw_set_int(ufbxw_scene *scene, ufbxw_id id, const char *prop, int32_t value);
 ufbxw_abi void ufbxw_set_int64(ufbxw_scene *scene, ufbxw_id id, const char *prop, int64_t value);
@@ -804,6 +808,8 @@ ufbxw_abi ufbxw_prop_data_type ufbxw_get_prop_data_type(ufbxw_scene *scene, ufbx
 
 ufbxw_abi ufbxw_anim_prop ufbxw_animate_prop(ufbxw_scene *scene, ufbxw_id id, const char *prop, ufbxw_anim_layer layer);
 ufbxw_abi ufbxw_anim_prop ufbxw_animate_prop_len(ufbxw_scene *scene, ufbxw_id id, const char *prop, size_t prop_len, ufbxw_anim_layer layer);
+
+ufbxw_abi ufbxw_template ufbxw_get_element_template(ufbxw_scene *scene, ufbxw_id id);
 
 // -- Node
 
@@ -1337,7 +1343,13 @@ ufbxw_abi ufbxw_id ufbxw_get_scene_info_id(ufbxw_scene *scene);
 
 // -- Templates
 
-ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type type);
+ufbxw_abi ufbxw_template ufbxw_get_template(ufbxw_scene *scene, ufbxw_element_type type);
+
+ufbxw_abi ufbxw_template ufbxw_get_template_ex(ufbxw_scene *scene, ufbxw_element_type type, const char *class_type);
+ufbxw_abi ufbxw_template ufbxw_get_template_ex_len(ufbxw_scene *scene, ufbxw_element_type type, const char *class_type, size_t class_type_len);
+
+// Mark `template_id` as the preferred template to use for the object type.
+ufbxw_abi void ufbxw_set_template_preferred(ufbxw_scene *scene, ufbxw_template template_id);
 
 // -- Pre-saving
 

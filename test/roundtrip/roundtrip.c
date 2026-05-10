@@ -267,13 +267,18 @@ static void set_prop_vec4(ufbxw_scene *out_scene, ufbxw_id out_id, const char *p
 	}
 }
 
+static void set_prop_string(ufbxw_scene *out_scene, ufbxw_id out_id, const char *prop, ufbxw_prop_type type, const char *value)
+{
+	ufbxw_prop_data_type data_type = ufbxw_get_prop_data_type(out_scene, out_id, prop);
+	if (data_type == UFBXW_PROP_DATA_STRING) {
+		ufbxw_set_string(out_scene, out_id, prop, value);
+	} else {
+		ufbxw_add_string(out_scene, out_id, prop, type, value);
+	}
+}
 
 static void copy_props(ufbxw_scene *out_scene, ufbxw_id out_id, const ufbx_props *in_props)
 {
-	if (in_props->defaults) {
-		copy_props(out_scene, out_id, in_props->defaults);
-	}
-
 	for (size_t i = 0; i < in_props->props.count; i++) {
 		const ufbx_prop *prop = &in_props->props.data[i];
 		if ((prop->flags & UFBX_PROP_FLAG_VALUE_INT) && prop->type == UFBX_PROP_BOOLEAN) {
@@ -288,6 +293,8 @@ static void copy_props(ufbxw_scene *out_scene, ufbxw_id out_id, const ufbx_props
 			set_prop_vec3(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_COLOR, to_ufbxw_vec3(prop->value_vec3));
 		} else if (prop->flags & UFBX_PROP_FLAG_VALUE_VEC4) {
 			set_prop_vec4(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_COLOR_RGBA, to_ufbxw_vec4(prop->value_vec4));
+		} else if (prop->flags & UFBX_PROP_FLAG_VALUE_STR) {
+			set_prop_string(out_scene, out_id, prop->name.data, UFBXW_PROP_TYPE_STRING, prop->value_str.data);
 		}
 	}
 }
@@ -507,6 +514,8 @@ int main(int argc, char **argv)
 		}
 	}
 
+	bool set_material_defaults = false;
+
 	for (size_t material_ix = 0; material_ix < in_scene->materials.count; material_ix++) {
 		ufbx_material *in_material = in_scene->materials.data[material_ix];
 
@@ -524,6 +533,21 @@ int main(int argc, char **argv)
 		ufbxw_set_name(out_scene, out_material.id, in_material->name.data);
 		element_ids[in_material->element_id] = out_material.id;
 
+		// NOTE: This might save the defaults to a nonsensical type, but ufbx loses the information about the template type..
+		if (!set_material_defaults) {
+			set_material_defaults = true;
+
+			ufbxw_template out_tmpl = ufbxw_get_element_template(out_scene, out_material.id);
+			ufbxw_clear_props(out_scene, out_tmpl.id);
+
+			if (in_material->props.defaults) {
+				copy_props(out_scene, out_tmpl.id, in_material->props.defaults);
+			}
+
+			ufbxw_set_template_preferred(out_scene, out_tmpl);
+		}
+
+		ufbxw_clear_props(out_scene, out_material.id);
 		copy_props(out_scene, out_material.id, &in_material->props);
 
 		for (size_t i = 0; i < in_material->textures.count; i++) {
