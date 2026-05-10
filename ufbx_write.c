@@ -317,6 +317,7 @@
 	#define ufbxwi_read_f32(ptr) (*(const ufbxwi_unaligned ufbxwi_unaligned_f32*)(ptr))
 	#define ufbxwi_read_f64(ptr) (*(const ufbxwi_unaligned ufbxwi_unaligned_f64*)(ptr))
 
+	#define ufbxwi_write_u32(ptr, value) ((*(ufbxwi_unaligned ufbxwi_unaligned_u32*)(ptr)) = (value))
 	#define ufbxwi_write_u64(ptr, value) ((*(ufbxwi_unaligned ufbxwi_unaligned_u64*)(ptr)) = (value))
 
 	#define UFBXWI_UNALIGNED_IS_FAST 1
@@ -358,6 +359,14 @@
 		double f;
 		memcpy(&f, &u, 8);
 		return f;
+	}
+
+	static ufbxwi_forceinline void ufbxwi_write_u32(void *ptr, uint32_t value) {
+		char *p = (char*)ptr;
+		p[0] = (char)(value >> 0u);
+		p[1] = (char)(value >> 8u);
+		p[2] = (char)(value >> 16u);
+		p[3] = (char)(value >> 24u);
 	}
 
 	static ufbxwi_forceinline void ufbxwi_write_u64(void *ptr, uint64_t value) {
@@ -1305,7 +1314,9 @@ static ufbxwi_noinline void *ufbxwi_list_push_size_slow(ufbxwi_allocator *ator, 
 	char *new_data = (char*)ufbxwi_alloc_size(ator, size, new_capacity, &alloc_size);
 	ufbxwi_check(new_data, NULL);
 
-	memcpy(new_data, list->data, count * size);
+	if (count > 0) {
+		memcpy(new_data, list->data, count * size);
+	}
 	ufbxwi_free(ator, list->data);
 
 	list->data = new_data;
@@ -1335,7 +1346,9 @@ static ufbxwi_noinline bool ufbxwi_list_resize_size_slow(ufbxwi_allocator *ator,
 	char *new_data = (char*)ufbxwi_alloc_size(ator, size, new_capacity, &alloc_size);
 	ufbxwi_check(new_data, false);
 
-	memcpy(new_data, list->data, list->count * size);
+	if (list->count > 0) {
+		memcpy(new_data, list->data, list->count * size);
+	}
 
 	list->data = new_data;
 	list->capacity = alloc_size / size;
@@ -1366,7 +1379,9 @@ static ufbxwi_forceinline void *ufbxwi_list_push_copy_size(ufbxwi_allocator *ato
 {
 	void *data = ufbxwi_list_push_size(ator, p_list, size, n);
 	if (!data) return NULL;
-	memcpy(data, src, size * n);
+	if (n > 0) {
+		memcpy(data, src, size * n);
+	}
 	return data;
 }
 
@@ -1764,12 +1779,12 @@ static ufbxwi_forceinline uint32_t ufbxwi_deflate_hash3_slow(const char *data, c
 {
 	uint32_t v;
 	uint32_t left = (uint32_t)(end - data);
-	if (left >= 3) {
+	if (left >= 4) {
 		v = ufbxwi_read_u32(data) & 0xffffff;
 	} else {
 		v = 0;
 		for (uint32_t i = 0; i < left; i++) {
-			v |= data[i] << (i * 8);
+			v |= (uint32_t)(uint8_t)data[i] << (i * 8);
 		}
 	}
 	return (uint32_t)(((uint64_t)(v) * UINT64_C(0x9E3779B185EBCA87)) >> (64 - bits));
@@ -1784,7 +1799,7 @@ static ufbxwi_forceinline uint32_t ufbxwi_deflate_hash4_slow(const char *data, c
 	} else {
 		v = 0;
 		for (uint32_t i = 0; i < left; i++) {
-			v |= data[i] << (i * 8);
+			v |= (uint32_t)(uint8_t)data[i] << (i * 8);
 		}
 	}
 	return (uint32_t)(((uint64_t)(v) * UINT64_C(0x9E3779B185EBCA87)) >> (64 - bits));
@@ -1835,12 +1850,20 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 
 			match_pos = next_pos;
 
+			// TODO: Determine this more rigorously
+			int32_t good_length = 200;
+			good_length = good_length <= max_length ? good_length : max_length;
+
 			while (match_pos >= match_limit) {
+				if (best_len >= good_length) {
+					break;
+				}
+
 				next_pos = next_pos - ud->hash4_chain[next_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)];
 
 				const char *data_match = data + match_pos;
 
-				if (ufbxwi_read_u32(data_match + best_len - 3) == ufbxwi_read_u32(data_read + best_len - 3)) {
+				if (best_len < 3 || ufbxwi_read_u32(data_match + best_len - 3) == ufbxwi_read_u32(data_read + best_len - 3)) {
 					int32_t new_len = ufbxwi_lz_match_length_slow(data_match, data_read, max_length);
 					if (new_len > best_len) {
 						best_len = new_len;
@@ -1879,7 +1902,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 		}
 
 		if (match3_pos >= match_limit && end_pos - read_pos >= 3) {
-			if (((ufbxwi_read_u32(data + match3_pos) ^ ufbxwi_read_u32(data + read_pos)) & 0xffffff) == 0) {
+			if (data[match3_pos + 0] == data[read_pos + 0] && data[match3_pos + 1] == data[read_pos + 1] && data[match3_pos + 2] == data[read_pos + 2]) {
 				const uint32_t match_index = ufbxwi_deflate_push_match(ud, read_pos, match3_pos, 3);
 
 				ufbxwi_lz_pos match_end_pos = read_pos + 3;
@@ -1981,12 +2004,19 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 
 			match_pos = next_pos;
 
+			// TODO: Determine this more rigorously
+			int32_t good_length = 200;
+
 			while (match_pos >= match_limit) {
+				if (best_len >= good_length) {
+					break;
+				}
+
 				next_pos = next_pos - ud->hash4_chain[next_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)];
 
 				const char *data_match = data + match_pos;
 
-				if (ufbxwi_read_u32(data_match + best_len - 3) == ufbxwi_read_u32(data_read + best_len - 3)) {
+				if (best_len < 3 || ufbxwi_read_u32(data_match + best_len - 3) == ufbxwi_read_u32(data_read + best_len - 3)) {
 					int32_t new_len = ufbxwi_lz_match_length_fast(data_match, data_read, 258);
 					if (new_len > best_len) {
 						best_len = new_len;
@@ -8343,16 +8373,16 @@ static void ufbxwi_write_queue_resolve_reloc(ufbxwi_write_queue *wq, uint32_t re
 
 	switch (reloc->type) {
 	case UFBXWI_WRITE_RELOC_ABSOLUTE_U32:
-		*(uint32_t*)dst = (uint32_t)target_offset;
+		ufbxwi_write_u32(dst, (uint32_t)target_offset);
 		break;
 	case UFBXWI_WRITE_RELOC_ABSOLUTE_U64:
-		*(uint64_t*)dst = target_offset;
+		ufbxwi_write_u64(dst, target_offset);
 		break;
 	case UFBXWI_WRITE_RELOC_RELATIVE_U32:
-		*(uint32_t*)dst = (uint32_t)relative_offset;
+		ufbxwi_write_u32(dst, (uint32_t)relative_offset);
 		break;
 	case UFBXWI_WRITE_RELOC_RELATIVE_U64:
-		*(uint64_t*)dst = relative_offset;
+		ufbxwi_write_u64(dst, relative_offset);
 		break;
 	}
 
@@ -8642,7 +8672,9 @@ static ufbxwi_noinline bool ufbxwi_queue_write_slow(ufbxwi_write_queue *wq, cons
 		ufbxwi_mutable_void_span dst = ufbxwi_queue_write_reserve_at_least(wq, length);
 		ufbxwi_check(dst.count > 0, false);
 
-		memcpy(dst.data, data, length);
+		if (length > 0) {
+			memcpy(dst.data, data, length);
+		}
 		ufbxwi_queue_write_commit(wq, length);
 	}
 
@@ -8654,7 +8686,9 @@ static ufbxwi_forceinline void ufbxwi_queue_write(ufbxwi_write_queue *wq, const 
 	char *dst = wq->buffer_pos;
 	size_t left = ufbxwi_to_size(wq->buffer_end - dst);
 	if (left >= length) {
-		memcpy(dst, data, length);
+		if (length > 0) {
+			memcpy(dst, data, length);
+		}
 		wq->buffer_pos = dst + length;
 	} else {
 		ufbxwi_queue_write_slow(wq, data, length);
