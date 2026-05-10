@@ -24,6 +24,11 @@
 
 #define ufbxwt_assert(cond) assert(cond)
 
+static bool ufbxwt_bad_deflate_impl(void *user, ufbxw_deflate_compressor *compressor, int32_t compression_level)
+{
+	return false;
+}
+
 bool ufbxwt_deflate_setup(ufbxw_deflate *deflate, ufbxwt_deflate_impl impl)
 {
 	switch (impl) {
@@ -44,6 +49,10 @@ bool ufbxwt_deflate_setup(ufbxw_deflate *deflate, ufbxwt_deflate_impl impl)
 		#endif
 		return false;
 
+	case UFBXWT_DEFLATE_IMPL_NONE:
+		deflate->create_cb.fn = &ufbxwt_bad_deflate_impl;
+		return true;
+
 	default:
 		ufbxwt_assert(false);
 		break;
@@ -57,6 +66,7 @@ const char *ufbxwt_deflate_impl_name(ufbxwt_deflate_impl impl)
 	case UFBXWT_DEFLATE_IMPL_BUILTIN: return "builtin";
 	case UFBXWT_DEFLATE_IMPL_LIBDEFLATE: return "libdeflate";
 	case UFBXWT_DEFLATE_IMPL_ZLIB: return "zlib";
+	case UFBXWT_DEFLATE_IMPL_NONE: return "none";
 	default: return "";
 	}
 }
@@ -105,12 +115,9 @@ bool ufbxwt_thread_setup(ufbxw_thread_sync *sync, ufbxw_thread_pool *pool, ufbxw
 		return true;
 
 	case UFBXWT_THREAD_IMPL_CPP_THREADS:
-		#if UFBXWT_HAS_LIBDEFLATE
-			ufbxw_cpp_threads_setup_sync(sync);
-			ufbxw_cpp_threads_setup_pool(pool);
-			return true;
-		#endif
-		return false;
+		ufbxw_cpp_threads_setup_sync(sync);
+		ufbxw_cpp_threads_setup_pool(pool);
+		return true;
 
 	default:
 		ufbxwt_assert(false);
