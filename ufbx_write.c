@@ -8767,7 +8767,7 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 //   uint64_t values_size; // < Size of the written values
 //
 // As we stream the output and potentially have threads writing the chunks asynchronously,
-// we might now know the exact file offsets for the chunks until later. For example:
+// we might not know the exact file offsets for the chunks until later. For example:
 //
 //   [chunk 0: <data>] { ... end_offset = chunk2 + 0x1234 }
 //   [chunk 1: <task 0>]
