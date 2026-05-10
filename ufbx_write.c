@@ -13135,6 +13135,7 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 
 	ufbxwi_thread_pool_free(&sc.thread_pool);
 
+	ufbxwi_free_allocator(&sc.thread_ator);
 	ufbxwi_free_allocator(&sc.ator);
 
 	if (sc.error.error.type != UFBXW_ERROR_NONE) {

@@ -56,6 +56,8 @@ UFBXWT_TEST(node_wrong_type)
 	ufbxw_node_set_translation(scene, fake_node, translation);
 
 	ufbxwt_assert_error(&error, UFBXW_ERROR_ELEMENT_WRONG_TYPE, "ufbxw_node_set_translation", "wrong type: mesh");
+
+	ufbxw_free_scene(scene);
 }
 #endif
 
