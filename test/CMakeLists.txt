@@ -2,7 +2,10 @@ cmake_minimum_required(VERSION 3.15)
 
 project(ufbxw_tests)
 
+include(CTest)
+
 option(USE_ASAN "Enable address sanitizer" OFF)
+option(USE_UBSAN "Enable undefined behavior sanitizer" OFF)
 
 add_library(ufbx_write)
 
@@ -20,12 +23,35 @@ if(MSVC)
     set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /Ob2")
 endif()
 
-if(USE_ASAN)
-    add_compile_options("-fsanitize=address")
-    add_link_options("-fsanitize=address")
-endif()
-
 target_sources(ufbx_write PRIVATE ${SRC_UFBX_WRITE})
+
+if(USE_ASAN OR USE_UBSAN)
+    set(UFBXW_SANITIZER_OPTIONS "")
+    set(UFBXW_SANITIZER_LINK_OPTIONS "")
+
+    if(USE_ASAN)
+        list(APPEND UFBXW_SANITIZER_OPTIONS "-fsanitize=address")
+        list(APPEND UFBXW_SANITIZER_LINK_OPTIONS "-fsanitize=address")
+
+        if(NOT APPLE)
+            list(APPEND UFBXW_SANITIZER_OPTIONS "-fsanitize=leak")
+            list(APPEND UFBXW_SANITIZER_LINK_OPTIONS "-fsanitize=leak")
+        endif()
+    endif()
+
+    if(USE_UBSAN)
+        list(APPEND UFBXW_SANITIZER_OPTIONS
+            "-fsanitize=undefined"
+            "-fno-sanitize=float-cast-overflow"
+            "-fno-sanitize-recover=undefined"
+        )
+        list(APPEND UFBXW_SANITIZER_LINK_OPTIONS "-fsanitize=undefined")
+        target_compile_definitions(ufbx_write PRIVATE UFBXW_UBSAN)
+    endif()
+
+    target_compile_options(ufbx_write PRIVATE ${UFBXW_SANITIZER_OPTIONS})
+    target_link_options(ufbx_write INTERFACE ${UFBXW_SANITIZER_LINK_OPTIONS})
+endif()
 
 add_subdirectory(ufbx)
 add_subdirectory(extra)
@@ -39,7 +65,7 @@ add_subdirectory(deflate_benchmark)
 if (MSVC)
     add_compile_options(/W4 /WX)
 else()
-    add_compile_options(-Wall -Wextra -Werror -Wno-format-truncation)
+    add_compile_options(-Wall -Wextra -Werror)
     target_link_libraries(ufbxw_test PRIVATE m)
     target_link_libraries(ufbxw_unit PRIVATE m)
 endif()
@@ -56,5 +82,14 @@ set_target_properties(roundtrip PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY ${ROOT_
 set_target_properties(compare_fbx PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY ${ROOT_PATH})
 
 file(MAKE_DIRECTORY "${ROOT_PATH}/output")
+
+if(BUILD_TESTING)
+    add_test(NAME test COMMAND ufbxw_test)
+    add_test(NAME unit COMMAND ufbxw_unit)
+
+    set_tests_properties(test unit PROPERTIES
+        WORKING_DIRECTORY ${ROOT_PATH}
+    )
+endif()
 
 set(CMAKE_SUPPRESS_REGENERATION true)

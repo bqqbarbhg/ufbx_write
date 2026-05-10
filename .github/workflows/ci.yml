@@ -28,6 +28,21 @@ jobs:
       - name: Run unit tests
         run: build-test/unit/ufbxw_unit --verbose
 
+  ci_sanitize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Configure test CMake
+        run: cmake -S test -B build-test -D USE_UBSAN=ON -D USE_ASAN=ON
+      - name: Compile tests
+        run: cmake --build build-test -j 4
+      - name: Run tests
+        run: build-test/test/ufbxw_test --verbose
+      - name: Run unit tests
+        run: build-test/unit/ufbxw_unit --verbose
+
   ci_cpp:
     runs-on: ubuntu-latest
     steps:
