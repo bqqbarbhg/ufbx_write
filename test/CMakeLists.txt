@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.15)
 
 project(ufbxw_tests)
 
+include(CTest)
+
 option(USE_ASAN "Enable address sanitizer" OFF)
 option(USE_UBSAN "Enable undefined behavior sanitizer" OFF)
 
@@ -80,5 +82,14 @@ set_target_properties(roundtrip PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY ${ROOT_
 set_target_properties(compare_fbx PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY ${ROOT_PATH})
 
 file(MAKE_DIRECTORY "${ROOT_PATH}/output")
+
+if(BUILD_TESTING)
+    add_test(NAME test COMMAND ufbxw_test)
+    add_test(NAME unit COMMAND ufbxw_unit)
+
+    set_tests_properties(test unit PROPERTIES
+        WORKING_DIRECTORY ${ROOT_PATH}
+    )
+endif()
 
 set(CMAKE_SUPPRESS_REGENERATION true)
