@@ -1112,7 +1112,12 @@ ufbxw_abi ufbxw_camera ufbxw_create_camera(ufbxw_scene *scene, ufbxw_node node);
 
 // -- Bone
 
-ufbxw_abi ufbxw_bone ufbxw_create_bone(ufbxw_scene *scene, ufbxw_node node);
+typedef enum ufbxw_bone_type {
+	UFBXW_BONE_LIMB_NODE,
+	UFBXW_BONE_ROOT,
+} ufbxw_bone_type;
+
+ufbxw_abi ufbxw_bone ufbxw_create_bone(ufbxw_scene *scene, ufbxw_bone_type type, ufbxw_node node);
 
 // -- Bind pose
 

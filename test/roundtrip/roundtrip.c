@@ -571,7 +571,12 @@ int main(int argc, char **argv)
 
 	for (size_t bone_ix = 0; bone_ix < in_scene->bones.count; bone_ix++) {
 		ufbx_bone *in_bone = in_scene->bones.data[bone_ix];
-		ufbxw_bone out_bone = ufbxw_create_bone(out_scene, ufbxw_null_node);
+		ufbxw_bone_type type = UFBXW_BONE_LIMB_NODE;
+		if (in_bone->is_root) {
+			type = UFBXW_BONE_ROOT;
+		}
+
+		ufbxw_bone out_bone = ufbxw_create_bone(out_scene, type, ufbxw_null_node);
 		element_ids[in_bone->element_id] = out_bone.id;
 	}
 

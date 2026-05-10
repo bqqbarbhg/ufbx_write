@@ -4,6 +4,7 @@
 #include "test_mesh.h"
 #include "test_animation.h"
 #include "test_skin.h"
+#include "test_bone.h"
 #include "test_blend_shape.h"
 #include "test_cache.h"
 #include "test_light.h"

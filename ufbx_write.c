@@ -3627,6 +3627,7 @@ typedef enum ufbxwi_token {
 	UFBXWI_RenderAPIVersion,
 	UFBXWI_RightBarnDoor,
 	UFBXWI_Roll,
+	UFBXWI_Root,
 	UFBXWI_RootBindingName,
 	UFBXWI_Rotation,
 	UFBXWI_RotationAccumulationMode,
@@ -4033,6 +4034,7 @@ static const ufbxw_string ufbxwi_tokens[] = {
 	{ "RenderAPIVersion", 16 },
 	{ "RightBarnDoor", 13 },
 	{ "Roll", 4 },
+	{ "Root", 4 },
 	{ "RootBindingName", 15 },
 	{ "Rotation", 8 },
 	{ "RotationAccumulationMode", 24 },
@@ -5228,6 +5230,7 @@ typedef struct {
 
 	ufbxw_real limb_length;
 	ufbxw_real size;
+	ufbxw_bone_type bone_type;
 } ufbxwi_skeleton;
 
 typedef struct {
@@ -6666,11 +6669,26 @@ static bool ufbxwi_init_camera(ufbxw_scene *scene, void *data)
 	return true;
 }
 
-static bool ufbxwi_init_skeleton(ufbxw_scene *scene, void *data)
+static bool ufbxwi_init_skeleton(ufbxw_scene *scene, ufbxwi_skeleton *skeleton)
 {
-	ufbxwi_skeleton *skeleton = (ufbxwi_skeleton*)data;
 	skeleton->size = (ufbxw_real)100.0;
 	skeleton->limb_length = (ufbxw_real)1.0;
+	return true;
+}
+
+static bool ufbxwi_init_skeleton_limb_node(ufbxw_scene *scene, void *data)
+{
+	ufbxwi_skeleton *skeleton = (ufbxwi_skeleton*)data;
+	if (!ufbxwi_init_skeleton(scene, skeleton)) return false;
+	skeleton->bone_type = UFBXW_BONE_LIMB_NODE;
+	return true;
+}
+
+static bool ufbxwi_init_skeleton_root(ufbxw_scene *scene, void *data)
+{
+	ufbxwi_skeleton *skeleton = (ufbxwi_skeleton*)data;
+	if (!ufbxwi_init_skeleton(scene, skeleton)) return false;
+	skeleton->bone_type = UFBXW_BONE_ROOT;
 	return true;
 }
 
@@ -6888,8 +6906,13 @@ static const ufbxwi_element_type_desc ufbxwi_element_types[] = {
 		0,
 	},
 	{
-		UFBXW_ELEMENT_BONE, UFBXWI_TOKEN_NONE, UFBXWI_LimbNode, UFBXWI_NodeAttribute, UFBXWI_NodeAttribute, UFBXWI_FbxSkeleton,
-		ufbxwi_skeleton_props, ufbxwi_arraycount(ufbxwi_skeleton_props), &ufbxwi_init_skeleton,
+		UFBXW_ELEMENT_BONE, UFBXWI_LimbNode, UFBXWI_LimbNode, UFBXWI_NodeAttribute, UFBXWI_NodeAttribute, UFBXWI_FbxSkeleton,
+		ufbxwi_skeleton_props, ufbxwi_arraycount(ufbxwi_skeleton_props), &ufbxwi_init_skeleton_limb_node,
+		0,
+	},
+	{
+		UFBXW_ELEMENT_BONE, UFBXWI_Root, UFBXWI_Root, UFBXWI_NodeAttribute, UFBXWI_NodeAttribute, UFBXWI_FbxSkeleton,
+		ufbxwi_skeleton_props, ufbxwi_arraycount(ufbxwi_skeleton_props), &ufbxwi_init_skeleton_root,
 		0,
 	},
 	{
@@ -8658,7 +8681,7 @@ static void ufbxwi_prepare_scene(ufbxw_scene *scene, const ufbxw_prepare_opts *o
 			if (!node) continue;
 			if (node->attribute != 0) continue;
 
-			ufbxw_bone bone = ufbxw_create_bone(scene, cluster->node);
+			ufbxw_bone bone = ufbxw_create_bone(scene, UFBXW_BONE_LIMB_NODE, cluster->node);
 			ufbxwi_check(!ufbxwi_is_fatal(&scene->error));
 		}
 	}
@@ -11090,6 +11113,18 @@ static void ufbxwi_save_blend_shape(ufbxwi_save_context *sc, ufbxwi_blend_shape 
 	ufbxwi_dom_array(sc, "Normals", shape->normals.id);
 }
 
+static void ufbxwi_save_skeleton(ufbxwi_save_context *sc, ufbxwi_skeleton *skeleton)
+{
+	switch (skeleton->bone_type) {
+	case UFBXW_BONE_LIMB_NODE:
+		ufbxwi_dom_value(sc, "TypeFlags", "C", "Skeleton");
+		break;
+	case UFBXW_BONE_ROOT:
+		ufbxwi_dom_value(sc, "TypeFlags", "CCC", "Null", "Skeleton", "Root");
+		break;
+	}
+}
+
 static void ufbxwi_save_bind_pose(ufbxwi_save_context *sc, ufbxwi_bind_pose *pose)
 {
 	ufbxw_scene *scene = sc->scene;
@@ -11446,7 +11481,7 @@ static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element
 	// TODO: Light, camera
 
 	if (type == UFBXW_ELEMENT_BONE) {
-		ufbxwi_dom_value(sc, "TypeFlags", "C", "Skeleton");
+		ufbxwi_save_skeleton(sc, (ufbxwi_skeleton*)element);
 	}
 
 	if (type == UFBXW_ELEMENT_BIND_POSE) {
@@ -13318,9 +13353,17 @@ ufbxw_abi ufbxw_camera ufbxw_create_camera(ufbxw_scene *scene, ufbxw_node node)
 	return camera;
 }
 
-ufbxw_abi ufbxw_bone ufbxw_create_bone(ufbxw_scene *scene, ufbxw_node node)
+ufbxw_abi ufbxw_bone ufbxw_create_bone(ufbxw_scene *scene, ufbxw_bone_type type, ufbxw_node node)
 {
-	ufbxw_bone bone = { ufbxw_create_element(scene, UFBXW_ELEMENT_BONE) };
+	const char *type_name = "LimbNode";
+	switch (type) {
+	case UFBXW_BONE_LIMB_NODE:
+		break;
+	case UFBXW_BONE_ROOT:
+		type_name = "Root";
+		break;
+	}
+	ufbxw_bone bone = { ufbxw_create_element_ex(scene, UFBXW_ELEMENT_BONE, type_name) };
 	if (node.id) {
 		ufbxwi_connect(scene, UFBXW_CONNECTION_NODE_ATTRIBUTE, bone.id, node.id, 0);
 	}
