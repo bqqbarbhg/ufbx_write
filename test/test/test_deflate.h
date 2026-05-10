@@ -6,6 +6,7 @@
 typedef struct {
 	void *data;
 	size_t data_size;
+	size_t written_size;
 } ufbxwt_memory_stream;
 
 static bool ufbxwt_memory_stream_write(void *user, uint64_t offset, const void *data, size_t size)
@@ -15,6 +16,12 @@ static bool ufbxwt_memory_stream_write(void *user, uint64_t offset, const void *
 		return false;
 	}
 	memcpy((char*)s->data + offset, data, size);
+
+	size_t end_pos = (size_t)offset + size;
+	if (end_pos > s->written_size) {
+		s->written_size = end_pos;
+	}
+
 	return true;
 }
 

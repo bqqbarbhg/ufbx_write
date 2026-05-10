@@ -9,3 +9,4 @@
 #include "test_camera.h"
 #include "test_deflate.h"
 #include "test_ascii.h"
+#include "test_binary.h"
