@@ -1475,14 +1475,14 @@ static ufbxw_string ufbxwi_vformat(ufbxwi_allocator *ator, ufbxwi_byte_list *buf
 			} break;
 			case '0': {
 				char *dst = ufbxwi_list_push_uninit(ator, buf, char);
-				ufbxwi_check(dst, ufbxwi_empty_string, ufbxwi_empty_string);
+				ufbxwi_check(dst, ufbxwi_empty_string);
 				*dst = '\0';
 			} break;
 			}
 		} else {
 			if (buf->count == buf->capacity) {
 				char *dst = ufbxwi_list_push_uninit(ator, buf, char);
-				ufbxwi_check(dst, ufbxwi_empty_string, ufbxwi_empty_string);
+				ufbxwi_check(dst, ufbxwi_empty_string);
 				*dst = c;
 			} else {
 				buf->data[buf->count++] = c;
