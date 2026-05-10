@@ -1353,6 +1353,9 @@ typedef struct ufbxw_save_opts {
 	// How to format floating point numbers in ASCII files.
 	ufbxw_ascii_float_format ascii_float_format;
 
+	// Do not compress binary data
+	bool disable_compression;
+
 	// TODO: Do not save animation
 	bool ignore_animation;
 
