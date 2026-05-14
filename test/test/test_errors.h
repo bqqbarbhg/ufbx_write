@@ -8,6 +8,11 @@ static void ufbxwt_capture_error(void *user, const ufbxw_error *error)
 	ufbxwt_assert(dst->type == UFBXW_ERROR_NONE);
 	*dst = *error;
 }
+
+static void ufbxwt_reset_error(ufbxw_error *error)
+{
+	memset(error, 0, sizeof(ufbxw_error));
+}
 #endif
 
 UFBXWT_TEST(node_not_found)
@@ -86,6 +91,54 @@ UFBXWT_TEST(error_out_of_bounds)
 	ufbxwt_assert(bad_child.id == 0);
 
 	ufbxwt_assert_error(&error, UFBXW_ERROR_INDEX_OUT_OF_BOUNDS, "ufbxw_node_get_child", "index (1) out of bounds (1)");
+
+	ufbxw_free_scene(scene);
+}
+#endif
+
+UFBXWT_TEST(error_buffer_edit)
+#if UFBXWT_IMPL
+{
+	ufbxw_scene *scene = ufbxw_create_scene(NULL);
+	ufbxwt_assert(scene);
+
+	ufbxw_error error = { UFBXW_ERROR_NONE };
+	ufbxw_set_error_callback(scene, &ufbxwt_capture_error, &error);
+
+	ufbxw_int_buffer buffer = ufbxw_create_int_buffer(scene, 16);
+
+	{
+		ufbxw_int_list list = ufbxw_edit_int_buffer(scene, buffer);
+		ufbxwt_assert(list.count == 16);
+	}
+
+	{
+		ufbxw_long_buffer long_buffer = { buffer.id };
+		ufbxw_long_list long_list = ufbxw_edit_long_buffer(scene, long_buffer);
+		ufbxwt_assert(long_list.count == 0);
+		ufbxwt_assert_error(&error, UFBXW_ERROR_BUFFER_WRONG_TYPE, "ufbxwi_edit_buffer", "wrong buffer type: int (expected long)");
+	}
+
+	ufbxw_free_buffer(scene, buffer.id);
+
+	ufbxwt_reset_error(&error);
+
+	{
+		ufbxw_int_list list = ufbxw_edit_int_buffer(scene, buffer);
+		ufbxwt_assert(list.count == 0);
+		ufbxwt_assert_error(&error, UFBXW_ERROR_BUFFER_NOT_FOUND, "ufbxwi_edit_buffer", "buffer not found");
+	}
+
+	ufbxw_real data[4] = { 0 };
+	ufbxw_real_buffer ext_buffer = ufbxw_external_real_array(scene, data, 4);
+
+	ufbxwt_reset_error(&error);
+
+	{
+		ufbxw_real_list list = ufbxw_edit_real_buffer(scene, ext_buffer);
+		ufbxwt_assert(list.count == 0);
+		ufbxwt_assert_error(&error, UFBXW_ERROR_BUFFER_NOT_EDITABLE, "ufbxwi_edit_buffer", "buffer not editable");
+	}
 
 	ufbxw_free_scene(scene);
 }
