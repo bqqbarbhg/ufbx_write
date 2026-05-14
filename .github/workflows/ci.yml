@@ -84,7 +84,7 @@ jobs:
       - name: Compile tests
         run: cmake --build build-test -j 4
       - name: Run tests
-        run: build-test/test/ufbxw_test --fuzz
+        run: build-test/test/ufbxw_test --fuzz --fuzz-rounds 5
 
   ci_cpp:
     runs-on: ubuntu-latest
