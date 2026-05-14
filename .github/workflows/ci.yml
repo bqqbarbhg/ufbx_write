@@ -39,9 +39,9 @@ jobs:
       - name: Compile tests
         run: cmake --build build-test -j 4
       - name: Run tests
-        run: build-test/test/ufbxw_test --verbose
+        run: build-test/test/ufbxw_test.exe --verbose
       - name: Run unit tests
-        run: build-test/unit/ufbxw_unit --verbose
+        run: build-test/unit/ufbxw_unit.exe --verbose
 
   ci_macos:
     runs-on: macos-latest
