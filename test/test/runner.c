@@ -163,7 +163,11 @@ void ufbxwt_log_uerror(ufbx_error *err)
 
 void ufbxwt_log_error(const ufbxw_error *err)
 {
-	ufbxwt_logf("Error: %s(): %s", err->function.data, err->description);
+	if (err->type == UFBXW_ERROR_NONE) {
+		ufbxwt_logf("Error: (none)");
+	} else {
+		ufbxwt_logf("Error: %s(): %s", err->function.data, err->description);
+	}
 }
 
 #include "testing_utils.h"
@@ -466,7 +470,7 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 					ufbxw_save_opts fuzz_opts = save_opts;
 					fuzz_opts.max_allocations = max_allocs;
 
-					ufbxw_error save_error;
+					ufbxw_error save_error = { 0 };
 					ufbxw_save_stream(scene, &ws, &fuzz_opts, &save_error);
 					if (save_error.type != UFBXW_ERROR_ALLOCATION_LIMIT) {
 						ufbxwt_log_error(&save_error);
@@ -480,7 +484,7 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 					ufbxw_save_opts fuzz_opts = save_opts;
 					fuzz_opts.thread_max_allocations = max_allocs;
 
-					ufbxw_error save_error;
+					ufbxw_error save_error = { 0 };
 					ufbxw_save_stream(scene, &ws, &fuzz_opts, &save_error);
 					if (save_error.type != UFBXW_ERROR_ALLOCATION_LIMIT) {
 						ufbxwt_log_error(&save_error);
@@ -499,7 +503,7 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 					ufbxw_save_opts fuzz_opts = save_opts;
 					fuzz_opts.file_size_limit = max_size;
 
-					ufbxw_error save_error;
+					ufbxw_error save_error = { 0 };
 					ufbxw_save_stream(scene, &ws, &fuzz_opts, &save_error);
 					if (save_error.type != UFBXW_ERROR_FILE_SIZE_LIMIT) {
 						ufbxwt_log_error(&save_error);
