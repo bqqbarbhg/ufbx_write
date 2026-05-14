@@ -8605,7 +8605,7 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush_chunks(ufbxwi_write_queue *
 	return true;
 }
 
-static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, size_t min_chunk_size)
+static ufbxwi_noinline bool ufbxwi_write_queue_flush_imp(ufbxwi_write_queue *wq, size_t min_chunk_size)
 {
 	if (ufbxwi_is_fatal(wq->error)) return false;
 
@@ -8659,6 +8659,16 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, siz
 	wq->buffer_begin = buffer->pos;
 	wq->buffer_pos = buffer->pos;
 	wq->buffer_end = buffer->end;
+
+	return true;
+}
+
+static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, size_t min_chunk_size)
+{
+	if (!ufbxwi_write_queue_flush_imp(wq, min_chunk_size)) {
+		ufbxwi_write_queue_set_failed(wq);
+		return false;
+	}
 
 	return true;
 }
@@ -8746,7 +8756,6 @@ static ufbxwi_forceinline void ufbxwi_queue_write_commit(ufbxwi_write_queue *wq,
 static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least_in_chunk(ufbxwi_write_queue *wq, ufbxwi_write_chunk *chunk, size_t length)
 {
 	ufbxwi_mutable_void_span result = { 0 };
-	if (ufbxwi_write_queue_check_fail(wq)) return result;
 
 	if (chunk == NULL) {
 		return ufbxwi_queue_write_reserve_at_least(wq, length);
@@ -8777,8 +8786,6 @@ static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least_in_chunk(ufb
 
 static ufbxwi_forceinline void ufbxwi_queue_write_commit_in_chunk(ufbxwi_write_queue *wq, ufbxwi_write_chunk *chunk, size_t length)
 {
-	if (ufbxwi_write_queue_check_fail(wq)) return;
-
 	if (chunk == NULL) {
 		ufbxwi_queue_write_commit(wq, length);
 	} else {

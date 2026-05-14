@@ -397,11 +397,15 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 
 	if (g_fuzz) {
 		g_skip_ok = true;
-		printf("FUZZ\n");
+		printf("FUZZ");
 		fuzz_rounds = g_fuzz_rounds > 0 ? g_fuzz_rounds : 1;
 	}
 
 	for (int i = 0; i < fuzz_rounds; i++) {
+		if ((i + 1) % 10 == 0) {
+			putchar('.');
+		}
+
 		for (size_t max_allocs = 1; max_allocs < memory_stats.allocation_count; max_allocs++) {
 			if (!ufbxwt_fuzzf("scene_max_allocs=%zu", max_allocs)) continue;
 
@@ -495,6 +499,10 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 		}
 	}
 
+	if (g_fuzz) {
+		printf(" OK\n");
+	}
+
 	ufbxw_free_scene(scene);
 }
 
@@ -520,6 +528,10 @@ int ufbxwt_run_test(ufbxwt_test *test)
 		fflush(stdout);
 		return 1;
 	} else {
+		if (g_skip_ok) {
+			printf(" ");
+		}
+
 		printf("FAIL\n");
 		fflush(stdout);
 
