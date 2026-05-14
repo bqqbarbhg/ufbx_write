@@ -9596,6 +9596,10 @@ static void ufbxwi_binary_dom_write(ufbxwi_save_context *sc, const char *tag, co
 
 static ufbxw_deflate_advance_result ufbxwi_deflate_advance(ufbxwi_save_thread_context *tc, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, bool is_final)
 {
+	if (!dst || dst_size == 0) {
+		return UFBXW_DEFLATE_ADVANCE_RESULT_ERROR;
+	}
+
 	uint32_t flags = 0;
 	if (is_final) {
 		flags |= UFBXW_DEFLATE_ADVANCE_FLAG_FINISH;
@@ -9809,6 +9813,7 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 
 	if (encoding == 1) {
 		ufbxwi_buffer_input input = ufbxwi_get_buffer_input(&sc->buffers, buffer_id);
+		ufbxwi_check(input.type != UFBXWI_BUFFER_TYPE_NONE);
 
 		if (sc->task_queue.enabled && data_size >= sc->opts.threaded_min_deflate_bytes) {
 			ufbxwi_write_chunk *chunk = ufbxwi_write_queue_reserve_chunk(&sc->write_queue);

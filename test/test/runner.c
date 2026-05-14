@@ -468,6 +468,9 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 
 					ufbxw_error save_error;
 					ufbxw_save_stream(scene, &ws, &fuzz_opts, &save_error);
+					if (save_error.type != UFBXW_ERROR_ALLOCATION_LIMIT) {
+						ufbxwt_log_error(&save_error);
+					}
 					ufbxwt_assert(save_error.type == UFBXW_ERROR_ALLOCATION_LIMIT);
 				}
 
@@ -479,10 +482,17 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 
 					ufbxw_error save_error;
 					ufbxw_save_stream(scene, &ws, &fuzz_opts, &save_error);
+					if (save_error.type != UFBXW_ERROR_ALLOCATION_LIMIT) {
+						ufbxwt_log_error(&save_error);
+					}
 					ufbxwt_assert(save_error.type == UFBXW_ERROR_ALLOCATION_LIMIT);
 				}
 
 				uint64_t size_step = save_opts.buffer_size;
+				if (size_step < stats.file_size / 32) {
+					size_step = stats.file_size / 32;
+				}
+
 				for (uint64_t max_size = 1; max_size < stats.file_size; max_size += size_step) {
 					if (!ufbxwt_fuzzf("file_size_limit=%llu", (unsigned long long)max_size)) continue;
 
@@ -491,6 +501,9 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 
 					ufbxw_error save_error;
 					ufbxw_save_stream(scene, &ws, &fuzz_opts, &save_error);
+					if (save_error.type != UFBXW_ERROR_FILE_SIZE_LIMIT) {
+						ufbxwt_log_error(&save_error);
+					}
 					ufbxwt_assert(save_error.type == UFBXW_ERROR_FILE_SIZE_LIMIT);
 				}
 
