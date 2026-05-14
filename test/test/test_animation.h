@@ -87,13 +87,15 @@ UFBXWT_SCENE_TEST(anim_buffers)
 	ufbxwt_assert(times.count == frame_count);
 	ufbxwt_assert(values.count == frame_count);
 
-	for (size_t i = 0; i < frame_count; i++) {
-		double time = (double)i / (double)frame_rate;
-		int64_t ktime = (int64_t)(time * (double)UFBXW_KTIME_SECOND);
-		float value = ufbxwt_sin_anim_value(time);
+	if (times.count > 0 && values.count > 0) {
+		for (size_t i = 0; i < frame_count; i++) {
+			double time = (double)i / (double)frame_rate;
+			int64_t ktime = (int64_t)(time * (double)UFBXW_KTIME_SECOND);
+			float value = ufbxwt_sin_anim_value(time);
 
-		times.data[i] = ktime;
-		values.data[i] = value;
+			times.data[i] = ktime;
+			values.data[i] = value;
+		}
 	}
 
 	ufbxw_anim_curve_data_desc data = { 0 };

@@ -239,10 +239,15 @@ ufbxwt_test_stats *ufbxwt_get_test_group(const char *name)
 	return group;
 }
 
+ufbxwt_threadlocal bool t_ignore_asserts = false;
 ufbxwt_threadlocal ufbxwt_jmp_buf *t_jmp_buf;
 
 void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr)
 {
+	if (t_ignore_asserts) {
+		return;
+	}
+
 	if (t_jmp_buf) {
 		ufbxwt_longjmp(*t_jmp_buf, 1, file, line, expr);
 	}
@@ -356,6 +361,8 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 	ufbxw_free_scene(scene);
 
 	if (g_fuzz) {
+		t_ignore_asserts = true;
+
 		for (size_t max_allocs = 1; max_allocs < memory_stats.allocation_count; max_allocs++) {
 			ufbxw_scene_opts fuzz_opts = scene_opts;
 			ufbxwt_hintf("max_allocs=%zu", max_allocs);
@@ -378,6 +385,8 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 
 			ufbxw_free_scene(fuzz_scene);
 		}
+
+		t_ignore_asserts = false;
 	}
 }
 
