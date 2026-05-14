@@ -4013,6 +4013,18 @@ typedef enum {
 	UFBXWI_BUFFER_TYPE_KEY_ATTR,
 } ufbxwi_buffer_type;
 
+static const char *ufbxwi_buffer_type_names[] = {
+	"none",
+	"int",
+	"long",
+	"real",
+	"vec2",
+	"vec3",
+	"vec4",
+	"float",
+	"key_attr",
+};
+
 typedef enum {
 	UFBXWI_BUFFER_TYPE_FLAG_ASCII_INT = 0x1,
 } ufbxwi_buffer_type_flags;
@@ -4146,6 +4158,31 @@ static ufbxwi_forceinline ufbxwi_buffer *ufbxwi_get_buffer(ufbxwi_buffer_pool *p
 	ufbxwi_buffer *buffer = &pool->buffers.data[index];
 	if (buffer->id != id) return NULL;
 	return buffer;
+}
+
+static void *ufbxwi_edit_buffer(ufbxwi_buffer_pool *pool, size_t *p_size, ufbxw_buffer_id id, ufbxwi_buffer_type type)
+{
+	if (!id) return NULL;
+
+	if (ufbxwi_buffer_id_type(id) != type) {
+		ufbxwi_failf(pool->error, UFBXW_ERROR_BUFFER_WRONG_TYPE, "wrong buffer type: %s (expected %s)",
+			ufbxwi_buffer_type_names[ufbxwi_buffer_id_type(id)], ufbxwi_buffer_type_names[type]);
+		return NULL;
+	}
+
+	ufbxwi_buffer *buf = ufbxwi_get_buffer(pool, id);
+	if (!buf) {
+		ufbxwi_fail(pool->error, UFBXW_ERROR_BUFFER_NOT_FOUND, "buffer not found");
+		return NULL;
+	}
+
+	if (buf->state != UFBXWI_BUFFER_STATE_OWNED) {
+		ufbxwi_fail(pool->error, UFBXW_ERROR_BUFFER_NOT_EDITABLE, "buffer not editable");
+		return NULL;
+	}
+
+	*p_size = buf->count;
+	return buf->data.owned.data;
 }
 
 static ufbxwi_forceinline size_t ufbxwi_get_buffer_size(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
@@ -11443,85 +11480,50 @@ ufbxw_abi ufbxw_float_buffer ufbxw_external_float_stream(ufbxw_scene *scene, ufb
 // TODO: Lock/unlock version for Rust
 ufbxw_abi ufbxw_int_list ufbxw_edit_int_buffer(ufbxw_scene *scene, ufbxw_int_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_INT);
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_int_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (int32_t*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_INT);
 	return result;
 }
 
 ufbxw_abi ufbxw_long_list ufbxw_edit_long_buffer(ufbxw_scene *scene, ufbxw_long_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_LONG);
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_long_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (int64_t*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_LONG);
 	return result;
 }
 
 ufbxw_abi ufbxw_real_list ufbxw_edit_real_buffer(ufbxw_scene *scene, ufbxw_real_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_REAL);
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_real_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (ufbxw_real*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_REAL);
 	return result;
 }
 
 ufbxw_abi ufbxw_vec2_list ufbxw_edit_vec2_buffer(ufbxw_scene *scene, ufbxw_vec2_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_VEC2);
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_vec2_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (ufbxw_vec2*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_VEC2);
 	return result;
 }
 
 ufbxw_abi ufbxw_vec3_list ufbxw_edit_vec3_buffer(ufbxw_scene *scene, ufbxw_vec3_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_VEC3);
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_vec3_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (ufbxw_vec3*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_VEC3);
 	return result;
 }
 
 ufbxw_abi ufbxw_vec4_list ufbxw_edit_vec4_buffer(ufbxw_scene* scene, ufbxw_vec4_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_VEC4);
-	ufbxwi_buffer* buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_vec4_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (ufbxw_vec4*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_VEC4);
 	return result;
 }
 
 ufbxw_abi ufbxw_float_list ufbxw_edit_float_buffer(ufbxw_scene* scene, ufbxw_float_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_FLOAT);
-	ufbxwi_buffer* buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_float_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (float*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_FLOAT);
 	return result;
 }
 
