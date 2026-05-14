@@ -3,7 +3,7 @@
 
 // Adapter for Zmij C++ implementation, for float/double formatting.
 //
-// https://github.com/dtolnay/zmij
+// https://github.com/vitaut/zmij
 //
 // Only supports floating point formatting with `UFBXW_ASCII_FLOAT_FORMAT_ROUND_TRIP`.
 //
