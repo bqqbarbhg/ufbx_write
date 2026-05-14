@@ -1669,6 +1669,9 @@ typedef struct {
 	ufbxwi_lz_pos prev_match_end_pos;
 	ufbxwi_lz_pos encode_pos;
 
+	int16_t max_scan;
+	int16_t good_length;
+
 	uint32_t num_matches;
 	uint32_t num_codelens;
 
@@ -1676,7 +1679,6 @@ typedef struct {
 	char *dst_end;
 	uint64_t dst_bits;
 	uint32_t dst_num_bits;
-
 
 	int8_t compression_level;
 	int8_t force_block_type;
@@ -1708,12 +1710,38 @@ typedef struct {
 	ufbxwi_huff_symbol huff_static_dist[UFBXWI_DEFLATE_NUM_DIST_SYMBOLS];
 } ufbxwi_deflate_encoder;
 
+typedef struct {
+	int16_t max_scan;
+	int16_t good_length;
+} ufbxwi_deflate_level;
+
+static const ufbxwi_deflate_level ufbxwi_deflate_levels[] = {
+	{ 1, 1  }, // 0
+	{ 1, 10 }, // 1
+	{ 2, 30 }, // 2
+	{ 4, 50 }, // 3
+	{ 8, 100 }, // 4
+	{ 16, 180 }, // 5
+	{ 32, 200 }, // 6
+	{ 32, 200 }, // 7
+	{ 64, 210 }, // 8
+	{ 96, 230 }, // 9
+	{ 128, 250 }, // 10
+};
+
 static ufbxwi_noinline void ufbxwi_deflate_encoder_setup(ufbxwi_deflate_encoder *ud, int32_t compression_level)
 {
+	if (compression_level < 0) compression_level = 0;
+	if (compression_level > 10) compression_level = 10;
+
 	ud->has_static_huff = false;
 	ud->force_block_type = -1;
 	ud->state = UFBXWI_DEFLATE_ENCODER_STATE_SETUP;
 	ud->compression_level = (int8_t)compression_level;
+
+	ufbxwi_deflate_level level = ufbxwi_deflate_levels[compression_level];
+	ud->max_scan = level.max_scan;
+	ud->good_length = level.good_length;
 }
 
 static ufbxwi_noinline void ufbxwi_deflate_encoder_reset_imp(ufbxwi_deflate_encoder *ud, const void *data, size_t src_size)
@@ -1874,7 +1902,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 		const char *data_read = data + read_pos;
 
 		if (match_pos >= match_limit) {
-			int32_t scan_left = 32;
+			int32_t scan_left = ud->max_scan;
 
 			int32_t data_left = (int32_t)(ud->end_pos - read_pos);
 			int32_t max_length = data_left < 258 ? data_left : 258;
@@ -1885,7 +1913,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 			match_pos = next_pos;
 
 			// TODO: Determine this more rigorously
-			int32_t good_length = 200;
+			int32_t good_length = ud->good_length;
 			good_length = good_length <= max_length ? good_length : max_length;
 
 			while (match_pos >= match_limit) {
@@ -1923,7 +1951,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 					match_pos = (ufbxwi_lz_pos)ud->hash4_tab[hash4];
 					ud->hash3_tab[hash3] = (int32_t)read_pos;
 					ud->hash4_tab[hash4] = (int32_t)read_pos;
-					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
+					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
 					read_pos++;
 				}
 
@@ -1948,7 +1976,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 					match_pos = (ufbxwi_lz_pos)ud->hash4_tab[hash4];
 					ud->hash3_tab[hash3] = (int32_t)read_pos;
 					ud->hash4_tab[hash4] = (int32_t)read_pos;
-					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
+					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
 					read_pos++;
 				}
 
@@ -2031,7 +2059,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 		const char *data_read = data + read_pos;
 
 		if (match_pos >= match_limit) {
-			uint32_t scan_left = 32;
+			uint32_t scan_left = ud->max_scan;
 
 			best_len = ufbxwi_lz_match_length_fast(data + match_pos, data_read, 258);
 			best_pos = match_pos;
@@ -2039,7 +2067,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 			match_pos = next_pos;
 
 			// TODO: Determine this more rigorously
-			int32_t good_length = 200;
+			int32_t good_length = ud->good_length;
 
 			while (match_pos >= match_limit) {
 				if (best_len >= good_length) {
@@ -2072,6 +2100,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 				read_pos++;
 				while (read_pos < match_end_pos) {
 
+					const uint32_t hash3 = next_hash3;
 					const uint32_t hash4 = next_hash4;
 					match_pos = next_match_pos;
 
@@ -2081,7 +2110,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 
 					ud->hash3_tab[hash3] = (int32_t)read_pos;
 					ud->hash4_tab[hash4] = (int32_t)read_pos;
-					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
+					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
 
 					read_pos++;
 				}
@@ -2102,12 +2131,17 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 
 				read_pos++;
 				for (size_t i = 0; i < 2; i++) {
-					const uint32_t hash3 = ufbxwi_deflate_hash3_fast(data + read_pos, UFBXWI_DEFLATE_HASH3_BITS);
-					const uint32_t hash4 = ufbxwi_deflate_hash4_fast(data + read_pos, UFBXWI_DEFLATE_HASH4_BITS);
-					match_pos = (ufbxwi_lz_pos)ud->hash4_tab[hash4];
+					const uint32_t hash3 = next_hash3;
+					const uint32_t hash4 = next_hash4;
+					match_pos = next_match_pos;
+
+					next_hash3 = ufbxwi_deflate_hash3_fast(data + read_pos + 1, UFBXWI_DEFLATE_HASH3_BITS);
+					next_hash4 = ufbxwi_deflate_hash4_fast(data + read_pos + 1, UFBXWI_DEFLATE_HASH4_BITS);
+					next_match_pos = (ufbxwi_lz_pos)ud->hash4_tab[next_hash4];
+
 					ud->hash3_tab[hash3] = (int32_t)read_pos;
 					ud->hash4_tab[hash4] = (int32_t)read_pos;
-					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
+					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
 					read_pos++;
 				}
 
@@ -2462,7 +2496,7 @@ static ufbxwi_noinline int32_t ufbxwi_deflate_determine_block_type(ufbxwi_deflat
 		ufbxwi_nounroll for (uint32_t i = 16; i < 19; i++) {
 			const uint32_t count = codelen_count[i];
 			const uint32_t extra_bits = codelen_extra_bits[i - 16];
-			bits_dynamic += count * ud->huff_codelen[i].length;
+			bits_dynamic += count * (ud->huff_codelen[i].length + extra_bits);
 		}
 	}
 
