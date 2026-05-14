@@ -38,6 +38,7 @@ bool ufbxwt_ascii_format_supports_float_format(ufbxwt_ascii_format_impl impl, uf
 
 bool ufbxwt_thread_setup(ufbxw_thread_sync *sync, ufbxw_thread_pool *pool, ufbxwt_thread_impl impl);
 const char *ufbxwt_thread_impl_name(ufbxwt_thread_impl impl);
+bool ufbxwt_thread_setup_any(ufbxw_thread_sync *sync, ufbxw_thread_pool *pool);
 
 #endif
 

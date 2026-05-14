@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+
 void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr);
 static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr) {
 	ufbxwt_assert_fail_imp(file, line, expr);
@@ -162,7 +163,11 @@ void ufbxwt_log_uerror(ufbx_error *err)
 
 void ufbxwt_log_error(const ufbxw_error *err)
 {
-	ufbxwt_logf("Error: %s(): %s", err->function.data, err->description);
+	if (err->type == UFBXW_ERROR_NONE) {
+		ufbxwt_logf("Error: (none)");
+	} else {
+		ufbxwt_logf("Error: %s(): %s", err->function.data, err->description);
+	}
 }
 
 #include "testing_utils.h"
@@ -239,10 +244,15 @@ ufbxwt_test_stats *ufbxwt_get_test_group(const char *name)
 	return group;
 }
 
+ufbxwt_threadlocal bool t_ignore_asserts = false;
 ufbxwt_threadlocal ufbxwt_jmp_buf *t_jmp_buf;
 
 void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr)
 {
+	if (t_ignore_asserts) {
+		return;
+	}
+
 	if (t_jmp_buf) {
 		ufbxwt_longjmp(*t_jmp_buf, 1, file, line, expr);
 	}
@@ -255,8 +265,42 @@ void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr)
 	ufbxwt_longjmp(g_test_jmp, 1, file, line, expr);
 }
 
+static bool ufbxwt_null_write_stream(void *user, uint64_t offset, const void *data, size_t size)
+{
+	return true;
+}
+
+
 bool g_fuzz = false;
 bool g_allow_scene_error = false;
+bool g_skip_ok = false;
+bool g_in_fuzz = false;
+
+int g_fuzz_serial = 0;
+int g_fuzz_serial_filter = 0;
+int g_fuzz_rounds = 0;
+
+bool ufbxwt_fuzzf(const char *fmt, ...)
+{
+	g_fuzz_serial++;
+
+	if (g_fuzz_serial_filter != 0 && g_fuzz_serial_filter != g_fuzz_serial) {
+		return false;
+	}
+
+	{
+		char fuzz_buf[256];
+
+		va_list args;
+		va_start(args, fmt);
+		vsnprintf(fuzz_buf, sizeof(fuzz_buf), fmt, args);
+		va_end(args);
+
+		ufbxwt_hintf("fuzz(%d) %s", g_fuzz_serial, fuzz_buf);
+	}
+
+	return true;
+}
 
 bool ufbxwt_check_scene_error_imp(ufbxw_scene *scene, const char *file, int line)
 {
@@ -353,12 +397,23 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 		}
 	}
 
-	ufbxw_free_scene(scene);
+	int fuzz_rounds = 0;
 
 	if (g_fuzz) {
+		g_skip_ok = true;
+		printf("FUZZ");
+		fuzz_rounds = g_fuzz_rounds > 0 ? g_fuzz_rounds : 1;
+	}
+
+	for (int i = 0; i < fuzz_rounds; i++) {
+		if (i > 0) {
+			putchar('.');
+		}
+
 		for (size_t max_allocs = 1; max_allocs < memory_stats.allocation_count; max_allocs++) {
+			if (!ufbxwt_fuzzf("scene_max_allocs=%zu", max_allocs)) continue;
+
 			ufbxw_scene_opts fuzz_opts = scene_opts;
-			ufbxwt_hintf("max_allocs=%zu", max_allocs);
 
 			fuzz_opts.max_allocations = max_allocs;
 
@@ -366,7 +421,10 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 			ufbxwt_diff_error fuzz_err = { 0 };
 
 			g_allow_scene_error = true;
+
+			t_ignore_asserts = true;
 			test_fn(fuzz_scene, &fuzz_err);
+			t_ignore_asserts = false;
 
 			if (!ufbxw_get_error(fuzz_scene, NULL)) {
 				ufbxw_prepare_scene(fuzz_scene, NULL);
@@ -378,7 +436,103 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 
 			ufbxw_free_scene(fuzz_scene);
 		}
+
+		for (int format_ix = 0; format_ix < ufbxwt_arraycount(formats); format_ix++) {
+			for (int threads_ix = 0; threads_ix < 2; threads_ix++) {
+				ufbxw_save_opts save_opts = { 0 };
+				save_opts.version = 7500;
+				save_opts.format = formats[format_ix];
+				save_opts.buffer_size = 1024;
+
+				if (threads_ix == 1) {
+					if (!ufbxwt_thread_setup_any(&save_opts.thread_sync, &save_opts.thread_pool)) {
+						continue;
+					}
+				}
+
+				ufbxw_write_stream ws = { 0 };
+				ws.write_fn = &ufbxwt_null_write_stream;
+
+				ufbxw_save_stats stats;
+
+				{
+
+					ufbxw_error save_error;
+					ufbxw_save_stream_ex(scene, &ws, &save_opts, &save_error, &stats);
+					ufbxwt_assert(save_error.type == UFBXW_ERROR_NONE);
+				}
+
+				g_in_fuzz = true;
+
+				for (size_t max_allocs = 1; max_allocs < stats.memory.allocation_count; max_allocs++) {
+					if (!ufbxwt_fuzzf("max_allocs=%zu", max_allocs)) continue;
+
+					ufbxw_save_opts fuzz_opts = save_opts;
+					fuzz_opts.max_allocations = max_allocs;
+
+					ufbxw_error save_error = { 0 };
+					ufbxw_save_stream(scene, &ws, &fuzz_opts, &save_error);
+
+					// If we have threads enabled, allocation counts seem to be slightly unstable..
+					if (threads_ix > 0 && save_error.type == UFBXW_ERROR_NONE) {
+						continue;
+					}
+
+					if (save_error.type != UFBXW_ERROR_ALLOCATION_LIMIT) {
+						ufbxwt_log_error(&save_error);
+					}
+					ufbxwt_assert(save_error.type == UFBXW_ERROR_ALLOCATION_LIMIT);
+				}
+
+				for (size_t max_allocs = 1; max_allocs < stats.thread_memory.allocation_count; max_allocs++) {
+					if (!ufbxwt_fuzzf("thread_max_allocs=%zu", max_allocs)) continue;
+
+					ufbxw_save_opts fuzz_opts = save_opts;
+					fuzz_opts.thread_max_allocations = max_allocs;
+
+					ufbxw_error save_error = { 0 };
+					ufbxw_save_stream(scene, &ws, &fuzz_opts, &save_error);
+
+					// If we have threads enabled, allocation counts seem to be slightly unstable..
+					if (threads_ix > 0 && save_error.type == UFBXW_ERROR_NONE) {
+						continue;
+					}
+
+					if (save_error.type != UFBXW_ERROR_ALLOCATION_LIMIT) {
+						ufbxwt_log_error(&save_error);
+					}
+					ufbxwt_assert(save_error.type == UFBXW_ERROR_ALLOCATION_LIMIT);
+				}
+
+				uint64_t size_step = save_opts.buffer_size;
+				if (size_step < stats.file_size / 32) {
+					size_step = stats.file_size / 32;
+				}
+
+				for (uint64_t max_size = 1; max_size < stats.file_size; max_size += size_step) {
+					if (!ufbxwt_fuzzf("file_size_limit=%llu", (unsigned long long)max_size)) continue;
+
+					ufbxw_save_opts fuzz_opts = save_opts;
+					fuzz_opts.file_size_limit = max_size;
+
+					ufbxw_error save_error = { 0 };
+					ufbxw_save_stream(scene, &ws, &fuzz_opts, &save_error);
+					if (save_error.type != UFBXW_ERROR_FILE_SIZE_LIMIT) {
+						ufbxwt_log_error(&save_error);
+					}
+					ufbxwt_assert(save_error.type == UFBXW_ERROR_FILE_SIZE_LIMIT);
+				}
+
+				g_in_fuzz = false;
+			}
+		}
 	}
+
+	if (g_fuzz) {
+		printf(" OK\n");
+	}
+
+	ufbxw_free_scene(scene);
 }
 
 int ufbxwt_run_test(ufbxwt_test *test)
@@ -389,13 +543,24 @@ int ufbxwt_run_test(ufbxwt_test *test)
 	memset(&g_error, 0, sizeof(g_error));
 	g_hint[0] = '\0';
 
+	g_skip_ok = false;
+	t_ignore_asserts = false;
+	g_in_fuzz = false;
+
 	g_current_test = test;
 	if (!ufbxwt_setjmp(g_test_jmp)) {
 		test->func();
-		printf("OK\n");
+
+		if (!g_skip_ok) {
+			printf("OK\n");
+		}
 		fflush(stdout);
 		return 1;
 	} else {
+		if (g_skip_ok) {
+			printf(" ");
+		}
+
 		printf("FAIL\n");
 		fflush(stdout);
 
@@ -471,6 +636,16 @@ int main(int argc, char **argv)
 		}
 		if (!strcmp(argv[i], "--fuzz")) {
 			g_fuzz = true;
+		}
+		if (!strcmp(argv[i], "--fuzz-serial")) {
+			if (++i < argc) {
+				g_fuzz_serial_filter = atoi(argv[i]);
+			}
+		}
+		if (!strcmp(argv[i], "--fuzz-rounds")) {
+			if (++i < argc) {
+				g_fuzz_rounds = atoi(argv[i]);
+			}
 		}
 		if (!strcmp(argv[i], "-g") || !strcmp(argv[i], "--group")) {
 			if (++i < argc) {

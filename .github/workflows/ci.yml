@@ -73,6 +73,30 @@ jobs:
       - name: Run unit tests
         run: build-test/unit/ufbxw_unit --verbose
 
+  ci_fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Configure test CMake
+        run: cmake -S test -B build-test -D USE_UBSAN=ON -D USE_ASAN=ON -D CMAKE_BUILD_TYPE=RelWithDebInfo
+      - name: Compile tests
+        run: cmake --build build-test -j 4
+      - name: Run tests
+        run: build-test/test/ufbxw_test --fuzz --fuzz-rounds 10
+
+  ci_lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for typos
+        if: ${{ always() && !cancelled() }}
+        uses: crate-ci/typos@master
+        with: 
+          files: ufbx_write.h ufbx_write.c
+          config: ./misc/typos.toml
+
   ci_cpp:
     runs-on: ubuntu-latest
     steps:

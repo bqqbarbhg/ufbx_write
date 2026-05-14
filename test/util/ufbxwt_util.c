@@ -176,3 +176,14 @@ const char *ufbxwt_thread_impl_name(ufbxwt_thread_impl impl)
 	default: return "";
 	}
 }
+
+bool ufbxwt_thread_setup_any(ufbxw_thread_sync *sync, ufbxw_thread_pool *pool)
+{
+	for (uint32_t i = 1; i < UFBXWT_THREAD_IMPL_COUNT; i++) {
+		if (ufbxwt_thread_setup(sync, pool, (ufbxwt_thread_impl)i)) {
+			return true;
+		}
+	}
+
+	return false;
+}

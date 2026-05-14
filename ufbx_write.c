@@ -915,6 +915,11 @@ struct ufbxwi_error {
 	ufbxwi_thread_pool *thread_pool;
 	ufbxwi_mutex mutex;
 
+	ufbxwi_atomic_u32 fatal;
+
+	ufbxwi_atomic_u32 *serial_counter;
+	uint32_t serial_index;
+
 	ufbxw_error_fn *error_fn;
 	void *error_user;
 
@@ -946,10 +951,16 @@ static ufbxwi_noinline void ufbxwi_failf_imp(ufbxwi_error *error, ufbxw_error_ty
 		return;
 	}
 
+	ufbxwi_atomic_cas(&error->fatal, 0, 1);
+
 	ufbxwi_mutex_lock_if_enabled(error->thread_pool, &error->mutex);
 	if (error->error.type >= UFBXW_ERROR_FATAL) {
 		ufbxwi_mutex_unlock_if_enabled(error->thread_pool, &error->mutex);
 		return;
+	}
+
+	if (error->serial_counter) {
+		error->serial_index = ufbxwi_atomic_add(error->serial_counter, 1) + 1;
 	}
 
 	error->error.type = type;
@@ -982,7 +993,7 @@ static ufbxwi_noinline void ufbxwi_fail_imp(ufbxwi_error *error, ufbxw_error_typ
 
 static ufbxwi_forceinline bool ufbxwi_is_fatal(ufbxwi_error *error)
 {
-	return error->error.type != UFBXW_ERROR_NONE;
+	return ufbxwi_atomic_load_relaxed(&error->fatal);
 }
 
 #define ufbxwi_check(cond, ...) do { if (!(cond)) return __VA_ARGS__; } while (0)
@@ -1069,6 +1080,7 @@ typedef struct {
 	size_t num_allocs;
 	size_t max_allocs;
 	size_t total_size;
+	size_t max_total_size;
 	size_t max_size;
 	size_t num_block_allocs;
 
@@ -1119,6 +1131,10 @@ static ufbxwi_noinline ufbxwi_alloc *ufbxwi_alloc_block(ufbxwi_allocator *ator, 
 	ator->total_size += alloc_size;
 	ator->num_block_allocs++;
 
+	if (ator->total_size > ator->max_total_size) {
+		ator->max_total_size = ator->total_size;
+	}
+
 	block->size = size;
 	block->prev = &ator->block_root;
 	block->next = ator->block_root.next;
@@ -1160,20 +1176,25 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 		ufbxwi_fail(ator->error, UFBXW_ERROR_ALLOCATION_FAILURE, "Allocation size overflow");
 		return NULL;
 	}
+
+	ufbxwi_mutex_lock_if_enabled(ator->thread_pool, &ator->mutex);
+
 	if (ator->num_allocs >= ator->max_allocs) {
+		ufbxwi_mutex_unlock_if_enabled(ator->thread_pool, &ator->mutex);
+
 		ufbxwi_failf(ator->error, UFBXW_ERROR_ALLOCATION_LIMIT, "Allocation limit exceeded (%zu)", ator->max_allocs);
 		return NULL;
 	}
 
-	ufbxwi_mutex_lock_if_enabled(ator->thread_pool, &ator->mutex);
-
 	ator->num_allocs++;
-	ator->total_size += total;
 
 	uint32_t size_class = ufbxwi_get_size_class(total);
 	if (size_class == ~0u) {
 		ufbxwi_alloc *block = ufbxwi_alloc_block(ator, total);
-		ufbxwi_check(block, NULL);
+		if (!block) {
+			ufbxwi_mutex_unlock_if_enabled(ator->thread_pool, &ator->mutex);
+			return NULL;
+		}
 		block->magic = UFBXWI_HUGE_MAGIC;
 
 		if (p_alloc_size) {
@@ -1202,7 +1223,10 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 		size_t block_alloc_size = ufbxwi_min_sz(ufbxwi_max_sz(ator->next_block_size * 2, 0x10000), 0x100000);
 
 		ufbxwi_alloc *block = ufbxwi_alloc_block(ator, block_alloc_size - sizeof(ufbxwi_alloc));
-		ufbxwi_check(block, NULL);
+		if (!block) {
+			ufbxwi_mutex_unlock_if_enabled(ator->thread_pool, &ator->mutex);
+			return NULL;
+		}
 		block->magic = UFBXWI_BLOCK_MAGIC;
 
 		ator->current_block = block;
@@ -1280,6 +1304,16 @@ static void *ufbxwi_alloc_zero_size(ufbxwi_allocator *ator, size_t size, size_t 
 		memset(ptr, 0, size * n);
 	}
 	return ptr;
+}
+
+static ufbxw_memory_stats ufbxwi_get_memory_stats(ufbxwi_allocator *ator)
+{
+	ufbxw_memory_stats stats;
+	stats.allocated_bytes = ator->total_size;
+	stats.max_allocated_bytes = ator->max_total_size;
+	stats.allocation_count = ator->num_allocs;
+	stats.block_allocation_count = ator->num_block_allocs;
+	return stats;
 }
 
 #define ufbxwi_alloc(ator, type, n) ufbxwi_maybe_null((type*)ufbxwi_alloc_size((ator), sizeof(type), (n), NULL))
@@ -2819,6 +2853,10 @@ static ufbxwi_thread_context *ufbxwi_get_thread_context(ufbxwi_task_queue *tq, u
 		if (ufbxwi_atomic_cas(&tc->thread_id, 0, id)) {
 			if (!tc->thread_ctx) {
 				tc->thread_ctx = tq->create_thread_ctx_fn(tq->thread_ctx_user);
+				if (!tc->thread_ctx) {
+					ufbxwi_atomic_store(&tc->thread_id, 0);
+					return NULL;
+				}
 			}
 			return tc;
 		}
@@ -2920,8 +2958,6 @@ static ufbxw_task_run_result ufbxwi_task_queue_run_task(ufbxwi_task_queue *tq, u
 
 static bool ufbxwi_task_queue_init(ufbxwi_task_queue *tq, ufbxwi_thread_pool *tp, ufbxwi_allocator *ator, const ufbxwi_task_queue_opts *opts, const ufbxw_thread_pool *pool)
 {
-	tq->enabled = true;
-
 	tq->user_pool = *pool;
 	tq->thread_pool = tp;
 	tq->create_thread_ctx_fn = opts->create_thread_ctx_fn;
@@ -2957,6 +2993,8 @@ static bool ufbxwi_task_queue_init(ufbxwi_task_queue *tq, ufbxwi_thread_pool *tp
 	if (!tq->user_pool.init_fn(tq->user_pool.user, ctx, num_threads)) {
 		return false;
 	}
+
+	tq->enabled = true;
 
 	return true;
 }
@@ -4013,6 +4051,18 @@ typedef enum {
 	UFBXWI_BUFFER_TYPE_KEY_ATTR,
 } ufbxwi_buffer_type;
 
+static const char *ufbxwi_buffer_type_names[] = {
+	"none",
+	"int",
+	"long",
+	"real",
+	"vec2",
+	"vec3",
+	"vec4",
+	"float",
+	"key_attr",
+};
+
 typedef enum {
 	UFBXWI_BUFFER_TYPE_FLAG_ASCII_INT = 0x1,
 } ufbxwi_buffer_type_flags;
@@ -4146,6 +4196,31 @@ static ufbxwi_forceinline ufbxwi_buffer *ufbxwi_get_buffer(ufbxwi_buffer_pool *p
 	ufbxwi_buffer *buffer = &pool->buffers.data[index];
 	if (buffer->id != id) return NULL;
 	return buffer;
+}
+
+static void *ufbxwi_edit_buffer(ufbxwi_buffer_pool *pool, size_t *p_size, ufbxw_buffer_id id, ufbxwi_buffer_type type)
+{
+	if (!id) return NULL;
+
+	ufbxwi_buffer *buf = ufbxwi_get_buffer(pool, id);
+	if (!buf) {
+		ufbxwi_fail(pool->error, UFBXW_ERROR_BUFFER_NOT_FOUND, "buffer not found");
+		return NULL;
+	}
+
+	if (ufbxwi_buffer_id_type(id) != type) {
+		ufbxwi_failf(pool->error, UFBXW_ERROR_BUFFER_WRONG_TYPE, "wrong buffer type: %s (expected %s)",
+			ufbxwi_buffer_type_names[ufbxwi_buffer_id_type(id)], ufbxwi_buffer_type_names[type]);
+		return NULL;
+	}
+
+	if (buf->state != UFBXWI_BUFFER_STATE_OWNED) {
+		ufbxwi_fail(pool->error, UFBXW_ERROR_BUFFER_NOT_EDITABLE, "buffer not editable");
+		return NULL;
+	}
+
+	*p_size = buf->count;
+	return buf->data.owned.data;
 }
 
 static ufbxwi_forceinline size_t ufbxwi_get_buffer_size(ufbxwi_buffer_pool *pool, ufbxw_buffer_id id)
@@ -7248,7 +7323,7 @@ static ufbxw_anim_prop ufbxwi_animate_prop(ufbxw_scene *scene, ufbxw_id id, ufbx
 
 	ufbxwi_token first_curve_prop = curve_props[0];
 
-	// For single channel propertes, use the property name
+	// For single channel properties, use the property name
 	// TODO: Flexible buffer
 	char name_buf[256];
 	if (curve_count == 1) {
@@ -8238,6 +8313,7 @@ typedef struct {
 	char *buffer_end;
 	size_t direct_write_size;
 	bool buffer_failed;
+	ufbxwi_atomic_u32 fail_flag;
 
 	ufbxwi_write_chunk *current_chunk;
 	ufbxwi_write_chunk_ptr_list chunks;
@@ -8246,6 +8322,8 @@ typedef struct {
 	size_t preferred_buffer_size;
 
 	ufbxw_write_stream stream;
+
+	uint64_t file_size_limit;
 
 	// Chunk flushing
 	size_t chunk_layout_index;
@@ -8283,11 +8361,17 @@ static ufbxwi_noinline ufbxwi_write_buffer *ufbxwi_write_queue_alloc_buffer(ufbx
 	}
 
 	ufbxwi_write_buffer *buf = ufbxwi_alloc(wq->ator, ufbxwi_write_buffer, 1);
-	ufbxwi_check(buf, NULL);
+	if (!buf) {
+		ufbxwi_mutex_unlock_if_enabled(wq->thread_pool, &wq->buffer_mutex);
+		return NULL;
+	}
 
 	const size_t size = ufbxwi_max_sz(wq->preferred_buffer_size, min_size);
 	buf->begin = ufbxwi_alloc(wq->ator, char, size);
-	ufbxwi_check(buf->begin, NULL);
+	if (!buf->begin) {
+		ufbxwi_mutex_unlock_if_enabled(wq->thread_pool, &wq->buffer_mutex);
+		return NULL;
+	}
 
 	buf->pos = buf->begin;
 	buf->end = buf->begin + size;
@@ -8302,7 +8386,10 @@ static ufbxwi_noinline void ufbxwi_write_queue_return_buffer(ufbxwi_write_queue 
 	ufbxwi_mutex_lock_if_enabled(wq->thread_pool, &wq->buffer_mutex);
 
 	// TODO(wq): Have something better than a linear list
-	ufbxwi_check(ufbxwi_list_push_copy(wq->ator, &wq->free_buffers, ufbxwi_write_buffer*, &buffer));
+	if (!ufbxwi_list_push_copy(wq->ator, &wq->free_buffers, ufbxwi_write_buffer*, &buffer)) {
+		ufbxwi_mutex_unlock_if_enabled(wq->thread_pool, &wq->buffer_mutex);
+		return;
+	}
 
 	ufbxwi_mutex_unlock_if_enabled(wq->thread_pool, &wq->buffer_mutex);
 }
@@ -8333,6 +8420,7 @@ static ufbxwi_noinline void ufbxwi_write_queue_init(ufbxwi_write_queue *wq, ufbx
 
 	wq->preferred_buffer_size = buffer_size;
 	wq->direct_write_size = buffer_size / 2;
+	wq->file_size_limit = UINT64_MAX;
 
 	ufbxwi_write_buffer *initial_buffer = ufbxwi_write_queue_alloc_buffer(wq, buffer_size);
 	ufbxwi_check(initial_buffer);
@@ -8359,6 +8447,28 @@ static ufbxwi_noinline void ufbxwi_write_queue_free(ufbxwi_write_queue *wq)
 	if (wq->stream.close_fn) {
 		wq->stream.close_fn(wq->stream.user);
 	}
+}
+
+static ufbxwi_noinline void ufbxwi_write_queue_set_failed(ufbxwi_write_queue *wq)
+{
+	uint32_t flag = ufbxwi_atomic_load_acquire(&wq->fail_flag);
+
+	if (wq->buffer_failed) return;
+
+	wq->buffer_begin = (char*)ufbxwi_zero_size_buffer;
+	wq->buffer_pos = (char*)ufbxwi_zero_size_buffer;
+	wq->buffer_end = (char*)ufbxwi_zero_size_buffer;
+	wq->buffer_failed = true;
+
+	ufbxwi_atomic_cas(&wq->fail_flag, flag, 0);
+}
+
+static ufbxwi_forceinline bool ufbxwi_write_queue_check_fail(ufbxwi_write_queue *wq)
+{
+	if (ufbxwi_atomic_load_relaxed(&wq->fail_flag)) {
+		ufbxwi_write_queue_set_failed(wq);
+	}
+	return wq->buffer_failed;
 }
 
 static void ufbxwi_write_queue_resolve_reloc(ufbxwi_write_queue *wq, uint32_t reloc_id)
@@ -8411,6 +8521,11 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush_chunks_imp(ufbxwi_write_que
 
 			uint64_t file_offset = chunk->file_offset;
 			do {
+				if (file_offset + part->size > wq->file_size_limit) {
+					ufbxwi_failf(wq->error, UFBXW_ERROR_FILE_SIZE_LIMIT, "file size limit exceeded (%llu)", (unsigned long long)wq->file_size_limit);
+					return false;
+				}
+
 				bool write_ok = wq->stream.write_fn(wq->stream.user, file_offset, part->data, part->size);
 				if (!write_ok) {
 					ufbxwi_fail(wq->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
@@ -8493,7 +8608,7 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush_chunks(ufbxwi_write_queue *
 	return true;
 }
 
-static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, size_t min_chunk_size)
+static ufbxwi_noinline bool ufbxwi_write_queue_flush_imp(ufbxwi_write_queue *wq, size_t min_chunk_size)
 {
 	if (ufbxwi_is_fatal(wq->error)) return false;
 
@@ -8536,12 +8651,27 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, siz
 	if (file_offset != UINT64_MAX) {
 		new_chunk->file_offset = file_offset;
 		new_chunk->has_file_offset = true;
+
+		if (file_offset > wq->file_size_limit) {
+			ufbxwi_failf(wq->error, UFBXW_ERROR_FILE_SIZE_LIMIT, "file size limit exceeded (%llu)", (unsigned long long)wq->file_size_limit);
+			return false;
+		}
 	}
 
 	wq->current_chunk = new_chunk;
 	wq->buffer_begin = buffer->pos;
 	wq->buffer_pos = buffer->pos;
 	wq->buffer_end = buffer->end;
+
+	return true;
+}
+
+static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, size_t min_chunk_size)
+{
+	if (!ufbxwi_write_queue_flush_imp(wq, min_chunk_size)) {
+		ufbxwi_write_queue_set_failed(wq);
+		return false;
+	}
 
 	return true;
 }
@@ -8574,7 +8704,7 @@ static ufbxwi_noinline bool ufbxwi_write_queue_finish(ufbxwi_write_queue *wq)
 
 static ufbxwi_noinline char *ufbxwi_queue_write_reserve_slow(ufbxwi_write_queue *wq, size_t length)
 {
-	if (wq->buffer_failed) return NULL;
+	if (ufbxwi_write_queue_check_fail(wq)) return NULL;
 
 	ufbxwi_check(ufbxwi_write_queue_flush(wq, length), NULL);
 
@@ -8603,7 +8733,7 @@ static ufbxwi_forceinline char *ufbxwi_queue_write_reserve_small(ufbxwi_write_qu
 static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least(ufbxwi_write_queue *wq, size_t length)
 {
 	ufbxwi_mutable_void_span span = { 0 };
-	if (wq->buffer_failed) return span;
+	if (ufbxwi_write_queue_check_fail(wq)) return span;
 
 	char *dst = wq->buffer_pos;
 	size_t left = ufbxwi_to_size(wq->buffer_end - dst);
@@ -8620,7 +8750,7 @@ static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least(ufbxwi_write
 
 static ufbxwi_forceinline void ufbxwi_queue_write_commit(ufbxwi_write_queue *wq, size_t length)
 {
-	if (wq->buffer_failed) return;
+	if (ufbxwi_write_queue_check_fail(wq)) return;
 
 	ufbxw_assert(length <= ufbxwi_to_size(wq->buffer_end - wq->buffer_pos));
 	wq->buffer_pos += length;
@@ -8629,7 +8759,6 @@ static ufbxwi_forceinline void ufbxwi_queue_write_commit(ufbxwi_write_queue *wq,
 static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least_in_chunk(ufbxwi_write_queue *wq, ufbxwi_write_chunk *chunk, size_t length)
 {
 	ufbxwi_mutable_void_span result = { 0 };
-	if (wq->buffer_failed) return result;
 
 	if (chunk == NULL) {
 		return ufbxwi_queue_write_reserve_at_least(wq, length);
@@ -8660,8 +8789,6 @@ static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least_in_chunk(ufb
 
 static ufbxwi_forceinline void ufbxwi_queue_write_commit_in_chunk(ufbxwi_write_queue *wq, ufbxwi_write_chunk *chunk, size_t length)
 {
-	if (wq->buffer_failed) return;
-
 	if (chunk == NULL) {
 		ufbxwi_queue_write_commit(wq, length);
 	} else {
@@ -8675,13 +8802,18 @@ static ufbxwi_forceinline void ufbxwi_queue_write_commit_in_chunk(ufbxwi_write_q
 
 static ufbxwi_noinline bool ufbxwi_queue_write_slow(ufbxwi_write_queue *wq, const void *data, size_t length)
 {
-	if (wq->buffer_failed) return false;
+	if (ufbxwi_write_queue_check_fail(wq)) return false;
 
 	if (length >= wq->direct_write_size && wq->current_chunk->has_file_offset) {
 		// If we are doing a large write and know where we are writing, just write it directly to the file.
 		ufbxwi_check(ufbxwi_write_queue_flush(wq, 0), false);
 
 		uint64_t file_offset = wq->current_chunk->file_offset;
+		if (file_offset + length > wq->file_size_limit) {
+			ufbxwi_failf(wq->error, UFBXW_ERROR_FILE_SIZE_LIMIT, "file size limit exceeded (%llu)", (unsigned long long)wq->file_size_limit);
+			return false;
+		}
+
 		bool write_ok = wq->stream.write_fn(wq->stream.user, file_offset, data, length);
 		if (!write_ok) {
 			ufbxwi_fail(wq->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
@@ -8832,9 +8964,10 @@ typedef struct {
 
 	ufbxwi_save_thread_context main_thread_ctx;
 
-	// Thread-safe error and alloocator
+	// Thread-safe error and allocator
 	ufbxwi_error thread_error;
 	ufbxwi_allocator thread_ator;
+	ufbxwi_atomic_u32 thread_error_serial;
 
 } ufbxwi_save_context;
 
@@ -9466,6 +9599,10 @@ static void ufbxwi_binary_dom_write(ufbxwi_save_context *sc, const char *tag, co
 
 static ufbxw_deflate_advance_result ufbxwi_deflate_advance(ufbxwi_save_thread_context *tc, ufbxw_deflate_advance_status *status, void *dst, size_t dst_size, const void *src, size_t src_size, bool is_final)
 {
+	if (!dst || dst_size == 0) {
+		return UFBXW_DEFLATE_ADVANCE_RESULT_ERROR;
+	}
+
 	uint32_t flags = 0;
 	if (is_final) {
 		flags |= UFBXW_DEFLATE_ADVANCE_FLAG_FINISH;
@@ -9498,7 +9635,7 @@ static ufbxw_deflate_advance_result ufbxwi_deflate_advance(ufbxwi_save_thread_co
 
 static bool ufbxwi_deflate_init(ufbxwi_save_thread_context *tc)
 {
-	if (!tc->tried_deflate_compressor && tc->opts->deflate.create_cb.fn) {
+	if (!tc->tried_deflate_compressor) {
 		tc->tried_deflate_compressor = true;
 
 		if (tc->opts->deflate.create_cb.fn(tc->opts->deflate.create_cb.user, &tc->deflate, tc->opts->compression_level)) {
@@ -9508,7 +9645,8 @@ static bool ufbxwi_deflate_init(ufbxwi_save_thread_context *tc)
 			return false;
 		}
 	}
-	return true;
+
+	return tc->has_deflate_compressor;
 }
 
 static bool ufbxwi_deflate_buffer(ufbxwi_save_thread_context *tc, ufbxwi_write_chunk *chunk, const ufbxwi_buffer_input *input)
@@ -9678,6 +9816,7 @@ static void ufbxwi_binary_dom_write_array(ufbxwi_save_context *sc, const char *t
 
 	if (encoding == 1) {
 		ufbxwi_buffer_input input = ufbxwi_get_buffer_input(&sc->buffers, buffer_id);
+		ufbxwi_check(input.type != UFBXWI_BUFFER_TYPE_NONE);
 
 		if (sc->task_queue.enabled && data_size >= sc->opts.threaded_min_deflate_bytes) {
 			ufbxwi_write_chunk *chunk = ufbxwi_write_queue_reserve_chunk(&sc->write_queue);
@@ -10472,6 +10611,8 @@ static void ufbxwi_save_anim_curve_keys(ufbxwi_save_context *sc, ufbxwi_element 
 
 static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element, uint32_t flags)
 {
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
+
 	ufbxw_scene *scene = sc->scene;
 
 	ufbxw_id id = element->id;
@@ -10893,6 +11034,8 @@ static void ufbxwi_save_root(ufbxwi_save_context *sc)
 		ufbxwi_binary_write_header(sc);
 	}
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
+
 	// Header extension
 	{
 		ufbxwi_dom_open(sc, "FBXHeaderExtension", "");
@@ -10911,6 +11054,8 @@ static void ufbxwi_save_root(ufbxwi_save_context *sc)
 
 		ufbxwi_dom_close(sc);
 	}
+
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 
 	// Creation time in another format used by binary checksums
 	char creation_time[32];
@@ -10938,29 +11083,37 @@ static void ufbxwi_save_root(ufbxwi_save_context *sc)
 		}
 	}
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 	ufbxwi_dom_section(sc, "Documents Description");
 	ufbxwi_save_documents(sc);
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 	ufbxwi_dom_section(sc, "Document References");
 	ufbxwi_dom_open(sc, "References", "");
 	ufbxwi_dom_close(sc);
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 	ufbxwi_dom_section(sc, "Object definitions");
 	ufbxwi_save_definitions(sc);
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 	ufbxwi_dom_section(sc, "Object properties");
 	ufbxwi_save_objects(sc);
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 	ufbxwi_dom_section(sc, "Object connections");
 	ufbxwi_save_connections(sc);
 
 	// Differently formatted section...
 	ufbxwi_dom_comment(sc, ";Takes section\n;%.52s\n\n", ufbxwi_dom_section_str);
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 	ufbxwi_save_takes(sc);
 
 	// Binary footer
 	if (!sc->ascii) {
+		ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
+
 		// We need to make sure all the chunks are flushed
 		if (!sc->write_queue.current_chunk->has_file_offset) {
 			ufbxwi_write_queue_finish(&sc->write_queue);
@@ -11046,11 +11199,7 @@ static bool ufbxwi_open_file_write(ufbxw_write_stream *stream, const char *path,
 static void ufbxwi_mark_save_context_failed(ufbxwi_save_context *sc)
 {
 	ufbxwi_mark_buffers_failed(&sc->buffers);
-
-	sc->write_queue.buffer_begin = (char*)ufbxwi_zero_size_buffer;
-	sc->write_queue.buffer_pos = (char*)ufbxwi_zero_size_buffer;
-	sc->write_queue.buffer_end = (char*)ufbxwi_zero_size_buffer;
-	sc->write_queue.buffer_failed = true;
+	ufbxwi_write_queue_set_failed(&sc->write_queue);
 }
 
 static void ufbxwi_save_fatal(void *user, ufbxwi_error *error)
@@ -11059,7 +11208,16 @@ static void ufbxwi_save_fatal(void *user, ufbxwi_error *error)
 	ufbxwi_mark_save_context_failed(sc);
 }
 
-static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
+static void ufbxwi_save_thread_fatal(void *user, ufbxwi_error *error)
+{
+	ufbxwi_save_context *sc = (ufbxwi_save_context*)user;
+
+	// TODO: We could go to fatal directly here if running on the main thread
+	ufbxwi_atomic_cas(&sc->write_queue.fail_flag, 0, 1);
+	ufbxwi_atomic_cas(&sc->error.fatal, 0, 1);
+}
+
+static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream, ufbxw_save_stats *stats)
 {
 	ufbxw_assert(sc->opts._begin_zero == 0 && sc->opts._end_zero == 0);
 
@@ -11072,10 +11230,10 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 	sc->ator.error = &sc->error;
 
 	// TODO: Options for these
-	sc->ator.max_allocs = SIZE_MAX;
+	sc->ator.max_allocs = sc->opts.max_allocations != 0 ? sc->opts.max_allocations : SIZE_MAX;
 	sc->ator.max_size = SIZE_MAX / 4;
 
-	// TODO: Proper hanling
+	// TODO: Proper handling
 	sc->buffers.ator = &sc->ator;
 	sc->buffers.error = &sc->error;
 	ufbxwi_refer_buffers(&sc->buffers, &sc->scene->buffers);
@@ -11127,11 +11285,17 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 
 		sc->thread_error.thread_pool = &sc->thread_pool;
 
+		sc->thread_error.fatal_fn = &ufbxwi_save_thread_fatal;
+		sc->thread_error.fatal_user = sc;
+
+		sc->error.serial_counter = &sc->thread_error_serial;
+		sc->thread_error.serial_counter = &sc->thread_error_serial;
+
 		sc->thread_ator.error = &sc->thread_error;
 		sc->thread_ator.thread_pool = &sc->thread_pool;
 
 		// TODO: Options for these
-		sc->thread_ator.max_allocs = SIZE_MAX;
+		sc->thread_ator.max_allocs = sc->opts.thread_max_allocations != 0 ? sc->opts.thread_max_allocations : SIZE_MAX;
 		sc->thread_ator.max_size = SIZE_MAX / 4;
 
 		ufbxwi_task_queue_opts task_queue_opts = { 0 };
@@ -11144,7 +11308,9 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 		task_queue_opts.free_thread_ctx_fn = &ufbxwi_free_save_thread_context;
 		task_queue_opts.thread_ctx_user = sc;
 
-		ufbxwi_task_queue_init(&sc->task_queue, &sc->thread_pool, &sc->thread_ator, &task_queue_opts, &sc->opts.thread_pool);
+		if (!ufbxwi_task_queue_init(&sc->task_queue, &sc->thread_pool, &sc->thread_ator, &task_queue_opts, &sc->opts.thread_pool)) {
+			ufbxwi_failf(&sc->error, UFBXW_ERROR_THREAD_POOL_INIT, "failed to init thread pool");
+		}
 
 		ufbxwi_init_save_thread_context(sc, &sc->main_thread_ctx);
 		ufbxwi_write_queue_init(&sc->write_queue, &sc->thread_ator, &sc->thread_error, &sc->task_queue, &sc->main_thread_ctx, *stream, buffer_size);
@@ -11157,6 +11323,13 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 		sc->builtin_deflate_opts.ator = &sc->ator;
 	}
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->thread_error));
+
+	if (sc->opts.file_size_limit > 0) {
+		sc->write_queue.file_size_limit = sc->opts.file_size_limit;
+	}
+
 	// HACK: Hook the write queue to the buffer pool, as write chunks may temporarily own a buffer that
 	// needs to be returned on the main thread.
 	sc->write_queue.buffer_pool = &sc->buffers;
@@ -11165,6 +11338,15 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 	ufbxwi_save_root(sc);
 
 	ufbxwi_write_queue_finish(&sc->write_queue);
+
+	if (stats) {
+		const uint32_t offset_in_chunk = (uint32_t)(sc->write_queue.buffer_pos - sc->write_queue.buffer_begin);
+		const uint64_t file_offset = sc->write_queue.chunk_layout_file_offset + offset_in_chunk;
+
+		stats->file_size = file_offset;
+		stats->memory = ufbxwi_get_memory_stats(&sc->ator);
+		stats->thread_memory = ufbxwi_get_memory_stats(&sc->thread_ator);
+	}
 }
 
 #endif
@@ -11443,85 +11625,50 @@ ufbxw_abi ufbxw_float_buffer ufbxw_external_float_stream(ufbxw_scene *scene, ufb
 // TODO: Lock/unlock version for Rust
 ufbxw_abi ufbxw_int_list ufbxw_edit_int_buffer(ufbxw_scene *scene, ufbxw_int_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_INT);
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_int_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (int32_t*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_INT);
 	return result;
 }
 
 ufbxw_abi ufbxw_long_list ufbxw_edit_long_buffer(ufbxw_scene *scene, ufbxw_long_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_LONG);
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_long_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (int64_t*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_LONG);
 	return result;
 }
 
 ufbxw_abi ufbxw_real_list ufbxw_edit_real_buffer(ufbxw_scene *scene, ufbxw_real_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_REAL);
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_real_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (ufbxw_real*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_REAL);
 	return result;
 }
 
 ufbxw_abi ufbxw_vec2_list ufbxw_edit_vec2_buffer(ufbxw_scene *scene, ufbxw_vec2_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_VEC2);
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_vec2_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (ufbxw_vec2*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_VEC2);
 	return result;
 }
 
 ufbxw_abi ufbxw_vec3_list ufbxw_edit_vec3_buffer(ufbxw_scene *scene, ufbxw_vec3_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_VEC3);
-	ufbxwi_buffer *buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_vec3_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (ufbxw_vec3*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_VEC3);
 	return result;
 }
 
 ufbxw_abi ufbxw_vec4_list ufbxw_edit_vec4_buffer(ufbxw_scene* scene, ufbxw_vec4_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_VEC4);
-	ufbxwi_buffer* buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_vec4_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (ufbxw_vec4*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_VEC4);
 	return result;
 }
 
 ufbxw_abi ufbxw_float_list ufbxw_edit_float_buffer(ufbxw_scene* scene, ufbxw_float_buffer buffer)
 {
-	ufbxw_assert(ufbxwi_buffer_id_type(buffer.id) == UFBXWI_BUFFER_TYPE_FLOAT);
-	ufbxwi_buffer* buf = ufbxwi_get_buffer(&scene->buffers, buffer.id);
 	ufbxw_float_list result = { NULL, 0 };
-	if (buf && buf->state == UFBXWI_BUFFER_STATE_OWNED) {
-		result.data = buf->data.owned.data;
-		result.count = buf->count;
-	}
+	result.data = (float*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_FLOAT);
 	return result;
 }
 
@@ -11591,11 +11738,7 @@ ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error)
 
 ufbxw_abi ufbxw_memory_stats ufbxw_get_memory_stats(ufbxw_scene *scene)
 {
-	ufbxw_memory_stats stats;
-	stats.allocated_bytes = scene->ator.total_size;
-	stats.allocation_count = scene->ator.num_allocs;
-	stats.block_allocation_count = scene->ator.num_block_allocs;
-	return stats;
+	return ufbxwi_get_memory_stats(&scene->ator);
 }
 
 ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type type)
@@ -13166,15 +13309,30 @@ ufbxw_abi bool ufbxw_save_file(ufbxw_scene *scene, const char *path, const ufbxw
 
 ufbxw_abi bool ufbxw_save_file_len(ufbxw_scene *scene, const char *path, size_t path_len, const ufbxw_save_opts *opts, ufbxw_error *error)
 {
+	return ufbxw_save_file_ex_len(scene, path, path_len, opts, error, NULL);
+}
+
+ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error)
+{
+	return ufbxw_save_stream_ex(scene, stream, opts, error, NULL);
+}
+
+ufbxw_abi bool ufbxw_save_file_ex(ufbxw_scene *scene, const char *path, const ufbxw_save_opts *opts, ufbxw_error *error, ufbxw_save_stats *stats)
+{
+	return ufbxw_save_file_ex_len(scene, path, strlen(path), opts, error, stats);
+}
+
+ufbxw_abi bool ufbxw_save_file_ex_len(ufbxw_scene *scene, const char *path, size_t path_len, const ufbxw_save_opts *opts, ufbxw_error *error, ufbxw_save_stats *stats)
+{
 	ufbxw_write_stream stream;
 	if (!ufbxw_open_file_write(&stream, path, path_len, error)) {
 		return false;
 	}
 
-	return ufbxw_save_stream(scene, &stream, opts, error);
+	return ufbxw_save_stream_ex(scene, &stream, opts, error, stats);
 }
 
-ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error)
+ufbxw_abi bool ufbxw_save_stream_ex(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error, ufbxw_save_stats *stats)
 {
 	ufbxwi_save_context sc = { 0 };
 	sc.scene = scene;
@@ -13182,7 +13340,8 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 		sc.opts = *opts;
 	}
 
-	ufbxwi_save_imp(&sc, stream);
+	ufbxwi_save_imp(&sc, stream, stats);
+
 	ufbxwi_write_queue_free(&sc.write_queue);
 
 	ufbxwi_task_queue_free(&sc.task_queue, &sc.main_thread_ctx);
@@ -13193,9 +13352,17 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 	ufbxwi_free_allocator(&sc.thread_ator);
 	ufbxwi_free_allocator(&sc.ator);
 
+	ufbxwi_error *first_error = NULL;
 	if (sc.error.error.type != UFBXW_ERROR_NONE) {
+		first_error = &sc.error;
+	}
+	if (sc.thread_error.error.type != UFBXW_ERROR_NONE && (!first_error || sc.thread_error.serial_index < first_error->serial_index)) {
+		first_error = &sc.thread_error;
+	}
+
+	if (first_error) {
 		if (error) {
-			*error = sc.error.error;
+			*error = first_error->error;
 		}
 		return false;
 	}
