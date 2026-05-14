@@ -28,6 +28,36 @@ jobs:
       - name: Run unit tests
         run: build-test/unit/ufbxw_unit --verbose
 
+  ci_windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Configure test CMake
+        run: cmake -S test -B build-test
+      - name: Compile tests
+        run: cmake --build build-test -j 4
+      - name: Run tests
+        run: build-test/test/ufbxw_test --verbose
+      - name: Run unit tests
+        run: build-test/unit/ufbxw_unit --verbose
+
+  ci_macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Configure test CMake
+        run: cmake -S test -B build-test
+      - name: Compile tests
+        run: cmake --build build-test -j 4
+      - name: Run tests
+        run: build-test/test/ufbxw_test --verbose
+      - name: Run unit tests
+        run: build-test/unit/ufbxw_unit --verbose
+
   ci_sanitize:
     runs-on: ubuntu-latest
     steps:
