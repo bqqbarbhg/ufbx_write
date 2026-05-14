@@ -154,9 +154,12 @@ bool ufbxwt_thread_setup(ufbxw_thread_sync *sync, ufbxw_thread_pool *pool, ufbxw
 		return true;
 
 	case UFBXWT_THREAD_IMPL_CPP_THREADS:
-		ufbxw_cpp_threads_setup_sync(sync);
-		ufbxw_cpp_threads_setup_pool(pool);
-		return true;
+		#if UFBXWT_HAS_CPP_THREADS
+			ufbxw_cpp_threads_setup_sync(sync);
+			ufbxw_cpp_threads_setup_pool(pool);
+			return true;
+		#endif
+		return false;
 
 	default:
 		ufbxwt_assert(false);
