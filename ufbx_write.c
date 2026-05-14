@@ -2850,6 +2850,10 @@ static ufbxwi_thread_context *ufbxwi_get_thread_context(ufbxwi_task_queue *tq, u
 		if (ufbxwi_atomic_cas(&tc->thread_id, 0, id)) {
 			if (!tc->thread_ctx) {
 				tc->thread_ctx = tq->create_thread_ctx_fn(tq->thread_ctx_user);
+				if (!tc->thread_ctx) {
+					ufbxwi_atomic_store(&tc->thread_id, 0);
+					return NULL;
+				}
 			}
 			return tc;
 		}
@@ -9617,7 +9621,7 @@ static ufbxw_deflate_advance_result ufbxwi_deflate_advance(ufbxwi_save_thread_co
 
 static bool ufbxwi_deflate_init(ufbxwi_save_thread_context *tc)
 {
-	if (!tc->tried_deflate_compressor && tc->opts->deflate.create_cb.fn) {
+	if (!tc->tried_deflate_compressor) {
 		tc->tried_deflate_compressor = true;
 
 		if (tc->opts->deflate.create_cb.fn(tc->opts->deflate.create_cb.user, &tc->deflate, tc->opts->compression_level)) {
@@ -9627,7 +9631,8 @@ static bool ufbxwi_deflate_init(ufbxwi_save_thread_context *tc)
 			return false;
 		}
 	}
-	return true;
+
+	return tc->has_deflate_compressor;
 }
 
 static bool ufbxwi_deflate_buffer(ufbxwi_save_thread_context *tc, ufbxwi_write_chunk *chunk, const ufbxwi_buffer_input *input)

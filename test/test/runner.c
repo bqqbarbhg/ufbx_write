@@ -274,6 +274,7 @@ bool g_in_fuzz = false;
 
 int g_fuzz_serial = 0;
 int g_fuzz_serial_filter = 0;
+int g_fuzz_rounds = 0;
 
 bool ufbxwt_fuzzf(const char *fmt, ...)
 {
@@ -392,10 +393,15 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 		}
 	}
 
+	int fuzz_rounds = 0;
+
 	if (g_fuzz) {
 		g_skip_ok = true;
 		printf("FUZZ\n");
+		fuzz_rounds = g_fuzz_rounds > 0 ? g_fuzz_rounds : 1;
+	}
 
+	for (int i = 0; i < fuzz_rounds; i++) {
 		for (size_t max_allocs = 1; max_allocs < memory_stats.allocation_count; max_allocs++) {
 			if (!ufbxwt_fuzzf("scene_max_allocs=%zu", max_allocs)) continue;
 
@@ -593,6 +599,11 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[i], "--fuzz-serial")) {
 			if (++i < argc) {
 				g_fuzz_serial_filter = atoi(argv[i]);
+			}
+		}
+		if (!strcmp(argv[i], "--fuzz-rounds")) {
+			if (++i < argc) {
+				g_fuzz_rounds = atoi(argv[i]);
 			}
 		}
 		if (!strcmp(argv[i], "-g") || !strcmp(argv[i], "--group")) {
