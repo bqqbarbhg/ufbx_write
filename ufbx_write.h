@@ -329,6 +329,7 @@ typedef struct ufbxw_error {
 
 typedef struct ufbxw_memory_stats {
 	size_t allocated_bytes;
+	size_t max_allocated_bytes;
 	size_t allocation_count;
 	size_t block_allocation_count;
 } ufbxw_memory_stats;
@@ -1393,13 +1394,26 @@ typedef struct ufbxw_save_opts {
 	size_t threaded_min_ascii_floats;
 	size_t threaded_min_ascii_ints;
 
+	// Maximum amount of allocations to do
+	size_t max_allocations;
+	size_t thread_max_allocations;
+
 	uint32_t _end_zero;
 } ufbxw_save_opts;
 
+typedef struct ufbxw_save_stats {
+	uint64_t file_size;
+	ufbxw_memory_stats memory;
+	ufbxw_memory_stats thread_memory;
+} ufbxw_save_stats;
+
 ufbxw_abi bool ufbxw_save_file(ufbxw_scene *scene, const char *path, const ufbxw_save_opts *opts, ufbxw_error *error);
 ufbxw_abi bool ufbxw_save_file_len(ufbxw_scene *scene, const char *path, size_t path_len, const ufbxw_save_opts *opts, ufbxw_error *error);
-
 ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error);
+
+ufbxw_abi bool ufbxw_save_file_ex(ufbxw_scene *scene, const char *path, const ufbxw_save_opts *opts, ufbxw_error *error, ufbxw_save_stats *stats);
+ufbxw_abi bool ufbxw_save_file_ex_len(ufbxw_scene *scene, const char *path, size_t path_len, const ufbxw_save_opts *opts, ufbxw_error *error, ufbxw_save_stats *stats);
+ufbxw_abi bool ufbxw_save_stream_ex(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error, ufbxw_save_stats *stats);
 
 // -- Thread pool
 

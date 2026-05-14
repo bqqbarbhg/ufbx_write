@@ -1069,6 +1069,7 @@ typedef struct {
 	size_t num_allocs;
 	size_t max_allocs;
 	size_t total_size;
+	size_t max_total_size;
 	size_t max_size;
 	size_t num_block_allocs;
 
@@ -1119,6 +1120,10 @@ static ufbxwi_noinline ufbxwi_alloc *ufbxwi_alloc_block(ufbxwi_allocator *ator, 
 	ator->total_size += alloc_size;
 	ator->num_block_allocs++;
 
+	if (ator->total_size > ator->max_total_size) {
+		ator->max_total_size = ator->total_size;
+	}
+
 	block->size = size;
 	block->prev = &ator->block_root;
 	block->next = ator->block_root.next;
@@ -1168,7 +1173,6 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 	ufbxwi_mutex_lock_if_enabled(ator->thread_pool, &ator->mutex);
 
 	ator->num_allocs++;
-	ator->total_size += total;
 
 	uint32_t size_class = ufbxwi_get_size_class(total);
 	if (size_class == ~0u) {
@@ -1280,6 +1284,16 @@ static void *ufbxwi_alloc_zero_size(ufbxwi_allocator *ator, size_t size, size_t 
 		memset(ptr, 0, size * n);
 	}
 	return ptr;
+}
+
+static ufbxw_memory_stats ufbxwi_get_memory_stats(ufbxwi_allocator *ator)
+{
+	ufbxw_memory_stats stats;
+	stats.allocated_bytes = ator->total_size;
+	stats.max_allocated_bytes = ator->max_total_size;
+	stats.allocation_count = ator->num_allocs;
+	stats.block_allocation_count = ator->num_block_allocs;
+	return stats;
 }
 
 #define ufbxwi_alloc(ator, type, n) ufbxwi_maybe_null((type*)ufbxwi_alloc_size((ator), sizeof(type), (n), NULL))
@@ -10509,6 +10523,8 @@ static void ufbxwi_save_anim_curve_keys(ufbxwi_save_context *sc, ufbxwi_element 
 
 static void ufbxwi_save_element(ufbxwi_save_context *sc, ufbxwi_element *element, uint32_t flags)
 {
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
+
 	ufbxw_scene *scene = sc->scene;
 
 	ufbxw_id id = element->id;
@@ -10930,6 +10946,8 @@ static void ufbxwi_save_root(ufbxwi_save_context *sc)
 		ufbxwi_binary_write_header(sc);
 	}
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
+
 	// Header extension
 	{
 		ufbxwi_dom_open(sc, "FBXHeaderExtension", "");
@@ -10948,6 +10966,8 @@ static void ufbxwi_save_root(ufbxwi_save_context *sc)
 
 		ufbxwi_dom_close(sc);
 	}
+
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 
 	// Creation time in another format used by binary checksums
 	char creation_time[32];
@@ -10975,29 +10995,37 @@ static void ufbxwi_save_root(ufbxwi_save_context *sc)
 		}
 	}
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 	ufbxwi_dom_section(sc, "Documents Description");
 	ufbxwi_save_documents(sc);
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 	ufbxwi_dom_section(sc, "Document References");
 	ufbxwi_dom_open(sc, "References", "");
 	ufbxwi_dom_close(sc);
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 	ufbxwi_dom_section(sc, "Object definitions");
 	ufbxwi_save_definitions(sc);
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 	ufbxwi_dom_section(sc, "Object properties");
 	ufbxwi_save_objects(sc);
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 	ufbxwi_dom_section(sc, "Object connections");
 	ufbxwi_save_connections(sc);
 
 	// Differently formatted section...
 	ufbxwi_dom_comment(sc, ";Takes section\n;%.52s\n\n", ufbxwi_dom_section_str);
 
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
 	ufbxwi_save_takes(sc);
 
 	// Binary footer
 	if (!sc->ascii) {
+		ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
+
 		// We need to make sure all the chunks are flushed
 		if (!sc->write_queue.current_chunk->has_file_offset) {
 			ufbxwi_write_queue_finish(&sc->write_queue);
@@ -11096,7 +11124,7 @@ static void ufbxwi_save_fatal(void *user, ufbxwi_error *error)
 	ufbxwi_mark_save_context_failed(sc);
 }
 
-static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
+static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream, ufbxw_save_stats *stats)
 {
 	ufbxw_assert(sc->opts._begin_zero == 0 && sc->opts._end_zero == 0);
 
@@ -11109,7 +11137,7 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 	sc->ator.error = &sc->error;
 
 	// TODO: Options for these
-	sc->ator.max_allocs = SIZE_MAX;
+	sc->ator.max_allocs = sc->opts.max_allocations != 0 ? sc->opts.max_allocations : SIZE_MAX;
 	sc->ator.max_size = SIZE_MAX / 4;
 
 	// TODO: Proper hanling
@@ -11168,7 +11196,7 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 		sc->thread_ator.thread_pool = &sc->thread_pool;
 
 		// TODO: Options for these
-		sc->thread_ator.max_allocs = SIZE_MAX;
+		sc->thread_ator.max_allocs = sc->opts.thread_max_allocations != 0 ? sc->opts.thread_max_allocations : SIZE_MAX;
 		sc->thread_ator.max_size = SIZE_MAX / 4;
 
 		ufbxwi_task_queue_opts task_queue_opts = { 0 };
@@ -11202,6 +11230,15 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream)
 	ufbxwi_save_root(sc);
 
 	ufbxwi_write_queue_finish(&sc->write_queue);
+
+	if (stats) {
+		const uint32_t offset_in_chunk = (uint32_t)(sc->write_queue.buffer_pos - sc->write_queue.buffer_begin);
+		const uint64_t file_offset = sc->write_queue.chunk_layout_file_offset + offset_in_chunk;
+
+		stats->file_size = file_offset;
+		stats->memory = ufbxwi_get_memory_stats(&sc->ator);
+		stats->thread_memory = ufbxwi_get_memory_stats(&sc->thread_ator);
+	}
 }
 
 #endif
@@ -11593,11 +11630,7 @@ ufbxw_abi bool ufbxw_get_error(ufbxw_scene *scene, ufbxw_error *error)
 
 ufbxw_abi ufbxw_memory_stats ufbxw_get_memory_stats(ufbxw_scene *scene)
 {
-	ufbxw_memory_stats stats;
-	stats.allocated_bytes = scene->ator.total_size;
-	stats.allocation_count = scene->ator.num_allocs;
-	stats.block_allocation_count = scene->ator.num_block_allocs;
-	return stats;
+	return ufbxwi_get_memory_stats(&scene->ator);
 }
 
 ufbxw_abi ufbxw_id ufbxw_create_element(ufbxw_scene *scene, ufbxw_element_type type)
@@ -13168,15 +13201,30 @@ ufbxw_abi bool ufbxw_save_file(ufbxw_scene *scene, const char *path, const ufbxw
 
 ufbxw_abi bool ufbxw_save_file_len(ufbxw_scene *scene, const char *path, size_t path_len, const ufbxw_save_opts *opts, ufbxw_error *error)
 {
+	return ufbxw_save_file_ex_len(scene, path, path_len, opts, error, NULL);
+}
+
+ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error)
+{
+	return ufbxw_save_stream_ex(scene, stream, opts, error, NULL);
+}
+
+ufbxw_abi bool ufbxw_save_file_ex(ufbxw_scene *scene, const char *path, const ufbxw_save_opts *opts, ufbxw_error *error, ufbxw_save_stats *stats)
+{
+	return ufbxw_save_file_ex_len(scene, path, strlen(path), opts, error, stats);
+}
+
+ufbxw_abi bool ufbxw_save_file_ex_len(ufbxw_scene *scene, const char *path, size_t path_len, const ufbxw_save_opts *opts, ufbxw_error *error, ufbxw_save_stats *stats)
+{
 	ufbxw_write_stream stream;
 	if (!ufbxw_open_file_write(&stream, path, path_len, error)) {
 		return false;
 	}
 
-	return ufbxw_save_stream(scene, &stream, opts, error);
+	return ufbxw_save_stream_ex(scene, &stream, opts, error, stats);
 }
 
-ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error)
+ufbxw_abi bool ufbxw_save_stream_ex(ufbxw_scene *scene, ufbxw_write_stream *stream, const ufbxw_save_opts *opts, ufbxw_error *error, ufbxw_save_stats *stats)
 {
 	ufbxwi_save_context sc = { 0 };
 	sc.scene = scene;
@@ -13184,7 +13232,8 @@ ufbxw_abi bool ufbxw_save_stream(ufbxw_scene *scene, ufbxw_write_stream *stream,
 		sc.opts = *opts;
 	}
 
-	ufbxwi_save_imp(&sc, stream);
+	ufbxwi_save_imp(&sc, stream, stats);
+
 	ufbxwi_write_queue_free(&sc.write_queue);
 
 	ufbxwi_task_queue_free(&sc.task_queue, &sc.main_thread_ctx);

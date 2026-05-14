@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+
 void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr);
 static void ufbxwt_assert_fail(const char *file, uint32_t line, const char *expr) {
 	ufbxwt_assert_fail_imp(file, line, expr);
@@ -260,8 +261,29 @@ void ufbxwt_assert_fail_imp(const char *file, uint32_t line, const char *expr)
 	ufbxwt_longjmp(g_test_jmp, 1, file, line, expr);
 }
 
+typedef struct {
+	uint64_t written_size;
+	size_t write_count;
+} ufbxwt_fuzz_output_stream;
+
+static bool ufbxwt_fuzz_output_stream_write(void *user, uint64_t offset, const void *data, size_t size)
+{
+	ufbxwt_fuzz_output_stream *s = (ufbxwt_fuzz_output_stream*)user;
+
+	s->write_count++;
+
+	uint64_t end_pos = offset + size;
+	if (end_pos > s->written_size) {
+		s->written_size = end_pos;
+	}
+
+	return true;
+}
+
+
 bool g_fuzz = false;
 bool g_allow_scene_error = false;
+bool g_skip_ok = false;
 
 bool ufbxwt_check_scene_error_imp(ufbxw_scene *scene, const char *file, int line)
 {
@@ -358,10 +380,9 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 		}
 	}
 
-	ufbxw_free_scene(scene);
-
 	if (g_fuzz) {
-		t_ignore_asserts = true;
+		g_skip_ok = true;
+		printf("FUZZ\n");
 
 		for (size_t max_allocs = 1; max_allocs < memory_stats.allocation_count; max_allocs++) {
 			ufbxw_scene_opts fuzz_opts = scene_opts;
@@ -373,7 +394,10 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 			ufbxwt_diff_error fuzz_err = { 0 };
 
 			g_allow_scene_error = true;
+
+			t_ignore_asserts = true;
 			test_fn(fuzz_scene, &fuzz_err);
+			t_ignore_asserts = false;
 
 			if (!ufbxw_get_error(fuzz_scene, NULL)) {
 				ufbxw_prepare_scene(fuzz_scene, NULL);
@@ -386,8 +410,55 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 			ufbxw_free_scene(fuzz_scene);
 		}
 
-		t_ignore_asserts = false;
+		for (int format_ix = 0; format_ix < ufbxwt_arraycount(formats); format_ix++) {
+			for (int threads_ix = 0; threads_ix < 2; threads_ix++) {
+				ufbxw_save_opts save_opts = { 0 };
+				save_opts.version = 7500;
+				save_opts.format = formats[format_ix];
+
+				if (threads_ix == 1) {
+					if (!ufbxwt_thread_setup_any(&save_opts.thread_sync, &save_opts.thread_pool)) {
+						continue;
+					}
+				}
+
+				ufbxwt_fuzz_output_stream stream = { 0 };
+
+				ufbxw_save_stats stats;
+
+				{
+					ufbxw_write_stream ws = { 0 };
+					ws.write_fn = &ufbxwt_fuzz_output_stream_write;
+					ws.user = &stream;
+
+					ufbxw_error save_error;
+					bool ok = ufbxw_save_stream_ex(scene, &ws, &save_opts, &save_error, &stats);
+					ufbxwt_assert(ok);
+					ufbxwt_assert(save_error.type == UFBXW_ERROR_NONE);
+					ufbxwt_assert(stream.written_size == stats.file_size);
+				}
+
+				for (size_t max_allocs = 1; max_allocs < stats.memory.allocation_count; max_allocs++) {
+					ufbxwt_hintf("max_allocs=%zu", max_allocs);
+
+					ufbxw_save_opts fuzz_opts = save_opts;
+					fuzz_opts.max_allocations = max_allocs;
+
+					ufbxw_write_stream ws = { 0 };
+					ws.write_fn = &ufbxwt_fuzz_output_stream_write;
+					ws.user = &stream;
+
+					ufbxw_error save_error;
+					bool ok = ufbxw_save_stream_ex(scene, &ws, &fuzz_opts, &save_error, &stats);
+					ufbxwt_assert(!ok);
+					ufbxwt_assert(save_error.type == UFBXW_ERROR_ALLOCATION_LIMIT);
+
+				}
+			}
+		}
 	}
+
+	ufbxw_free_scene(scene);
 }
 
 int ufbxwt_run_test(ufbxwt_test *test)
@@ -400,8 +471,14 @@ int ufbxwt_run_test(ufbxwt_test *test)
 
 	g_current_test = test;
 	if (!ufbxwt_setjmp(g_test_jmp)) {
+		g_skip_ok = false;
+		t_ignore_asserts = false;
+
 		test->func();
-		printf("OK\n");
+
+		if (!g_skip_ok) {
+			printf("OK\n");
+		}
 		fflush(stdout);
 		return 1;
 	} else {
