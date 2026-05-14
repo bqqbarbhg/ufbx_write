@@ -1176,12 +1176,15 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 		ufbxwi_fail(ator->error, UFBXW_ERROR_ALLOCATION_FAILURE, "Allocation size overflow");
 		return NULL;
 	}
+
+	ufbxwi_mutex_lock_if_enabled(ator->thread_pool, &ator->mutex);
+
 	if (ator->num_allocs >= ator->max_allocs) {
+		ufbxwi_mutex_unlock_if_enabled(ator->thread_pool, &ator->mutex);
+
 		ufbxwi_failf(ator->error, UFBXW_ERROR_ALLOCATION_LIMIT, "Allocation limit exceeded (%zu)", ator->max_allocs);
 		return NULL;
 	}
-
-	ufbxwi_mutex_lock_if_enabled(ator->thread_pool, &ator->mutex);
 
 	ator->num_allocs++;
 
