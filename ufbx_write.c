@@ -1951,7 +1951,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 					match_pos = (ufbxwi_lz_pos)ud->hash4_tab[hash4];
 					ud->hash3_tab[hash3] = (int32_t)read_pos;
 					ud->hash4_tab[hash4] = (int32_t)read_pos;
-					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
+					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
 					read_pos++;
 				}
 
@@ -1976,7 +1976,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_slow(ufbxwi_deflate_encoder *ud,
 					match_pos = (ufbxwi_lz_pos)ud->hash4_tab[hash4];
 					ud->hash3_tab[hash3] = (int32_t)read_pos;
 					ud->hash4_tab[hash4] = (int32_t)read_pos;
-					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
+					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
 					read_pos++;
 				}
 
@@ -2110,7 +2110,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 
 					ud->hash3_tab[hash3] = (int32_t)read_pos;
 					ud->hash4_tab[hash4] = (int32_t)read_pos;
-					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
+					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
 
 					read_pos++;
 				}
@@ -2141,7 +2141,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 
 					ud->hash3_tab[hash3] = (int32_t)read_pos;
 					ud->hash4_tab[hash4] = (int32_t)read_pos;
-					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
+					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE - 1)] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
 					read_pos++;
 				}
 
