@@ -1,0 +1,30 @@
+[default.extend-identifiers]
+
+# Format specifier
+CLL = "CLL"
+
+# Shorthand: node data
+nd = "nd"
+
+# Typos in the FBX file format
+PreferedAngleX = "PreferedAngleX"
+PreferedAngleY = "PreferedAngleY"
+PreferedAngleZ = "PreferedAngleZ"
+Link_DeformAcuracy = "Link_DeformAcuracy"
+BackgroundAlphaTreshold = "BackgroundAlphaTreshold"
+ByVertice = "ByVertice"
+
+# UFBX Tokens
+UFBXWI_PreferedAngleX = "UFBXWI_PreferedAngleX"
+UFBXWI_PreferedAngleY = "UFBXWI_PreferedAngleY"
+UFBXWI_PreferedAngleZ = "UFBXWI_PreferedAngleZ"
+UFBXWI_BackgroundAlphaTreshold = "UFBXWI_BackgroundAlphaTreshold"
+UFBXWI_ByVertice = "UFBXWI_ByVertice"
+
+# Take file extension
+tak = "tak"
+
+[default.extend-words]
+
+# Level of Detail
+lod = "lod"

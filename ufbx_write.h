@@ -438,7 +438,7 @@ typedef enum ufbxw_prop_type {
 	UFBXW_PROP_TYPE_USER_STRING,  // < "KString", "", `UFBXW_PROP_DATA_STRING`
 	UFBXW_PROP_TYPE_USER_ENUM,    // < "Enum", "", `UFBXW_PROP_DATA_USER_ENUM`
 
-	// Decicated types
+	// Dedicated types
 	UFBXW_PROP_TYPE_VISIBILITY,             // < "Visibility", "", `UFBXW_PROP_DATA_BOOL`
 	UFBXW_PROP_TYPE_VISIBILITY_INHERITANCE, // < "Visibility Inheritance", "", `UFBXW_PROP_DATA_BOOL`
 	UFBXW_PROP_TYPE_ROLL,                   // < "Roll", "", `UFBXW_PROP_DATA_REAL`
@@ -720,7 +720,7 @@ ufbxw_abi void ufbxw_set_name(ufbxw_scene *scene, ufbxw_id id, const char *name)
 ufbxw_abi void ufbxw_set_name_len(ufbxw_scene *scene, ufbxw_id id, const char *name, size_t name_len);
 ufbxw_abi ufbxw_string ufbxw_get_name(ufbxw_scene *scene, ufbxw_id id);
 
-// TODO: Connect function taht takes connection type as an argument
+// TODO: Connect function that takes connection type as an argument
 ufbxw_abi void ufbxw_connect(ufbxw_scene *scene, ufbxw_id src, ufbxw_id dst);
 ufbxw_abi void ufbxw_connect_prop(ufbxw_scene *scene, ufbxw_id src, const char *src_prop, ufbxw_id dst, const char *dst_prop);
 ufbxw_abi void ufbxw_connect_prop_len(ufbxw_scene *scene, ufbxw_id src, const char *src_prop, size_t src_prop_len, ufbxw_id dst, const char *dst_prop, size_t dst_prop_len);
@@ -1136,7 +1136,7 @@ ufbxw_abi ufbxw_id ufbxw_get_template_id(ufbxw_scene *scene, ufbxw_element_type 
 typedef struct ufbxw_save_info {
 	uint32_t _begin_zero;
 
-	// Usually aboslute path of the exported FBX
+	// Usually absolute path of the exported FBX
 	ufbxw_string document_url;
 
 	// Application info

@@ -86,6 +86,17 @@ jobs:
       - name: Run tests
         run: build-test/test/ufbxw_test --fuzz --fuzz-rounds 10
 
+  ci_lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for typos
+        if: ${{ always() && !cancelled() }}
+        uses: crate-ci/typos@master
+        with: 
+          files: ufbx_write.h ufbx_write.c
+          config: ./misc/typos.toml
+
   ci_cpp:
     runs-on: ubuntu-latest
     steps:

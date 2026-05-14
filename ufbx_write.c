@@ -7323,7 +7323,7 @@ static ufbxw_anim_prop ufbxwi_animate_prop(ufbxw_scene *scene, ufbxw_id id, ufbx
 
 	ufbxwi_token first_curve_prop = curve_props[0];
 
-	// For single channel propertes, use the property name
+	// For single channel properties, use the property name
 	// TODO: Flexible buffer
 	char name_buf[256];
 	if (curve_count == 1) {
@@ -11233,7 +11233,7 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream,
 	sc->ator.max_allocs = sc->opts.max_allocations != 0 ? sc->opts.max_allocations : SIZE_MAX;
 	sc->ator.max_size = SIZE_MAX / 4;
 
-	// TODO: Proper hanling
+	// TODO: Proper handling
 	sc->buffers.ator = &sc->ator;
 	sc->buffers.error = &sc->error;
 	ufbxwi_refer_buffers(&sc->buffers, &sc->scene->buffers);
