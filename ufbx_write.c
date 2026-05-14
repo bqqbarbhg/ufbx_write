@@ -2496,7 +2496,7 @@ static ufbxwi_noinline int32_t ufbxwi_deflate_determine_block_type(ufbxwi_deflat
 		ufbxwi_nounroll for (uint32_t i = 16; i < 19; i++) {
 			const uint32_t count = codelen_count[i];
 			const uint32_t extra_bits = codelen_extra_bits[i - 16];
-			bits_dynamic += count * ud->huff_codelen[i].length;
+			bits_dynamic += count * (ud->huff_codelen[i].length + extra_bits);
 		}
 	}
 
