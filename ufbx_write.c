@@ -4202,15 +4202,15 @@ static void *ufbxwi_edit_buffer(ufbxwi_buffer_pool *pool, size_t *p_size, ufbxw_
 {
 	if (!id) return NULL;
 
-	if (ufbxwi_buffer_id_type(id) != type) {
-		ufbxwi_failf(pool->error, UFBXW_ERROR_BUFFER_WRONG_TYPE, "wrong buffer type: %s (expected %s)",
-			ufbxwi_buffer_type_names[ufbxwi_buffer_id_type(id)], ufbxwi_buffer_type_names[type]);
-		return NULL;
-	}
-
 	ufbxwi_buffer *buf = ufbxwi_get_buffer(pool, id);
 	if (!buf) {
 		ufbxwi_fail(pool->error, UFBXW_ERROR_BUFFER_NOT_FOUND, "buffer not found");
+		return NULL;
+	}
+
+	if (ufbxwi_buffer_id_type(id) != type) {
+		ufbxwi_failf(pool->error, UFBXW_ERROR_BUFFER_WRONG_TYPE, "wrong buffer type: %s (expected %s)",
+			ufbxwi_buffer_type_names[ufbxwi_buffer_id_type(id)], ufbxwi_buffer_type_names[type]);
 		return NULL;
 	}
 
