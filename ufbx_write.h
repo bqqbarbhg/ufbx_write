@@ -304,6 +304,7 @@ typedef enum ufbxw_error_type {
 	UFBXW_ERROR_MEMORY_LIMIT,
 	UFBXW_ERROR_ALLOCATION_LIMIT,
 	UFBXW_ERROR_ALLOCATION_FAILURE,
+	UFBXW_ERROR_FILE_SIZE_LIMIT,
 	UFBXW_ERROR_BUFFER_STREAM,
 	UFBXW_ERROR_WRITE_FAILED,
 	UFBXW_ERROR_DEFLATE_FAILED,
@@ -312,6 +313,7 @@ typedef enum ufbxw_error_type {
 	UFBXW_ERROR_FILE_OPEN_FAILED,
 	UFBXW_ERROR_ASCII_FORMAT,
 	UFBXW_ERROR_THREAD_SYNC_INIT,
+	UFBXW_ERROR_THREAD_POOL_INIT,
 
 } ufbxw_error_type;
 
@@ -1393,6 +1395,9 @@ typedef struct ufbxw_save_opts {
 	size_t threaded_min_deflate_bytes;
 	size_t threaded_min_ascii_floats;
 	size_t threaded_min_ascii_ints;
+
+	// Maximum output file size
+	uint64_t file_size_limit;
 
 	// Maximum amount of allocations to do
 	size_t max_allocations;

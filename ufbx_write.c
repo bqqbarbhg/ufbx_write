@@ -915,6 +915,11 @@ struct ufbxwi_error {
 	ufbxwi_thread_pool *thread_pool;
 	ufbxwi_mutex mutex;
 
+	ufbxwi_atomic_u32 fatal;
+
+	ufbxwi_atomic_u32 *serial_counter;
+	uint32_t serial_index;
+
 	ufbxw_error_fn *error_fn;
 	void *error_user;
 
@@ -946,10 +951,16 @@ static ufbxwi_noinline void ufbxwi_failf_imp(ufbxwi_error *error, ufbxw_error_ty
 		return;
 	}
 
+	ufbxwi_atomic_cas(&error->fatal, 0, 1);
+
 	ufbxwi_mutex_lock_if_enabled(error->thread_pool, &error->mutex);
 	if (error->error.type >= UFBXW_ERROR_FATAL) {
 		ufbxwi_mutex_unlock_if_enabled(error->thread_pool, &error->mutex);
 		return;
+	}
+
+	if (error->serial_counter) {
+		error->serial_index = ufbxwi_atomic_add(error->serial_counter, 1) + 1;
 	}
 
 	error->error.type = type;
@@ -982,7 +993,7 @@ static ufbxwi_noinline void ufbxwi_fail_imp(ufbxwi_error *error, ufbxw_error_typ
 
 static ufbxwi_forceinline bool ufbxwi_is_fatal(ufbxwi_error *error)
 {
-	return error->error.type != UFBXW_ERROR_NONE;
+	return ufbxwi_atomic_load_relaxed(&error->fatal);
 }
 
 #define ufbxwi_check(cond, ...) do { if (!(cond)) return __VA_ARGS__; } while (0)
@@ -1177,7 +1188,10 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 	uint32_t size_class = ufbxwi_get_size_class(total);
 	if (size_class == ~0u) {
 		ufbxwi_alloc *block = ufbxwi_alloc_block(ator, total);
-		ufbxwi_check(block, NULL);
+		if (!block) {
+			ufbxwi_mutex_unlock_if_enabled(ator->thread_pool, &ator->mutex);
+			return NULL;
+		}
 		block->magic = UFBXWI_HUGE_MAGIC;
 
 		if (p_alloc_size) {
@@ -1206,7 +1220,10 @@ static ufbxwi_noinline void *ufbxwi_alloc_size(ufbxwi_allocator *ator, size_t si
 		size_t block_alloc_size = ufbxwi_min_sz(ufbxwi_max_sz(ator->next_block_size * 2, 0x10000), 0x100000);
 
 		ufbxwi_alloc *block = ufbxwi_alloc_block(ator, block_alloc_size - sizeof(ufbxwi_alloc));
-		ufbxwi_check(block, NULL);
+		if (!block) {
+			ufbxwi_mutex_unlock_if_enabled(ator->thread_pool, &ator->mutex);
+			return NULL;
+		}
 		block->magic = UFBXWI_BLOCK_MAGIC;
 
 		ator->current_block = block;
@@ -2934,8 +2951,6 @@ static ufbxw_task_run_result ufbxwi_task_queue_run_task(ufbxwi_task_queue *tq, u
 
 static bool ufbxwi_task_queue_init(ufbxwi_task_queue *tq, ufbxwi_thread_pool *tp, ufbxwi_allocator *ator, const ufbxwi_task_queue_opts *opts, const ufbxw_thread_pool *pool)
 {
-	tq->enabled = true;
-
 	tq->user_pool = *pool;
 	tq->thread_pool = tp;
 	tq->create_thread_ctx_fn = opts->create_thread_ctx_fn;
@@ -2971,6 +2986,8 @@ static bool ufbxwi_task_queue_init(ufbxwi_task_queue *tq, ufbxwi_thread_pool *tp
 	if (!tq->user_pool.init_fn(tq->user_pool.user, ctx, num_threads)) {
 		return false;
 	}
+
+	tq->enabled = true;
 
 	return true;
 }
@@ -8289,6 +8306,7 @@ typedef struct {
 	char *buffer_end;
 	size_t direct_write_size;
 	bool buffer_failed;
+	ufbxwi_atomic_u32 fail_flag;
 
 	ufbxwi_write_chunk *current_chunk;
 	ufbxwi_write_chunk_ptr_list chunks;
@@ -8297,6 +8315,8 @@ typedef struct {
 	size_t preferred_buffer_size;
 
 	ufbxw_write_stream stream;
+
+	uint64_t file_size_limit;
 
 	// Chunk flushing
 	size_t chunk_layout_index;
@@ -8334,11 +8354,17 @@ static ufbxwi_noinline ufbxwi_write_buffer *ufbxwi_write_queue_alloc_buffer(ufbx
 	}
 
 	ufbxwi_write_buffer *buf = ufbxwi_alloc(wq->ator, ufbxwi_write_buffer, 1);
-	ufbxwi_check(buf, NULL);
+	if (!buf) {
+		ufbxwi_mutex_unlock_if_enabled(wq->thread_pool, &wq->buffer_mutex);
+		return NULL;
+	}
 
 	const size_t size = ufbxwi_max_sz(wq->preferred_buffer_size, min_size);
 	buf->begin = ufbxwi_alloc(wq->ator, char, size);
-	ufbxwi_check(buf->begin, NULL);
+	if (!buf->begin) {
+		ufbxwi_mutex_unlock_if_enabled(wq->thread_pool, &wq->buffer_mutex);
+		return NULL;
+	}
 
 	buf->pos = buf->begin;
 	buf->end = buf->begin + size;
@@ -8353,7 +8379,10 @@ static ufbxwi_noinline void ufbxwi_write_queue_return_buffer(ufbxwi_write_queue 
 	ufbxwi_mutex_lock_if_enabled(wq->thread_pool, &wq->buffer_mutex);
 
 	// TODO(wq): Have something better than a linear list
-	ufbxwi_check(ufbxwi_list_push_copy(wq->ator, &wq->free_buffers, ufbxwi_write_buffer*, &buffer));
+	if (!ufbxwi_list_push_copy(wq->ator, &wq->free_buffers, ufbxwi_write_buffer*, &buffer)) {
+		ufbxwi_mutex_unlock_if_enabled(wq->thread_pool, &wq->buffer_mutex);
+		return;
+	}
 
 	ufbxwi_mutex_unlock_if_enabled(wq->thread_pool, &wq->buffer_mutex);
 }
@@ -8384,6 +8413,7 @@ static ufbxwi_noinline void ufbxwi_write_queue_init(ufbxwi_write_queue *wq, ufbx
 
 	wq->preferred_buffer_size = buffer_size;
 	wq->direct_write_size = buffer_size / 2;
+	wq->file_size_limit = UINT64_MAX;
 
 	ufbxwi_write_buffer *initial_buffer = ufbxwi_write_queue_alloc_buffer(wq, buffer_size);
 	ufbxwi_check(initial_buffer);
@@ -8410,6 +8440,28 @@ static ufbxwi_noinline void ufbxwi_write_queue_free(ufbxwi_write_queue *wq)
 	if (wq->stream.close_fn) {
 		wq->stream.close_fn(wq->stream.user);
 	}
+}
+
+static ufbxwi_noinline void ufbxwi_write_queue_set_failed(ufbxwi_write_queue *wq)
+{
+	uint32_t flag = ufbxwi_atomic_load_acquire(&wq->fail_flag);
+
+	if (wq->buffer_failed) return;
+
+	wq->buffer_begin = (char*)ufbxwi_zero_size_buffer;
+	wq->buffer_pos = (char*)ufbxwi_zero_size_buffer;
+	wq->buffer_end = (char*)ufbxwi_zero_size_buffer;
+	wq->buffer_failed = true;
+
+	ufbxwi_atomic_cas(&wq->fail_flag, flag, 0);
+}
+
+static ufbxwi_forceinline bool ufbxwi_write_queue_check_fail(ufbxwi_write_queue *wq)
+{
+	if (ufbxwi_atomic_load_relaxed(&wq->fail_flag)) {
+		ufbxwi_write_queue_set_failed(wq);
+	}
+	return wq->buffer_failed;
 }
 
 static void ufbxwi_write_queue_resolve_reloc(ufbxwi_write_queue *wq, uint32_t reloc_id)
@@ -8462,6 +8514,11 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush_chunks_imp(ufbxwi_write_que
 
 			uint64_t file_offset = chunk->file_offset;
 			do {
+				if (file_offset + part->size > wq->file_size_limit) {
+					ufbxwi_failf(wq->error, UFBXW_ERROR_FILE_SIZE_LIMIT, "file size limit exceeded (%llu)", (unsigned long long)wq->file_size_limit);
+					return false;
+				}
+
 				bool write_ok = wq->stream.write_fn(wq->stream.user, file_offset, part->data, part->size);
 				if (!write_ok) {
 					ufbxwi_fail(wq->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
@@ -8587,6 +8644,11 @@ static ufbxwi_noinline bool ufbxwi_write_queue_flush(ufbxwi_write_queue *wq, siz
 	if (file_offset != UINT64_MAX) {
 		new_chunk->file_offset = file_offset;
 		new_chunk->has_file_offset = true;
+
+		if (file_offset > wq->file_size_limit) {
+			ufbxwi_failf(wq->error, UFBXW_ERROR_FILE_SIZE_LIMIT, "file size limit exceeded (%llu)", (unsigned long long)wq->file_size_limit);
+			return false;
+		}
 	}
 
 	wq->current_chunk = new_chunk;
@@ -8625,7 +8687,7 @@ static ufbxwi_noinline bool ufbxwi_write_queue_finish(ufbxwi_write_queue *wq)
 
 static ufbxwi_noinline char *ufbxwi_queue_write_reserve_slow(ufbxwi_write_queue *wq, size_t length)
 {
-	if (wq->buffer_failed) return NULL;
+	if (ufbxwi_write_queue_check_fail(wq)) return NULL;
 
 	ufbxwi_check(ufbxwi_write_queue_flush(wq, length), NULL);
 
@@ -8654,7 +8716,7 @@ static ufbxwi_forceinline char *ufbxwi_queue_write_reserve_small(ufbxwi_write_qu
 static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least(ufbxwi_write_queue *wq, size_t length)
 {
 	ufbxwi_mutable_void_span span = { 0 };
-	if (wq->buffer_failed) return span;
+	if (ufbxwi_write_queue_check_fail(wq)) return span;
 
 	char *dst = wq->buffer_pos;
 	size_t left = ufbxwi_to_size(wq->buffer_end - dst);
@@ -8671,7 +8733,7 @@ static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least(ufbxwi_write
 
 static ufbxwi_forceinline void ufbxwi_queue_write_commit(ufbxwi_write_queue *wq, size_t length)
 {
-	if (wq->buffer_failed) return;
+	if (ufbxwi_write_queue_check_fail(wq)) return;
 
 	ufbxw_assert(length <= ufbxwi_to_size(wq->buffer_end - wq->buffer_pos));
 	wq->buffer_pos += length;
@@ -8680,7 +8742,7 @@ static ufbxwi_forceinline void ufbxwi_queue_write_commit(ufbxwi_write_queue *wq,
 static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least_in_chunk(ufbxwi_write_queue *wq, ufbxwi_write_chunk *chunk, size_t length)
 {
 	ufbxwi_mutable_void_span result = { 0 };
-	if (wq->buffer_failed) return result;
+	if (ufbxwi_write_queue_check_fail(wq)) return result;
 
 	if (chunk == NULL) {
 		return ufbxwi_queue_write_reserve_at_least(wq, length);
@@ -8711,7 +8773,7 @@ static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least_in_chunk(ufb
 
 static ufbxwi_forceinline void ufbxwi_queue_write_commit_in_chunk(ufbxwi_write_queue *wq, ufbxwi_write_chunk *chunk, size_t length)
 {
-	if (wq->buffer_failed) return;
+	if (ufbxwi_write_queue_check_fail(wq)) return;
 
 	if (chunk == NULL) {
 		ufbxwi_queue_write_commit(wq, length);
@@ -8726,13 +8788,18 @@ static ufbxwi_forceinline void ufbxwi_queue_write_commit_in_chunk(ufbxwi_write_q
 
 static ufbxwi_noinline bool ufbxwi_queue_write_slow(ufbxwi_write_queue *wq, const void *data, size_t length)
 {
-	if (wq->buffer_failed) return false;
+	if (ufbxwi_write_queue_check_fail(wq)) return false;
 
 	if (length >= wq->direct_write_size && wq->current_chunk->has_file_offset) {
 		// If we are doing a large write and know where we are writing, just write it directly to the file.
 		ufbxwi_check(ufbxwi_write_queue_flush(wq, 0), false);
 
 		uint64_t file_offset = wq->current_chunk->file_offset;
+		if (file_offset + length > wq->file_size_limit) {
+			ufbxwi_failf(wq->error, UFBXW_ERROR_FILE_SIZE_LIMIT, "file size limit exceeded (%llu)", (unsigned long long)wq->file_size_limit);
+			return false;
+		}
+
 		bool write_ok = wq->stream.write_fn(wq->stream.user, file_offset, data, length);
 		if (!write_ok) {
 			ufbxwi_fail(wq->error, UFBXW_ERROR_WRITE_FAILED, "failed to write to output stream");
@@ -8883,9 +8950,10 @@ typedef struct {
 
 	ufbxwi_save_thread_context main_thread_ctx;
 
-	// Thread-safe error and alloocator
+	// Thread-safe error and allocator
 	ufbxwi_error thread_error;
 	ufbxwi_allocator thread_ator;
+	ufbxwi_atomic_u32 thread_error_serial;
 
 } ufbxwi_save_context;
 
@@ -11111,17 +11179,22 @@ static bool ufbxwi_open_file_write(ufbxw_write_stream *stream, const char *path,
 static void ufbxwi_mark_save_context_failed(ufbxwi_save_context *sc)
 {
 	ufbxwi_mark_buffers_failed(&sc->buffers);
-
-	sc->write_queue.buffer_begin = (char*)ufbxwi_zero_size_buffer;
-	sc->write_queue.buffer_pos = (char*)ufbxwi_zero_size_buffer;
-	sc->write_queue.buffer_end = (char*)ufbxwi_zero_size_buffer;
-	sc->write_queue.buffer_failed = true;
+	ufbxwi_write_queue_set_failed(&sc->write_queue);
 }
 
 static void ufbxwi_save_fatal(void *user, ufbxwi_error *error)
 {
 	ufbxwi_save_context *sc = (ufbxwi_save_context*)user;
 	ufbxwi_mark_save_context_failed(sc);
+}
+
+static void ufbxwi_save_thread_fatal(void *user, ufbxwi_error *error)
+{
+	ufbxwi_save_context *sc = (ufbxwi_save_context*)user;
+
+	// TODO: We could go to fatal directly here if running on the main thread
+	ufbxwi_atomic_cas(&sc->write_queue.fail_flag, 0, 1);
+	ufbxwi_atomic_cas(&sc->error.fatal, 0, 1);
 }
 
 static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream, ufbxw_save_stats *stats)
@@ -11192,6 +11265,12 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream,
 
 		sc->thread_error.thread_pool = &sc->thread_pool;
 
+		sc->thread_error.fatal_fn = &ufbxwi_save_thread_fatal;
+		sc->thread_error.fatal_user = sc;
+
+		sc->error.serial_counter = &sc->thread_error_serial;
+		sc->thread_error.serial_counter = &sc->thread_error_serial;
+
 		sc->thread_ator.error = &sc->thread_error;
 		sc->thread_ator.thread_pool = &sc->thread_pool;
 
@@ -11209,7 +11288,9 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream,
 		task_queue_opts.free_thread_ctx_fn = &ufbxwi_free_save_thread_context;
 		task_queue_opts.thread_ctx_user = sc;
 
-		ufbxwi_task_queue_init(&sc->task_queue, &sc->thread_pool, &sc->thread_ator, &task_queue_opts, &sc->opts.thread_pool);
+		if (!ufbxwi_task_queue_init(&sc->task_queue, &sc->thread_pool, &sc->thread_ator, &task_queue_opts, &sc->opts.thread_pool)) {
+			ufbxwi_failf(&sc->error, UFBXW_ERROR_THREAD_POOL_INIT, "failed to init thread pool");
+		}
 
 		ufbxwi_init_save_thread_context(sc, &sc->main_thread_ctx);
 		ufbxwi_write_queue_init(&sc->write_queue, &sc->thread_ator, &sc->thread_error, &sc->task_queue, &sc->main_thread_ctx, *stream, buffer_size);
@@ -11220,6 +11301,13 @@ static void ufbxwi_save_imp(ufbxwi_save_context *sc, ufbxw_write_stream *stream,
 		ufbxwi_write_queue_init(&sc->write_queue, &sc->ator, &sc->error, NULL, &sc->main_thread_ctx, *stream, buffer_size);
 
 		sc->builtin_deflate_opts.ator = &sc->ator;
+	}
+
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->error));
+	ufbxwi_check(!ufbxwi_is_fatal(&sc->thread_error));
+
+	if (sc->opts.file_size_limit > 0) {
+		sc->write_queue.file_size_limit = sc->opts.file_size_limit;
 	}
 
 	// HACK: Hook the write queue to the buffer pool, as write chunks may temporarily own a buffer that
@@ -13244,9 +13332,17 @@ ufbxw_abi bool ufbxw_save_stream_ex(ufbxw_scene *scene, ufbxw_write_stream *stre
 	ufbxwi_free_allocator(&sc.thread_ator);
 	ufbxwi_free_allocator(&sc.ator);
 
+	ufbxwi_error *first_error = NULL;
 	if (sc.error.error.type != UFBXW_ERROR_NONE) {
+		first_error = &sc.error;
+	}
+	if (sc.thread_error.error.type != UFBXW_ERROR_NONE && (!first_error || sc.thread_error.serial_index < first_error->serial_index)) {
+		first_error = &sc.thread_error;
+	}
+
+	if (first_error) {
 		if (error) {
-			*error = sc.error.error;
+			*error = first_error->error;
 		}
 		return false;
 	}
