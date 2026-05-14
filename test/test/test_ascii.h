@@ -74,6 +74,12 @@ static void ufbxwt_ascii_format_test(const char *name, ufbxw_scene *scene, const
 
 					ufbxw_error save_error;
 					bool save_ok = ufbxw_save_stream(scene, &ws, &save_opts, &save_error);
+
+					if (!ufbxwt_ascii_format_supports_float_format(ascii_impl, save_opts.ascii_float_format)) {
+						ufbxwt_assert(!save_ok);
+						ufbxwt_assert(save_error.type == UFBXW_ERROR_ASCII_FORMAT);
+						continue;
+					}
 					if (save_error.type != UFBXW_ERROR_NONE) {
 						ufbxwt_log_error(&save_error);
 					}

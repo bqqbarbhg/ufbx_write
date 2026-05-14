@@ -1295,6 +1295,16 @@ typedef struct ufbxw_deflate {
 
 // -- ASCII formatting
 
+// Number of characters reserved for formatting ASCII, per element
+// Allow space for maximum length, comma, and optional space.
+#define UFBXW_ASCII_FORMAT_INT_CHARS 13
+#define UFBXW_ASCII_FORMAT_LONG_CHARS 22
+#define UFBXW_ASCII_FORMAT_FLOAT_CHARS 20
+#define UFBXW_ASCII_FORMAT_DOUBLE_CHARS 28
+
+// Number of additional bytes in the end of the buffer, in case the formatter needs scratch space.
+#define UFBXW_ASCII_FORMAT_EXTRA_BUFFER_CHARS 64
+
 // TODO: Should round trip be default?
 typedef enum ufbxw_ascii_float_format {
 	// Fixed-precision formatting, matching what the FBX SDK outputs.

@@ -23,6 +23,10 @@ if(MSVC)
     set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /Ob2")
 endif()
 
+if (MSVC)
+    add_compile_options(/MP)
+endif()
+
 target_sources(ufbx_write PRIVATE ${SRC_UFBX_WRITE})
 
 if(USE_ASAN OR USE_UBSAN)

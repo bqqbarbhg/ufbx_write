@@ -684,6 +684,7 @@ bool im_arg_ctx(im_arg_context *ctx, const char *fmt, const char *description)
 			case IM_ARG__COUNT_ANY: suffix = "*"; break;
 			case IM_ARG__COUNT_ZERO_OR_ONE: suffix = "?"; break;
 			case IM_ARG__COUNT_ONE_OR_MORE: suffix = "+"; break;
+			default: break;
 			}
 			if (do_print) {
 				printf("%s%.*s%s", prefix, (int)arg->length, fmt + arg->offset, suffix);
