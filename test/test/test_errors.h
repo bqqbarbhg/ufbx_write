@@ -140,6 +140,15 @@ UFBXWT_TEST(error_buffer_edit)
 		ufbxwt_assert_error(&error, UFBXW_ERROR_BUFFER_NOT_EDITABLE, "ufbxwi_edit_buffer", "buffer not editable");
 	}
 
+	ufbxwt_reset_error(&error);
+
+	{
+		ufbxw_int_buffer bad_id_buffer = { UINT64_MAX };
+		ufbxw_int_list list = ufbxw_edit_int_buffer(scene, bad_id_buffer);
+		ufbxwt_assert(list.count == 0);
+		ufbxwt_assert_error(&error, UFBXW_ERROR_BUFFER_NOT_FOUND, "ufbxwi_edit_buffer", "buffer not found");
+	}
+
 	ufbxw_free_scene(scene);
 }
 #endif
