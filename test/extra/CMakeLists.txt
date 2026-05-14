@@ -6,6 +6,7 @@ option(USE_LIBDEFLATE "Enable libdeflate" ON)
 option(USE_ZLIB "Enable Zlib" ON)
 option(USE_FMTLIB "Enable fmtlib" ON)
 option(USE_TO_CHARS "Enable to_chars" ON)
+option(USE_ZMIJ "Enable Zmij" ON)
 option(USE_CPP_THREADS "Enable C++ threads" ON)
 
 set(SRC_EXTRA "")
@@ -75,6 +76,42 @@ if(USE_TO_CHARS)
     target_compile_definitions(ufbxw_extra PUBLIC UFBXWT_HAS_TO_CHARS=1)
 
     list(APPEND SRC_EXTRA "../../extra/ufbxw_to_chars.h" "ufbxw_to_chars.cpp")
+endif()
+
+if(USE_ZMIJ)
+    FetchContent_Populate(
+        zmij
+        GIT_REPOSITORY "https://github.com/vitaut/zmij.git"
+        GIT_TAG main
+    )
+
+    add_library(zmij STATIC EXCLUDE_FROM_ALL
+        "${zmij_SOURCE_DIR}/zmij.cc"
+        "${zmij_SOURCE_DIR}/zmij.h"
+    )
+    target_compile_features(zmij PRIVATE cxx_std_14)
+    target_include_directories(zmij PUBLIC "${zmij_SOURCE_DIR}")
+    if(MSVC)
+        # MSVC fails to resolve `float_traits::is_iec559` without `/permissive-`
+        # warning C4804: '-': unsafe use of type 'bool' in operation
+        target_compile_options(zmij PRIVATE /permissive- /wd4804)
+    endif()
+
+    add_library(zmij_c STATIC EXCLUDE_FROM_ALL
+        "${zmij_SOURCE_DIR}/zmij.c"
+        "${zmij_SOURCE_DIR}/zmij-c.h"
+    )
+    target_include_directories(zmij_c PUBLIC "${zmij_SOURCE_DIR}")
+
+    target_link_libraries(ufbxw_extra PRIVATE zmij zmij_c)
+    target_compile_definitions(ufbxw_extra PUBLIC UFBXWT_HAS_ZMIJ=1)
+
+    list(APPEND SRC_EXTRA
+        "../../extra/ufbxw_zmij.h"
+        "../../extra/ufbxw_zmij_c.h"
+        "ufbxw_zmij.cpp"
+        "ufbxw_zmij_c.c"
+    )
 endif()
 
 if(USE_CPP_THREADS)
