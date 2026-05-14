@@ -8222,6 +8222,8 @@ UFBXWI_LIST_TYPE(ufbxwi_write_buffer_ptr_list, ufbxwi_write_buffer*);
 UFBXWI_LIST_TYPE(ufbxwi_write_chunk_ptr_list, ufbxwi_write_chunk*);
 UFBXWI_LIST_TYPE(ufbxwi_write_reloc_list, ufbxwi_write_reloc);
 
+#define UFBXWI_WRITE_SMALL_MAX_BYTES 256
+
 typedef struct {
 	ufbxwi_allocator *ator;
 	ufbxwi_error *error;
@@ -8235,6 +8237,7 @@ typedef struct {
 	char *buffer_pos;
 	char *buffer_end;
 	size_t direct_write_size;
+	bool buffer_failed;
 
 	ufbxwi_write_chunk *current_chunk;
 	ufbxwi_write_chunk_ptr_list chunks;
@@ -8253,6 +8256,9 @@ typedef struct {
 
 	ufbxwi_mutex buffer_mutex;
 	ufbxwi_write_buffer_ptr_list free_buffers;
+
+	// Temporary small reserve buffer to write to, if we encounter a fatal error
+	char fatal_small_buffer[UFBXWI_WRITE_SMALL_MAX_BYTES];
 
 } ufbxwi_write_queue;
 
@@ -8568,34 +8574,45 @@ static ufbxwi_noinline bool ufbxwi_write_queue_finish(ufbxwi_write_queue *wq)
 
 static ufbxwi_noinline char *ufbxwi_queue_write_reserve_slow(ufbxwi_write_queue *wq, size_t length)
 {
+	if (wq->buffer_failed) return NULL;
+
 	ufbxwi_check(ufbxwi_write_queue_flush(wq, length), NULL);
 
 	return wq->buffer_pos;
 }
 
+static ufbxwi_noinline char *ufbxwi_queue_write_reserve_small_slow(ufbxwi_write_queue *wq, size_t length)
+{
+	char *dst = ufbxwi_queue_write_reserve_slow(wq, length);
+	return dst ? dst : wq->fatal_small_buffer;
+}
+
 static ufbxwi_forceinline char *ufbxwi_queue_write_reserve_small(ufbxwi_write_queue *wq, size_t length)
 {
-	ufbxwi_dev_assert(length <= 256);
+	ufbxwi_dev_assert(length <= UFBXWI_WRITE_SMALL_MAX_BYTES);
 
 	char *dst = wq->buffer_pos;
 	size_t left = ufbxwi_to_size(wq->buffer_end - dst);
 	if (left >= length) {
 		return wq->buffer_pos;
 	} else {
-		return ufbxwi_queue_write_reserve_slow(wq, length);
+		return ufbxwi_queue_write_reserve_small_slow(wq, length);
 	}
 }
 
 static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least(ufbxwi_write_queue *wq, size_t length)
 {
+	ufbxwi_mutable_void_span span = { 0 };
+	if (wq->buffer_failed) return span;
+
 	char *dst = wq->buffer_pos;
 	size_t left = ufbxwi_to_size(wq->buffer_end - dst);
-	ufbxwi_mutable_void_span span;
 	if (left >= length) {
 		span.data = wq->buffer_pos;
 		span.count = left;
 	} else {
 		span.data = ufbxwi_queue_write_reserve_slow(wq, length);
+		if (!span.data) return span;
 		span.count = ufbxwi_to_size(wq->buffer_end - (char*)span.data);
 	}
 	return span;
@@ -8603,18 +8620,22 @@ static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least(ufbxwi_write
 
 static ufbxwi_forceinline void ufbxwi_queue_write_commit(ufbxwi_write_queue *wq, size_t length)
 {
+	if (wq->buffer_failed) return;
+
 	ufbxw_assert(length <= ufbxwi_to_size(wq->buffer_end - wq->buffer_pos));
 	wq->buffer_pos += length;
 }
 
 static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least_in_chunk(ufbxwi_write_queue *wq, ufbxwi_write_chunk *chunk, size_t length)
 {
+	ufbxwi_mutable_void_span result = { 0 };
+	if (wq->buffer_failed) return result;
+
 	if (chunk == NULL) {
 		return ufbxwi_queue_write_reserve_at_least(wq, length);
 	} else {
 		ufbxwi_write_chunk_part *const last_part = chunk->last_part;
 		ufbxwi_write_chunk_part *part;
-		ufbxwi_mutable_void_span result = { 0 };
 		if (last_part == NULL) {
 			part = &chunk->data;
 		} else {
@@ -8639,6 +8660,8 @@ static ufbxwi_mutable_void_span ufbxwi_queue_write_reserve_at_least_in_chunk(ufb
 
 static ufbxwi_forceinline void ufbxwi_queue_write_commit_in_chunk(ufbxwi_write_queue *wq, ufbxwi_write_chunk *chunk, size_t length)
 {
+	if (wq->buffer_failed) return;
+
 	if (chunk == NULL) {
 		ufbxwi_queue_write_commit(wq, length);
 	} else {
@@ -8652,7 +8675,7 @@ static ufbxwi_forceinline void ufbxwi_queue_write_commit_in_chunk(ufbxwi_write_q
 
 static ufbxwi_noinline bool ufbxwi_queue_write_slow(ufbxwi_write_queue *wq, const void *data, size_t length)
 {
-	if (ufbxwi_is_fatal(wq->error)) return false;
+	if (wq->buffer_failed) return false;
 
 	if (length >= wq->direct_write_size && wq->current_chunk->has_file_offset) {
 		// If we are doing a large write and know where we are writing, just write it directly to the file.
@@ -8972,7 +8995,7 @@ static void ufbxwi_ascii_comment(ufbxwi_save_context *sc, const char *fmt, va_li
 {
 	// TODO: More rigorous
 	// TODO: Sanitize \n's and other special characters
-	size_t max_length = 256;
+	size_t max_length = UFBXWI_WRITE_SMALL_MAX_BYTES;
 	char *dst = ufbxwi_write_reserve_small(sc, max_length);
 
 	int len = vsnprintf(dst, max_length, fmt, args);
@@ -9001,6 +9024,25 @@ static void ufbxwi_ascii_dom_string(ufbxwi_save_context *sc, const char *str, si
 	ufbxwi_write(sc, "\"", 1);
 }
 
+static ufbxwi_noinline void ufbxwi_ascii_check_format_fail(ufbxwi_error *error, size_t dst_size, size_t result_size)
+{
+	if (result_size == 0 || result_size == SIZE_MAX) {
+		ufbxwi_failf(error, UFBXW_ERROR_ASCII_FORMAT, "ASCII format failed");
+	} else {
+		ufbxwi_failf(error, UFBXW_ERROR_ASCII_FORMAT, "ASCII format overflow: %zu/%zu bytes", result_size, dst_size);
+	}
+}
+
+static ufbxwi_forceinline bool ufbxwi_ascii_check_format_result(ufbxwi_error *error, size_t dst_size, size_t result_size)
+{
+	if (result_size > 0 && result_size <= dst_size) {
+		return true;
+	} else {
+		ufbxwi_ascii_check_format_fail(error, dst_size, result_size);
+		return false;
+	}
+}
+
 static void ufbxwi_ascii_dom_write(ufbxwi_save_context *sc, const char *tag, const char *fmt, va_list args, bool open)
 {
 	ufbxwi_ascii_indent(sc);
@@ -9020,47 +9062,55 @@ static void ufbxwi_ascii_dom_write(ufbxwi_save_context *sc, const char *tag, con
 
 		switch (f) {
 		case 'I': {
-			char *dst = ufbxwi_write_reserve_small(sc, 128);
 			int32_t src[4];
 			size_t src_count = 1;
 			src[0] = va_arg(args, int32_t);
 			for (; pf[1] == 'I' && src_count < 4; src_count++, pf++) {
 				src[src_count] = va_arg(args, int32_t);
 			}
-			size_t len = sc->opts.ascii_formatter.format_int_fn(sc->opts.ascii_formatter.user, dst, 128, src, src_count);
+			size_t dst_size = src_count * UFBXW_ASCII_FORMAT_INT_CHARS + UFBXW_ASCII_FORMAT_EXTRA_BUFFER_CHARS;
+			char *dst = ufbxwi_write_reserve_small(sc, dst_size);
+			size_t len = sc->opts.ascii_formatter.format_int_fn(sc->opts.ascii_formatter.user, dst, dst_size, src, src_count);
+			ufbxwi_check(ufbxwi_ascii_check_format_result(&sc->error, dst_size, len));
 			ufbxwi_write_commit(sc, (size_t)len - 1);
 		} break;
 		case 'L': {
-			char *dst = ufbxwi_write_reserve_small(sc, 128);
 			int64_t src[4];
 			size_t src_count = 1;
 			src[0] = va_arg(args, int64_t);
 			for (; pf[1] == 'L' && src_count < 4; src_count++, pf++) {
 				src[src_count] = va_arg(args, int64_t);
 			}
-			size_t len = sc->opts.ascii_formatter.format_long_fn(sc->opts.ascii_formatter.user, dst, 128, src, src_count);
+			size_t dst_size = src_count * UFBXW_ASCII_FORMAT_LONG_CHARS + UFBXW_ASCII_FORMAT_EXTRA_BUFFER_CHARS;
+			char *dst = ufbxwi_write_reserve_small(sc, dst_size);
+			size_t len = sc->opts.ascii_formatter.format_long_fn(sc->opts.ascii_formatter.user, dst, dst_size, src, src_count);
+			ufbxwi_check(ufbxwi_ascii_check_format_result(&sc->error, dst_size, len));
 			ufbxwi_write_commit(sc, (size_t)len - 1);
 		} break;
 		case 'F': {
-			char *dst = ufbxwi_write_reserve_small(sc, 128);
 			float src[4];
 			size_t src_count = 1;
 			src[0] = (float)va_arg(args, double);
 			for (; pf[1] == 'F' && src_count < 4; src_count++, pf++) {
 				src[src_count] = (float)va_arg(args, double);
 			}
-			size_t len = sc->opts.ascii_formatter.format_float_fn(sc->opts.ascii_formatter.user, dst, 128, src, src_count, sc->opts.ascii_float_format);
+			size_t dst_size = src_count * UFBXW_ASCII_FORMAT_FLOAT_CHARS + UFBXW_ASCII_FORMAT_EXTRA_BUFFER_CHARS;
+			char *dst = ufbxwi_write_reserve_small(sc, dst_size);
+			size_t len = sc->opts.ascii_formatter.format_float_fn(sc->opts.ascii_formatter.user, dst, dst_size, src, src_count, sc->opts.ascii_float_format);
+			ufbxwi_check(ufbxwi_ascii_check_format_result(&sc->error, dst_size, len));
 			ufbxwi_write_commit(sc, (size_t)len - 1);
 		} break;
 		case 'D': {
-			char *dst = ufbxwi_write_reserve_small(sc, 128);
 			double src[4];
 			size_t src_count = 1;
 			src[0] = va_arg(args, double);
 			for (; pf[1] == 'D' && src_count < 4; src_count++, pf++) {
 				src[src_count] = va_arg(args, double);
 			}
-			size_t len = sc->opts.ascii_formatter.format_double_fn(sc->opts.ascii_formatter.user, dst, 128, src, src_count, sc->opts.ascii_float_format);
+			size_t dst_size = src_count * UFBXW_ASCII_FORMAT_DOUBLE_CHARS + UFBXW_ASCII_FORMAT_EXTRA_BUFFER_CHARS;
+			char *dst = ufbxwi_write_reserve_small(sc, dst_size);
+			size_t len = sc->opts.ascii_formatter.format_double_fn(sc->opts.ascii_formatter.user, dst, dst_size, src, src_count, sc->opts.ascii_float_format);
+			ufbxwi_check(ufbxwi_ascii_check_format_result(&sc->error, dst_size, len));
 			ufbxwi_write_commit(sc, (size_t)len - 1);
 		} break;
 		case 'C': {
@@ -9132,7 +9182,15 @@ static ufbxwi_noinline bool ufbxwi_ascii_write_array_data(ufbxwi_save_thread_con
 			size_t src_count = ufbxwi_min_sz(span_scalars - begin, line_scalars);
 			const void *src = (const char*)span.data + begin * scalar_size;
 
-			size_t dst_size = src_count * 28 + 1;
+			size_t elem_chars = 0;
+			switch (scalar_type) {
+			case UFBXWI_BUFFER_TYPE_INT: elem_chars = UFBXW_ASCII_FORMAT_INT_CHARS; break;
+			case UFBXWI_BUFFER_TYPE_LONG: elem_chars = UFBXW_ASCII_FORMAT_LONG_CHARS; break;
+			case UFBXWI_BUFFER_TYPE_FLOAT: elem_chars = UFBXW_ASCII_FORMAT_FLOAT_CHARS; break;
+			case UFBXWI_BUFFER_TYPE_REAL: elem_chars = UFBXW_ASCII_FORMAT_DOUBLE_CHARS; break;
+			default: ufbxwi_unreachable("bad scalar type");
+			}
+			size_t dst_size = src_count * elem_chars + UFBXW_ASCII_FORMAT_EXTRA_BUFFER_CHARS;
 
 			if (ufbxwi_to_size(dst_end - dst_pos) < dst_size) {
 				if (dst_pos > dst_start) {
@@ -9164,10 +9222,7 @@ static ufbxwi_noinline bool ufbxwi_ascii_write_array_data(ufbxwi_save_thread_con
 				ufbxwi_unreachable("bad scalar type");
 			}
 
-			if (result_length == 0 || result_length == SIZE_MAX) {
-				ufbxwi_fail(tc->error, UFBXW_ERROR_ASCII_FORMAT, "failed to format ASCII numbers");
-				return false;
-			}
+			ufbxwi_check(ufbxwi_ascii_check_format_result(tc->error, dst_size, result_length), false);
 
 			scalars_left -= src_count;
 			begin += src_count;
@@ -10992,10 +11047,10 @@ static void ufbxwi_mark_save_context_failed(ufbxwi_save_context *sc)
 {
 	ufbxwi_mark_buffers_failed(&sc->buffers);
 
-	// TODO(wq): Make this better
-	sc->write_queue.buffer_begin = NULL;
-	sc->write_queue.buffer_pos = NULL;
-	sc->write_queue.buffer_end = NULL;
+	sc->write_queue.buffer_begin = (char*)ufbxwi_zero_size_buffer;
+	sc->write_queue.buffer_pos = (char*)ufbxwi_zero_size_buffer;
+	sc->write_queue.buffer_end = (char*)ufbxwi_zero_size_buffer;
+	sc->write_queue.buffer_failed = true;
 }
 
 static void ufbxwi_save_fatal(void *user, ufbxwi_error *error)
