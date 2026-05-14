@@ -60,6 +60,11 @@ ufbxw_zmij_c_abi void ufbxw_zmij_c_setup(struct ufbxw_ascii_formatter *formatter
 
 #include <stdint.h>
 
+#define ufbxw_zmij_static_assert(desc, cond) typedef char ufbxw_zmij_static_assert_##desc[(cond)?1:-1]
+
+ufbxw_zmij_static_assert(float_buffer_size, zmij_float_buffer_size <= UFBXW_ASCII_FORMAT_FLOAT_CHARS + UFBXW_ASCII_FORMAT_EXTRA_BUFFER_CHARS);
+ufbxw_zmij_static_assert(double_buffer_size, zmij_double_buffer_size <= UFBXW_ASCII_FORMAT_DOUBLE_CHARS + UFBXW_ASCII_FORMAT_EXTRA_BUFFER_CHARS);
+
 static size_t ufbxw_zmij_c_format_float(void *user, char *dst, size_t dst_size, const float *src, size_t src_count, ufbxw_ascii_float_format format)
 {
 	if (format != UFBXW_ASCII_FLOAT_FORMAT_ROUND_TRIP) return SIZE_MAX;

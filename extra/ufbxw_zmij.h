@@ -66,6 +66,9 @@ ufbxw_zmij_abi void ufbxw_zmij_setup(struct ufbxw_ascii_formatter *formatter);
 
 #include <stdint.h>
 
+static_assert(zmij::float_buffer_size <= UFBXW_ASCII_FORMAT_FLOAT_CHARS + UFBXW_ASCII_FORMAT_EXTRA_BUFFER_CHARS, "ufbxw float buffer is too small");
+static_assert(zmij::double_buffer_size <= UFBXW_ASCII_FORMAT_DOUBLE_CHARS + UFBXW_ASCII_FORMAT_EXTRA_BUFFER_CHARS, "ufbxw double buffer is too small");
+
 static size_t ufbxw_zmij_format_float(void *user, char *dst, size_t dst_size, const float *src, size_t src_count, ufbxw_ascii_float_format format)
 {
 	if (format != UFBXW_ASCII_FLOAT_FORMAT_ROUND_TRIP) return SIZE_MAX;
