@@ -2100,6 +2100,7 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 				read_pos++;
 				while (read_pos < match_end_pos) {
 
+					const uint32_t hash3 = next_hash3;
 					const uint32_t hash4 = next_hash4;
 					match_pos = next_match_pos;
 
@@ -2130,9 +2131,14 @@ static ufbxwi_noinline void ufbxwi_find_matches_fast(ufbxwi_deflate_encoder *ud,
 
 				read_pos++;
 				for (size_t i = 0; i < 2; i++) {
-					const uint32_t hash3 = ufbxwi_deflate_hash3_fast(data + read_pos, UFBXWI_DEFLATE_HASH3_BITS);
-					const uint32_t hash4 = ufbxwi_deflate_hash4_fast(data + read_pos, UFBXWI_DEFLATE_HASH4_BITS);
-					match_pos = (ufbxwi_lz_pos)ud->hash4_tab[hash4];
+					const uint32_t hash3 = next_hash3;
+					const uint32_t hash4 = next_hash4;
+					match_pos = next_match_pos;
+
+					next_hash3 = ufbxwi_deflate_hash3_fast(data + read_pos + 1, UFBXWI_DEFLATE_HASH3_BITS);
+					next_hash4 = ufbxwi_deflate_hash4_fast(data + read_pos + 1, UFBXWI_DEFLATE_HASH4_BITS);
+					next_match_pos = (ufbxwi_lz_pos)ud->hash4_tab[next_hash4];
+
 					ud->hash3_tab[hash3] = (int32_t)read_pos;
 					ud->hash4_tab[hash4] = (int32_t)read_pos;
 					ud->hash4_chain[read_pos & (UFBXWI_DEFLATE_WINDOW_SIZE) - 1] = ufbxwi_lz_saturate_chain_offset(read_pos - match_pos);
