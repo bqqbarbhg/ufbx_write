@@ -406,7 +406,7 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 	}
 
 	for (int i = 0; i < fuzz_rounds; i++) {
-		if ((i + 1) % 10 == 0) {
+		if (i > 0) {
 			putchar('.');
 		}
 
