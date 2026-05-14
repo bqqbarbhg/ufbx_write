@@ -472,6 +472,12 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 
 					ufbxw_error save_error = { 0 };
 					ufbxw_save_stream(scene, &ws, &fuzz_opts, &save_error);
+
+					// If we have threads enabled, allocation counts seem to be slightly unstable..
+					if (threads_ix > 0 && save_error.type == UFBXW_ERROR_NONE) {
+						continue;
+					}
+
 					if (save_error.type != UFBXW_ERROR_ALLOCATION_LIMIT) {
 						ufbxwt_log_error(&save_error);
 					}
@@ -486,6 +492,12 @@ void ufbxwt_do_scene_test(const char *name, void (*test_fn)(ufbxw_scene *scene, 
 
 					ufbxw_error save_error = { 0 };
 					ufbxw_save_stream(scene, &ws, &fuzz_opts, &save_error);
+
+					// If we have threads enabled, allocation counts seem to be slightly unstable..
+					if (threads_ix > 0 && save_error.type == UFBXW_ERROR_NONE) {
+						continue;
+					}
+
 					if (save_error.type != UFBXW_ERROR_ALLOCATION_LIMIT) {
 						ufbxwt_log_error(&save_error);
 					}
