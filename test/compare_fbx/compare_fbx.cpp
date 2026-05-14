@@ -34,24 +34,34 @@ void format(char *&dst, char *end, bool value)
 	dst += snprintf(dst, end - dst, "%s", value ? "true" : "false");
 }
 
-void format(char *&dst, char *end, int32_t value)
+void format(char *&dst, char *end, int value)
 {
-	dst += snprintf(dst, end - dst, "%" PRIi32, value);
+	dst += snprintf(dst, end - dst, "%d", value);
 }
 
-void format(char *&dst, char *end, uint32_t value)
+void format(char *&dst, char *end, unsigned int value)
 {
-	dst += snprintf(dst, end - dst, "%" PRIu32, value);
+	dst += snprintf(dst, end - dst, "%u", value);
 }
 
-void format(char *&dst, char *end, int64_t value)
+void format(char *&dst, char *end, long value)
 {
-	dst += snprintf(dst, end - dst, "%" PRIi64, value);
+	dst += snprintf(dst, end - dst, "%ld", value);
 }
 
-void format(char *&dst, char *end, uint64_t value)
+void format(char *&dst, char *end, unsigned long value)
 {
-	dst += snprintf(dst, end - dst, "%" PRIu64, value);
+	dst += snprintf(dst, end - dst, "%lu", value);
+}
+
+void format(char *&dst, char *end, long long value)
+{
+	dst += snprintf(dst, end - dst, "%lld", value);
+}
+
+void format(char *&dst, char *end, unsigned long long value)
+{
+	dst += snprintf(dst, end - dst, "%llu", value);
 }
 
 void format(char *&dst, char *end, double value)
