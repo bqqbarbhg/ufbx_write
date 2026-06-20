@@ -1007,7 +1007,9 @@ ufbxw_abi void ufbxw_mesh_set_attribute(ufbxw_scene *scene, ufbxw_mesh mesh, ufb
 ufbxw_abi void ufbxw_mesh_set_attribute_name(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const char *name);
 ufbxw_abi void ufbxw_mesh_set_attribute_name_len(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_mesh_attribute attribute, int32_t set, const char *name, size_t name_len);
 
-ufbxw_vec3_buffer ufbxw_mesh_get_vertices(ufbxw_scene *scene, ufbxw_mesh mesh);
+ufbxw_abi ufbxw_vec3_buffer ufbxw_mesh_get_vertices(ufbxw_scene *scene, ufbxw_mesh mesh);
+ufbxw_abi ufbxw_int_buffer ufbxw_mesh_get_vertex_indices(ufbxw_scene *scene, ufbxw_mesh mesh);
+ufbxw_abi ufbxw_int_buffer ufbxw_mesh_get_face_offsets(ufbxw_scene *scene, ufbxw_mesh mesh);
 
 ufbxw_abi void ufbxw_mesh_add_instance(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_node node);
 

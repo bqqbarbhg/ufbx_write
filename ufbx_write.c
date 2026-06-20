@@ -14071,11 +14071,25 @@ ufbxw_abi void ufbxw_mesh_set_attribute_name_len(ufbxw_scene *scene, ufbxw_mesh 
 	ufbxwi_intern_string(&scene->string_pool, &attrib->name, name, name_len);
 }
 
-ufbxw_vec3_buffer ufbxw_mesh_get_vertices(ufbxw_scene *scene, ufbxw_mesh mesh)
+ufbxw_abi ufbxw_vec3_buffer ufbxw_mesh_get_vertices(ufbxw_scene *scene, ufbxw_mesh mesh)
 {
 	ufbxwi_mesh *md = ufbxwi_get_mesh(scene, mesh);
 	ufbxwi_check_element(scene, mesh.id, md, ufbxwi_empty_vec3_buffer);
 	return md->vertices;
+}
+
+ufbxw_abi ufbxw_int_buffer ufbxw_mesh_get_vertex_indices(ufbxw_scene *scene, ufbxw_mesh mesh)
+{
+	ufbxwi_mesh *md = ufbxwi_get_mesh(scene, mesh);
+	ufbxwi_check_element(scene, mesh.id, md, ufbxwi_empty_int_buffer);
+	return md->vertex_indices;
+}
+
+ufbxw_abi ufbxw_int_buffer ufbxw_mesh_get_face_offsets(ufbxw_scene *scene, ufbxw_mesh mesh)
+{
+	ufbxwi_mesh *md = ufbxwi_get_mesh(scene, mesh);
+	ufbxwi_check_element(scene, mesh.id, md, ufbxwi_empty_int_buffer);
+	return md->face_offsets;
 }
 
 ufbxw_abi void ufbxw_mesh_add_instance(ufbxw_scene *scene, ufbxw_mesh mesh, ufbxw_node node)
