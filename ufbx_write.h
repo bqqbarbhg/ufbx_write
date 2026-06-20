@@ -241,6 +241,15 @@ UFBXW_LIST_TYPE(ufbxw_vec3_list, ufbxw_vec3);
 UFBXW_LIST_TYPE(ufbxw_vec4_list, ufbxw_vec4);
 UFBXW_LIST_TYPE(ufbxw_float_list, float);
 
+UFBXW_LIST_TYPE(ufbxw_const_byte_list, const char);
+UFBXW_LIST_TYPE(ufbxw_const_int_list, const int32_t);
+UFBXW_LIST_TYPE(ufbxw_const_long_list, const int64_t);
+UFBXW_LIST_TYPE(ufbxw_const_real_list, const ufbxw_real);
+UFBXW_LIST_TYPE(ufbxw_const_vec2_list, const ufbxw_vec2);
+UFBXW_LIST_TYPE(ufbxw_const_vec3_list, const ufbxw_vec3);
+UFBXW_LIST_TYPE(ufbxw_const_vec4_list, const ufbxw_vec4);
+UFBXW_LIST_TYPE(ufbxw_const_float_list, const float);
+
 typedef int64_t ufbxw_ktime;
 
 typedef struct ufbxw_ktime_range {
@@ -756,6 +765,15 @@ ufbxw_abi ufbxw_vec2_list ufbxw_edit_vec2_buffer(ufbxw_scene *scene, ufbxw_vec2_
 ufbxw_abi ufbxw_vec3_list ufbxw_edit_vec3_buffer(ufbxw_scene *scene, ufbxw_vec3_buffer buffer);
 ufbxw_abi ufbxw_vec4_list ufbxw_edit_vec4_buffer(ufbxw_scene *scene, ufbxw_vec4_buffer buffer);
 ufbxw_abi ufbxw_float_list ufbxw_edit_float_buffer(ufbxw_scene *scene, ufbxw_float_buffer buffer);
+
+ufbxw_abi ufbxw_const_byte_list ufbxw_view_byte_buffer(ufbxw_scene *scene, ufbxw_byte_buffer buffer);
+ufbxw_abi ufbxw_const_int_list ufbxw_view_int_buffer(ufbxw_scene *scene, ufbxw_int_buffer buffer);
+ufbxw_abi ufbxw_const_long_list ufbxw_view_long_buffer(ufbxw_scene *scene, ufbxw_long_buffer buffer);
+ufbxw_abi ufbxw_const_real_list ufbxw_view_real_buffer(ufbxw_scene *scene, ufbxw_real_buffer buffer);
+ufbxw_abi ufbxw_const_vec2_list ufbxw_view_vec2_buffer(ufbxw_scene *scene, ufbxw_vec2_buffer buffer);
+ufbxw_abi ufbxw_const_vec3_list ufbxw_view_vec3_buffer(ufbxw_scene *scene, ufbxw_vec3_buffer buffer);
+ufbxw_abi ufbxw_const_vec4_list ufbxw_view_vec4_buffer(ufbxw_scene *scene, ufbxw_vec4_buffer buffer);
+ufbxw_abi ufbxw_const_float_list ufbxw_view_float_buffer(ufbxw_scene *scene, ufbxw_float_buffer buffer);
 
 // --
 

@@ -4823,6 +4823,28 @@ ufbxwi_nodiscard static bool ufbxwi_buffer_materialize(ufbxwi_buffer_pool *pool,
 	return false;
 }
 
+static const void *ufbxwi_view_buffer(ufbxwi_buffer_pool *pool, size_t *p_size, ufbxw_buffer_id id, ufbxwi_buffer_type type)
+{
+	if (!id) return NULL;
+
+	ufbxwi_buffer *buf = ufbxwi_get_buffer(pool, id);
+	if (!buf) {
+		ufbxwi_fail(pool->error, UFBXW_ERROR_BUFFER_NOT_FOUND, "buffer not found");
+		return NULL;
+	}
+
+	ufbxwi_check(ufbxwi_buffer_materialize(pool, id), NULL);
+
+	if (ufbxwi_buffer_id_type(id) != type) {
+		ufbxwi_failf(pool->error, UFBXW_ERROR_BUFFER_WRONG_TYPE, "wrong buffer type: %s (expected %s)",
+			ufbxwi_buffer_type_names[ufbxwi_buffer_id_type(id)], ufbxwi_buffer_type_names[type]);
+		return NULL;
+	}
+
+	*p_size = buf->count;
+	return ufbxwi_buffer_get_data(pool, id);
+}
+
 static void ufbxwi_set_buffer_from_user(ufbxwi_buffer_pool *pool, ufbxw_buffer_id *p_dst, ufbxw_buffer_id src)
 {
 	if (ufbxwi_is_fatal(pool->error)) return;
@@ -12869,6 +12891,62 @@ ufbxw_abi ufbxw_float_list ufbxw_edit_float_buffer(ufbxw_scene *scene, ufbxw_flo
 {
 	ufbxw_float_list result = { NULL, 0 };
 	result.data = (float*)ufbxwi_edit_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_FLOAT);
+	return result;
+}
+
+ufbxw_abi ufbxw_const_byte_list ufbxw_view_byte_buffer(ufbxw_scene *scene, ufbxw_byte_buffer buffer)
+{
+	ufbxw_const_byte_list result = { NULL, 0 };
+	result.data = (const char*)ufbxwi_view_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_BYTE);
+	return result;
+}
+
+ufbxw_abi ufbxw_const_int_list ufbxw_view_int_buffer(ufbxw_scene *scene, ufbxw_int_buffer buffer)
+{
+	ufbxw_const_int_list result = { NULL, 0 };
+	result.data = (const int32_t*)ufbxwi_view_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_INT);
+	return result;
+}
+
+ufbxw_abi ufbxw_const_long_list ufbxw_view_long_buffer(ufbxw_scene *scene, ufbxw_long_buffer buffer)
+{
+	ufbxw_const_long_list result = { NULL, 0 };
+	result.data = (const int64_t*)ufbxwi_view_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_LONG);
+	return result;
+}
+
+ufbxw_abi ufbxw_const_real_list ufbxw_view_real_buffer(ufbxw_scene *scene, ufbxw_real_buffer buffer)
+{
+	ufbxw_const_real_list result = { NULL, 0 };
+	result.data = (const ufbxw_real*)ufbxwi_view_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_REAL);
+	return result;
+}
+
+ufbxw_abi ufbxw_const_vec2_list ufbxw_view_vec2_buffer(ufbxw_scene *scene, ufbxw_vec2_buffer buffer)
+{
+	ufbxw_const_vec2_list result = { NULL, 0 };
+	result.data = (const ufbxw_vec2*)ufbxwi_view_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_VEC2);
+	return result;
+}
+
+ufbxw_abi ufbxw_const_vec3_list ufbxw_view_vec3_buffer(ufbxw_scene *scene, ufbxw_vec3_buffer buffer)
+{
+	ufbxw_const_vec3_list result = { NULL, 0 };
+	result.data = (const ufbxw_vec3*)ufbxwi_view_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_VEC3);
+	return result;
+}
+
+ufbxw_abi ufbxw_const_vec4_list ufbxw_view_vec4_buffer(ufbxw_scene *scene, ufbxw_vec4_buffer buffer)
+{
+	ufbxw_const_vec4_list result = { NULL, 0 };
+	result.data = (const ufbxw_vec4*)ufbxwi_view_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_VEC4);
+	return result;
+}
+
+ufbxw_abi ufbxw_const_float_list ufbxw_view_float_buffer(ufbxw_scene *scene, ufbxw_float_buffer buffer)
+{
+	ufbxw_const_float_list result = { NULL, 0 };
+	result.data = (const float*)ufbxwi_view_buffer(&scene->buffers, &result.count, buffer.id, UFBXWI_BUFFER_TYPE_FLOAT);
 	return result;
 }
 
